@@ -60,18 +60,14 @@ systemctl start klinikatop
 
 1. **Bot tokeni** — @BotFather dan, `/etc/klinikatop.env` dagi `TELEGRAM_BOT_TOKEN`
 2. **Domen** — DNS A yozuvi `137.184.103.148` ga
-3. Keyin:
+3. Bitta buyruq — qolganini skript qiladi:
 
 ```bash
-DOMAIN=klinikatop.example.uz
-sed -i "s/KLINIKATOP_DOMAIN/$DOMAIN/g" /etc/nginx/sites-available/klinikatop
-ln -s /etc/nginx/sites-available/klinikatop /etc/nginx/sites-enabled/klinikatop
-nginx -t && systemctl reload nginx
-certbot --nginx -d "$DOMAIN"
-
-sed -i "s|^WEBAPP_URL=.*|WEBAPP_URL=https://$DOMAIN|" /etc/klinikatop.env
-sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$DOMAIN|" /etc/klinikatop.env
-systemctl restart klinikatop
+bash deploy/activate-domain.sh klinikatop.uz
 ```
 
-4. @BotFather da Mini App manzilini `https://$DOMAIN` qilib qo'yish
+Skript avval DNS haqiqatan shu serverga qarayotganini tekshiradi, keyin
+nginx blokini yoqadi (xato bo'lsa **qaytaradi**, banisa.uz buzilmasin),
+sertifikat oladi, `.env` ni to'ldiradi va tekshiruv natijasini ko'rsatadi.
+
+4. @BotFather da Mini App manzilini `https://<domen>` qilib qo'yish
