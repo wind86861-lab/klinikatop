@@ -11,6 +11,7 @@ import {
   setClinicCommission,
   setSetting,
 } from '../services/terms.business';
+import { ADMIN_CLINIC_FILTERS, type AdminClinicFilter } from '../../../shared/types';
 
 /** Moderator amalini mavjud audit jurnaliga yozadi. */
 function logModeration(userId: number, entity: string, entityId: number, action: string, note: string | null) {
@@ -29,6 +30,7 @@ import {
   setUserBlocked,
   setUserRoles,
   upsertManualPrice,
+  listClinicsForAdmin,
 } from '../services/admin';
 import { listPendingVerifications, setVerification, suspendSubscription } from '../services/clinics';
 import { getDeal } from '../services/deals';
@@ -208,4 +210,13 @@ adminRouter.post('/clinics/:id/trial', (req, res) => {
   const result = grantTrial(Number(req.params.id), body.months);
   logModeration(req.user!.id, 'clinic', Number(req.params.id), 'trial:grant', result.until);
   res.json(result);
+});
+
+
+/** Klinikalar ro'yxati — filtr bilan. */
+adminRouter.get('/clinics', (req, res) => {
+  const filter = ADMIN_CLINIC_FILTERS.includes(req.query.filter as any)
+    ? (req.query.filter as AdminClinicFilter)
+    : 'all';
+  res.json(listClinicsForAdmin(filter));
 });

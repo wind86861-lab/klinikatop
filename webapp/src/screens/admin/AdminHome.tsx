@@ -29,9 +29,10 @@ import {
   Textarea,
 } from '@/ui';
 import { FileThumb } from '@/components/wizard/FileThumb';
+import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
 import type { AdminMetrics, ChatMessage, Clinic, ClinicDocument, Deal, DealDetail } from '@shared/types';
 
-type Tab = 'verifications' | 'disputes' | 'metrics';
+type Tab = 'verifications' | 'clinics' | 'disputes' | 'metrics' | 'settings';
 
 export function AdminHome() {
   const { t, lang, toast } = useApp();
@@ -111,7 +112,9 @@ export function AdminHome() {
         options={[
           { value: 'verifications', label: `${t('admin.verifications')}${pending?.length ? ` (${pending.length})` : ''}` },
           { value: 'disputes', label: `${t('admin.disputes')}${disputes?.length ? ` (${disputes.length})` : ''}` },
+          { value: 'clinics', label: t('admin.tabClinics') },
           { value: 'metrics', label: t('admin.metrics') },
+          { value: 'settings', label: t('admin.tabSettings') },
         ]}
       />
 
@@ -170,6 +173,12 @@ export function AdminHome() {
             ))}
           </AnimatedList>
         ))}
+
+      {/* Klinikalar: tasdiqlash, komissiya foizi, sinov davri */}
+      {tab === 'clinics' && <AdminClinics />}
+
+      {/* Platforma bo'yicha umumiy shartlar */}
+      {tab === 'settings' && <PlatformSettingsScreen />}
 
       {tab === 'metrics' &&
         (metrics === null ? (

@@ -2552,3 +2552,21 @@
   min-width: 0;
 }
 .login__note { padding: var(--s-3) var(--s-4); }
+
+/* ── Admin: klinika shartlari qatori ── */
+.terms-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+  padding: 7px 0;
+  font-size: var(--t-sm);
+  border-top: 1px solid var(--line);
+}
+.terms-row__label { color: var(--muted); }
+.terms-row__value {
+  color: var(--ink);
+  font-weight: 600;
+  text-align: right;
+}
+.terms-row__value .tiny { font-weight: 400; color: var(--muted); }

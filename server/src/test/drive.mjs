@@ -53,6 +53,21 @@ await send('Emulation.setDeviceMetricsOverride', {
   mobile: true,
 });
 
+/*
+ * Sahifa yuklanishidan OLDIN kiritiladigan skript.
+ *
+ * Imzosiz kirish olib tashlangandan keyin brauzerda sinash uchun Telegram
+ * ko'prigini taqlid qilish kerak bo'ldi. Ilova `window.Telegram` ni modul
+ * yuklanganda o'qiydi, shuning uchun uni navigatsiyadan keyin qo'yish kech —
+ * `addScriptToEvaluateOnNewDocument` esa har yuklanishda birinchi bo'lib
+ * ishlaydi.
+ *
+ *   INIT_SCRIPT="window.Telegram = {...}" node drive.mjs ...
+ */
+if (process.env.INIT_SCRIPT) {
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: process.env.INIT_SCRIPT });
+}
+
 await send('Page.navigate', { url });
 await new Promise((r) => setTimeout(r, waitMs));
 

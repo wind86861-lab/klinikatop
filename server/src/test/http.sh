@@ -415,6 +415,20 @@ done
 echo
 echo "11. Biznes shartlari (admin)"
 
+# Klinikalar ro'yxati — admin uchun barcha kerakli ma'lumot bitta so'rovda
+CL=$(curl -s "${MOD[@]}" "$API/admin/clinics")
+CL_N=$(echo "$CL" | jqv '.length')
+check "admin klinikalar ro'yxatini oldi" "$([ "$CL_N" -ge 1 ] 2>/dev/null && echo 1)" "$CL_N ta"
+
+EFF=$(echo "$CL" | jqv '[0].effectiveCommissionPercent')
+check "amaldagi komissiya hisoblandi" "$([ -n "$EFF" ] && echo 1)" "$EFF%"
+
+FILT=$(curl -s "${MOD[@]}" "$API/admin/clinics?filter=approved" | jqv '.every(c=>c.verification==="approved")')
+check "filtr ishlaydi (approved)" "$([ "$FILT" = "true" ] && echo 1)" "$FILT"
+
+code=$(status "${PATIENT[@]}" "$API/admin/clinics")
+check "bemor klinikalar ro'yxatini ko'ra olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
 SET=$(curl -s "${MOD[@]}" "$API/admin/settings")
 DEF_COMM=$(echo "$SET" | jqv '.commissionPercent')
 check "platforma sozlamalari qaytdi" "$([ -n "$DEF_COMM" ] && echo 1)" "komissiya=$DEF_COMM%"

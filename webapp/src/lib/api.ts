@@ -1,6 +1,8 @@
 /** REST klienti — autentifikatsiya sarlavhalari bir joyda. */
 import { tg } from './telegram';
 import type {
+  AdminClinicFilter,
+  AdminClinicRow,
   AdminMetrics,
   AiResult,
   CapacitySlot,
@@ -17,6 +19,7 @@ import type {
   NotificationPrefs,
   OfferTemplate,
   OperatorRole,
+  PlatformSettings,
   ClinicPublic,
   Deal,
   DealDetail,
@@ -261,6 +264,17 @@ export const api = {
 
   /* ── Moderator / admin ── */
   metrics: () => get<AdminMetrics>('/admin/metrics'),
+  /* Moderator: klinikalar va platforma sozlamalari */
+  adminClinics: (filter: AdminClinicFilter = 'all') =>
+    get<AdminClinicRow[]>(`/admin/clinics?filter=${filter}`),
+  platformSettings: () => get<PlatformSettings>('/admin/settings'),
+  savePlatformSettings: (body: Partial<PlatformSettings>) =>
+    patch<PlatformSettings>('/admin/settings', body),
+  setClinicCommission: (clinicId: number, percent: number | null) =>
+    post<{ clinicId: number; percent: number | null }>(`/admin/clinics/${clinicId}/commission`, { percent }),
+  grantTrial: (clinicId: number, months: number | null) =>
+    post<{ until: string }>(`/admin/clinics/${clinicId}/trial`, { months }),
+
   verifications: () => get<Clinic[]>('/admin/verifications'),
   decideVerification: (clinicId: number, status: 'approved' | 'rejected', note: string | null) =>
     post<Clinic>(`/admin/verifications/${clinicId}`, { status, note }),

@@ -4,6 +4,8 @@ import { notFound } from '../lib/errors';
 import { mapDeal, mapUser } from '../lib/mappers';
 import type { AdminMetrics, Deal, Role, User } from '../../../shared/types';
 import { recomputeClinicRating } from './reviews';
+import { listSettings } from './terms.business';
+import type { AdminClinicFilter, AdminClinicRow } from '../../../shared/types';
 
 export function getMetrics(): AdminMetrics {
   const one = <T>(sql: string, ...args: unknown[]): T => db.prepare(sql).get(...(args as any)) as T;
@@ -147,4 +149,63 @@ export function listFlaggedReviews() {
         WHERE r.flagged = 1 ORDER BY r.id DESC`,
     )
     .all();
+}
+
+/**
+ * Admin uchun klinikalar ro'yxati.
+ *
+ * Bitta so'rovda hamma kerakli ma'lumot: holat, obuna, sinov davri, amaldagi
+ * komissiya va ko'rib chiqilmagan hujjatlar soni. Shunday qilib admin ekranda
+ * har klinika uchun alohida so'rov yubormaydi.
+ *
+ * `effective_commission` — klinikaga xos foiz bo'lsa o'sha, aks holda
+ * platforma qiymati. Hisob SQL'da qilinadi, chunki u ro'yxatni saralashda
+ * ham kerak bo'lishi mumkin.
+ */
+export function listClinicsForAdmin(filter: AdminClinicFilter = 'all'): AdminClinicRow[] {
+  const platformPercent = listSettings().commissionPercent;
+
+  const where =
+    filter === 'pending'
+      ? `c.verification = 'pending'
+         OR (c.verification = 'rejected'
+             AND EXISTS (SELECT 1 FROM clinic_documents d
+                          WHERE d.clinic_id = c.id AND d.status = 'pending'))`
+      : filter === 'approved'
+        ? `c.verification = 'approved'`
+        : filter === 'no_subscription'
+          ? `c.subscription_status <> 'active'`
+          : '1 = 1';
+
+  const rows = db
+    .prepare(
+      `SELECT c.*,
+              (SELECT COUNT(*) FROM offers o WHERE o.clinic_id = c.id) AS offers_count,
+              (SELECT COUNT(*) FROM clinic_documents d
+                WHERE d.clinic_id = c.id AND d.status = 'pending') AS pending_docs
+         FROM clinics c
+        WHERE ${where}
+        ORDER BY (c.verification = 'pending') DESC, c.created_at DESC`,
+    )
+    .all() as any[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    cityId: r.city_id,
+    verification: r.verification,
+    plan: r.plan ?? null,
+    subscriptionStatus: r.subscription_status,
+    subscriptionUntil: r.subscription_until
+      ? new Date(r.subscription_until.replace(' ', 'T') + 'Z').toISOString()
+      : null,
+    trialUntil: r.trial_until ? new Date(r.trial_until.replace(' ', 'T') + 'Z').toISOString() : null,
+    commissionPercent: r.commission_percent ?? null,
+    effectiveCommissionPercent: r.commission_percent ?? platformPercent,
+    ratingAvg: r.rating_avg,
+    dealsCount: r.deals_count,
+    offersCount: r.offers_count,
+    pendingDocuments: r.pending_docs,
+    createdAt: new Date(r.created_at.replace(' ', 'T') + 'Z').toISOString(),
+  }));
 }

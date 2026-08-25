@@ -666,3 +666,44 @@ export interface ClinicRevenue {
 /** Bitimlar kanban ustunlari — bitim holatiga to'g'ridan-to'g'ri mos keladi. */
 export const DEAL_BOARD_COLUMNS = ['SELECTED', 'AGREED', 'PERFORMED', 'CONFIRMED'] as const;
 export type DealBoardColumn = (typeof DEAL_BOARD_COLUMNS)[number];
+
+/* ═══════════════════  Admin: klinikalar boshqaruvi  ═══════════════════ */
+
+/**
+ * Admin ro'yxatidagi klinika qatori.
+ *
+ * `Clinic` dan farqi: bu yerda ADMIN uchun kerakli qo'shimchalar bor —
+ * amaldagi komissiya foizi (klinikaga xosmi yoki umumiymi), sinov davri
+ * va hujjatlar holati. Bemor bu ma'lumotni hech qachon ko'rmaydi.
+ */
+export interface AdminClinicRow {
+  id: number;
+  name: string;
+  cityId: number;
+  verification: VerificationStatus;
+  plan: SubscriptionPlan | null;
+  subscriptionStatus: SubscriptionStatus;
+  subscriptionUntil: string | null;
+  trialUntil: string | null;
+  /** null — platforma bo'yicha umumiy foiz ishlatiladi */
+  commissionPercent: number | null;
+  /** Shu klinika uchun amalda qo'llanadigan foiz */
+  effectiveCommissionPercent: number;
+  ratingAvg: number;
+  dealsCount: number;
+  offersCount: number;
+  /** Moderator ko'rib chiqishi kutilayotgan hujjatlar */
+  pendingDocuments: number;
+  createdAt: string;
+}
+
+/** Klinikalar ro'yxatini saralash. */
+export const ADMIN_CLINIC_FILTERS = ['all', 'pending', 'approved', 'no_subscription'] as const;
+export type AdminClinicFilter = (typeof ADMIN_CLINIC_FILTERS)[number];
+
+/** Platforma sozlamalari — admin kod'siz o'zgartiradi. */
+export interface PlatformSettings {
+  commissionPercent: number;
+  trialMonths: number;
+  autoConfirmDays: number;
+}
