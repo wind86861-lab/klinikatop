@@ -1,0 +1,754 @@
+<title>KlinikaTop MVP Hisoboti</title>
+<style>
+  /* ── Ranglar loyihaning o'z dizayn tizimidan olingan (webapp/src/styles/tokens.css) ── */
+  :root {
+    --ground: #eaf0ee;
+    --surface: #ffffff;
+    --surface-quiet: #f4f8f6;
+    --ink: #0b2422;
+    --body: #516361;
+    --muted: #859895;
+    --line: rgba(11, 42, 34, 0.11);
+    --line-strong: rgba(11, 42, 34, 0.2);
+    --teal: #0e766b;
+    --teal-deep: #0a4d46;
+    --teal-soft: #d7ebe7;
+    --amber: #b8722a;
+    --amber-soft: #fbebd4;
+    --done: #1a8f60;
+    --shadow: 0 1px 2px rgba(11, 42, 34, 0.05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0c1817;
+      --surface: #12211f;
+      --surface-quiet: #0f1e1c;
+      --ink: #eaf3f0;
+      --body: #9db2ae;
+      --muted: #6d817e;
+      --line: rgba(234, 243, 240, 0.12);
+      --line-strong: rgba(234, 243, 240, 0.24);
+      --teal: #4bbdae;
+      --teal-deep: #7ad4c5;
+      --teal-soft: #12332f;
+      --amber: #edb56a;
+      --amber-soft: #3a2a12;
+      --done: #4cc98d;
+      --shadow: none;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0c1817;
+    --surface: #12211f;
+    --surface-quiet: #0f1e1c;
+    --ink: #eaf3f0;
+    --body: #9db2ae;
+    --muted: #6d817e;
+    --line: rgba(234, 243, 240, 0.12);
+    --line-strong: rgba(234, 243, 240, 0.24);
+    --teal: #4bbdae;
+    --teal-deep: #7ad4c5;
+    --teal-soft: #12332f;
+    --amber: #edb56a;
+    --amber-soft: #3a2a12;
+    --done: #4cc98d;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--body);
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Matn ustuni tor, ma'lumot bloklari kengroq chiqadi */
+  .doc {
+    display: grid;
+    grid-template-columns:
+      [full-start] minmax(20px, 1fr)
+      [wide-start] minmax(0, 200px)
+      [text-start] minmax(0, 68ch) [text-end]
+      minmax(0, 200px) [wide-end]
+      minmax(20px, 1fr) [full-end];
+    padding: 0 0 120px;
+  }
+  .doc > * { grid-column: text; }
+  .doc > .wide { grid-column: wide; }
+
+  h1, h2, h3 {
+    color: var(--ink);
+    font-weight: 700;
+    letter-spacing: -0.021em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  h1 { font-size: clamp(2.1rem, 6vw, 3.1rem); line-height: 1.08; }
+  h2 { font-size: clamp(1.35rem, 3.4vw, 1.72rem); line-height: 1.2; }
+  h3 {
+    font-size: 1.02rem;
+    line-height: 1.35;
+    letter-spacing: -0.008em;
+  }
+
+  p { margin: 0 0 1.05em; }
+  p:last-child { margin-bottom: 0; }
+  strong { color: var(--ink); font-weight: 600; }
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--surface-quiet);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.1em 0.38em;
+    color: var(--ink);
+  }
+
+  .label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ── Sarlavha bloki ── */
+  header {
+    padding: clamp(56px, 10vw, 104px) 0 0;
+  }
+  .eyebrow {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding-bottom: 14px;
+    margin-bottom: 26px;
+    border-bottom: 2px solid var(--teal);
+  }
+  .eyebrow .mark {
+    font-size: 0.98rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--teal);
+  }
+  .lede {
+    font-size: 1.14rem;
+    line-height: 1.6;
+    margin-top: 20px;
+    color: var(--body);
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 30px;
+    margin-top: 30px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .meta div { display: flex; flex-direction: column; gap: 2px; }
+  .meta b {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* ── Raqamlar bandi ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 1px;
+    margin: 44px 0 8px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .stat {
+    background: var(--surface);
+    padding: 18px 16px 16px;
+  }
+  .stat b {
+    display: block;
+    font-size: 1.86rem;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    color: var(--teal-deep);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat span {
+    display: block;
+    margin-top: 5px;
+    font-size: 0.79rem;
+    line-height: 1.35;
+    color: var(--muted);
+  }
+
+  /* ── Bo'limlar ── */
+  section { margin-top: clamp(48px, 7vw, 76px); }
+  section > h2 {
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line-strong);
+    margin-bottom: 22px;
+  }
+  section > h3 { margin: 32px 0 10px; }
+
+  ul { margin: 0 0 1.05em; padding-left: 1.15em; }
+  li { margin-bottom: 0.42em; }
+  li::marker { color: var(--teal); }
+
+  /* ── Jadvallar ── */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    margin-bottom: 20px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    min-width: 520px;
+  }
+  thead th {
+    background: var(--surface-quiet);
+    text-align: left;
+    padding: 11px 16px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody td:first-child {
+    color: var(--ink);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  td .num, th .num { font-variant-numeric: tabular-nums; }
+  .t-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ── Holat nishonlari ── */
+  .pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 100px;
+    font-size: 0.73rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+  .pill--done { background: var(--teal-soft); color: var(--teal-deep); }
+  .pill--part { background: var(--amber-soft); color: var(--amber); }
+
+  /* ── Ketma-ketlik (holat mashinasi) ── */
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    font-size: 0.84rem;
+  }
+  .flow em {
+    font-style: normal;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--surface-quiet);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 4px 9px;
+    white-space: nowrap;
+  }
+  .flow i {
+    font-style: normal;
+    color: var(--teal);
+    font-weight: 700;
+  }
+  .flow em.end { border-color: var(--teal); color: var(--teal-deep); background: var(--teal-soft); }
+  .flow em.stop { border-color: var(--line-strong); color: var(--muted); background: transparent; }
+
+  /* ── Vizard qadamlari ── */
+  ol.steps {
+    counter-reset: s;
+    list-style: none;
+    padding: 0;
+    margin: 0 0 20px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  ol.steps li {
+    counter-increment: s;
+    display: grid;
+    grid-template-columns: 42px 1fr;
+    gap: 14px;
+    align-items: baseline;
+    padding: 13px 18px;
+    margin: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  ol.steps li:last-child { border-bottom: 0; }
+  ol.steps li::before {
+    content: counter(s, decimal-leading-zero);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--teal);
+    font-variant-numeric: tabular-nums;
+  }
+  ol.steps b { display: block; color: var(--ink); font-weight: 600; font-size: 0.97rem; }
+  ol.steps span { font-size: 0.88rem; line-height: 1.5; }
+
+  /* ── Izoh bloki ── */
+  .note {
+    border-left: 2px solid var(--teal);
+    padding: 2px 0 2px 18px;
+    margin: 22px 0;
+    color: var(--body);
+    font-size: 0.95rem;
+  }
+  .note--warn { border-left-color: var(--amber); }
+  .note b { color: var(--ink); }
+
+  footer {
+    margin-top: clamp(56px, 8vw, 88px);
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  @media (max-width: 620px) {
+    body { font-size: 16px; }
+    .meta { gap: 8px 20px; }
+    ol.steps li { grid-template-columns: 30px 1fr; gap: 10px; padding: 12px 14px; }
+  }
+</style>
+
+<div class="doc">
+
+  <header>
+    <div class="eyebrow">
+      <span class="mark">KLINIKATOP</span>
+      <span class="label">Bosqich hisoboti</span>
+    </div>
+
+    <h1>Tibbiy tender platformasi: MVP qurib bo'lindi</h1>
+
+    <p class="lede">
+      Bemor bitta so'rov qoldiradi — klinikalar narx bilan raqobatlashadi — bemor
+      o'zi tanlaydi. Telegram Mini App sifatida, o'zbek va rus tillarida.
+      Quyida bajarilgan ishlar, qamrab olingan rollar, ekranlar va tanlangan
+      texnologiyalar keltirilgan.
+    </p>
+
+    <div class="meta">
+      <div><span class="label">Sana</span><b>2026-yil 18-avgust</b></div>
+      <div><span class="label">Bosqich</span><b>MVP — funksional to'liq</b></div>
+      <div><span class="label">Holat</span><b>Lokalda ishlaydi, deploy kutilmoqda</b></div>
+      <div><span class="label">Tillar</span><b>O'zbek, rus</b></div>
+    </div>
+  </header>
+
+  <div class="stats wide">
+    <div class="stat"><b>5</b><span>rol</span></div>
+    <div class="stat"><b>15</b><span>ekran</span></div>
+    <div class="stat"><b>63</b><span>API nuqtasi</span></div>
+    <div class="stat"><b>19</b><span>ma'lumot jadvali</span></div>
+    <div class="stat"><b>111</b><span>avtotest</span></div>
+    <div class="stat"><b>15k</b><span>satr TypeScript</span></div>
+  </div>
+
+  <section>
+    <h2>Qisqacha xulosa</h2>
+    <p>
+      Platformaning <strong>butun asosiy aylanmasi ishlaydi</strong>: bemor
+      ro'yxatdan o'tadi, ofertani qabul qilib so'rov yuboradi, so'rov mos
+      klinikalarga tarqaladi, klinikalar taklif beradi, bemor tanlaydi, chat
+      ochiladi, operatsiya bajariladi, bemar tasdiqlaydi va sharh qoldiradi —
+      shundan keyin to'langan summa boshqa bemorlar uchun real narx
+      statistikasiga aylanadi.
+    </p>
+    <p>
+      Har bir bosqich holat mashinasi bilan qat'iy boshqariladi: bosqichni
+      o'tkazib yuborib bo'lmaydi, begona so'rovga kirib bo'lmaydi, tibbiy
+      hujjatni faqat so'rovni olgan klinika ko'radi. Bu qoidalar
+      <strong>111 ta avtotest</strong> bilan qoplangan.
+    </p>
+    <p>
+      Eng so'nggi bosqichda AI yordamchisi va "bilmayman, klinika aytsin"
+      yo'llari <strong>bitta suhbatga birlashtirildi</strong> — bu AI ning bir
+      jumladan xato tashxis qo'yish xavfini kamaytiradi va bemor hech qachon
+      tupikka tushmaydi.
+    </p>
+  </section>
+
+  <section>
+    <h2>Rollar</h2>
+    <p>
+      Tizimda beshta rol bor. Rol foydalanuvchiga biriktiriladi, bitta odam bir
+      nechta rolga ega bo'lishi mumkin (masalan, klinika administratori ayni
+      paytda bemor ham).
+    </p>
+
+    <div class="table-wrap wide">
+      <table>
+        <thead>
+          <tr><th>Rol</th><th>Nima qila oladi</th><th>Holat</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>patient</td>
+            <td>So'rov yuboradi, takliflarni taqqoslaydi, tanlaydi, chatlashadi, tasdiqlaydi va sharh qoldiradi</td>
+            <td><span class="pill pill--done">To'liq</span></td>
+          </tr>
+          <tr>
+            <td>clinic_admin</td>
+            <td>Klinikani ro'yxatdan o'tkazadi, yo'nalishlarini tanlaydi, obuna to'laydi, taklif yuboradi, bitimlarni yuritadi</td>
+            <td><span class="pill pill--done">To'liq</span></td>
+          </tr>
+          <tr>
+            <td>clinic_operator</td>
+            <td>Klinika nomidan so'rovlarni ko'radi va taklif yuboradi — moliyaviy sozlamalarga tegmaydi</td>
+            <td><span class="pill pill--done">To'liq</span></td>
+          </tr>
+          <tr>
+            <td>moderator</td>
+            <td>Klinikalarni tasdiqlaydi, nizolarni hal qiladi, shubhali sharhlarni ko'rib chiqadi</td>
+            <td><span class="pill pill--done">To'liq</span></td>
+          </tr>
+          <tr>
+            <td>admin</td>
+            <td>Moderator huquqlari + rol berish, foydalanuvchini bloklash, klinikani to'xtatish, qo'lda narx kiritish</td>
+            <td><span class="pill pill--done">To'liq</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ekranlar</h2>
+    <p>
+      Jami <strong>15 ta ekran</strong>. Ularning ustiga so'rov vizardining
+      8 qadami, panellarning 7 ta ichki bo'limi va 5 ta tizim holati qo'shiladi.
+    </p>
+
+    <div class="table-wrap wide">
+      <table>
+        <thead>
+          <tr><th>Bemor — 11 ta</th><th>Nima bor</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Onboarding</td><td>3 ta slayd, til tanlash</td></tr>
+          <tr><td>Ro'yxatdan o'tish</td><td>Ism, familiya, viloyat</td></tr>
+          <tr><td>Bosh sahifa</td><td>Narx pulsi, faol so'rov kartasi jonli taymer bilan, bemorlar fikri</td></tr>
+          <tr><td>Yangi so'rov</td><td>8 qadamli vizard — har qadamda bitta savol</td></tr>
+          <tr><td>So'rov tafsiloti</td><td>Takliflar ro'yxati, saralash, taqqoslash, tanlov</td></tr>
+          <tr><td>Bitim</td><td>4 bosqichli stepper, ichki chat, sana kelishuvi</td></tr>
+          <tr><td>Mening so'rovlarim</td><td>Faol va tugagan so'rovlar</td></tr>
+          <tr><td>Mening bitimlarim</td><td>Bitimlar tarixi</td></tr>
+          <tr><td>Bildirishnomalar</td><td>Jonli yangilanadi (WebSocket)</td></tr>
+          <tr><td>Profil</td><td>Shaxsiy ma'lumot, ballar</td></tr>
+          <tr><td>Sozlamalar</td><td>Til, bildirishnomalar, oferta matni</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-wrap wide">
+      <table>
+        <thead>
+          <tr><th>Klinika — 3 ta</th><th>Nima bor</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Klinika ro'yxati</td><td>Nom, manzil, litsenziya, <strong>o'z operatsiya yo'nalishlarini tanlash</strong></td></tr>
+          <tr><td>Klinika paneli</td><td>4 bo'lim: So'rovlar · Takliflar · Bitimlar · Obuna</td></tr>
+          <tr><td>So'rov tafsiloti</td><td>Bemor tavsifi, hujjatlar, taklif yuborish formasi</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-wrap wide">
+      <table>
+        <thead>
+          <tr><th>Moderator — 1 ta</th><th>Nima bor</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Moderator paneli</td><td>3 bo'lim: Tasdiqlashlar · Nizolar · Ko'rsatkichlar</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="font-size:0.92rem;color:var(--muted)">
+      Bundan tashqari 5 ta tizim holati: topilmadi, ruxsat yo'q, bloklangan,
+      internetsiz banneri, yuklanish ekrani.
+    </p>
+  </section>
+
+  <section>
+    <h2>So'rov vizardi</h2>
+    <p>
+      Platformaning yuragi. Bemor uzun formani to'ldirmaydi — har qadamda
+      bitta savolga javob beradi. Orqaga qaytish hech narsani yo'qotmaydi.
+    </p>
+
+    <ol class="steps wide">
+      <li><b>Operatsiya</b><span>Katalogdan tanlash yoki shikoyatni o'z so'zi bilan yozish. Ikkinchi yo'lda AI suhbati ochiladi.</span></li>
+      <li><b>Holat</b><span>Matnli tavsif. AI suhbatidan kelgan bo'lsa tayyor turadi.</span></li>
+      <li><b>Hujjatlar</b><span>UZI, MRT, analiz, shifokor xulosasi yoki boshqa — nomi bilan. 5 tagacha, har biri 8 MB.</span></li>
+      <li><b>Viloyat</b><span>Ro'yxatdan tanlash + "boshqa viloyat ham bo'ladi".</span></li>
+      <li><b>Byudjet</b><span>Ixtiyoriy. Faqat real bitimlardan chiqqan narx ko'rsatiladi.</span></li>
+      <li><b>Sana</b><span>Oraliq + moslashuvchanlik, shoshilinchlik darajasi.</span></li>
+      <li><b>Izoh</b><span>Ixtiyoriy qo'shimcha.</span></li>
+      <li><b>Ko'rib chiqish</b><span>Hammasi bir joyda, har qatordan tahrirlashga qaytish, ommaviy ofertani qabul qilish.</span></li>
+    </ol>
+
+    <h3>AI va "klinika aytsin" birlashuvi</h3>
+    <p>
+      Dastlab bular alohida yo'l edi. Endi bitta: bemor yozadi, yordamchi kerak
+      bo'lsa <strong>bitta aniqlashtiruvchi savol</strong> beradi, aniqlangach
+      "Shu bilan davom etish" chiqadi. Aniqlanmasa — o'sha suhbat "klinika
+      o'zi aniqlaydi" bo'lib yakunlanadi.
+    </p>
+    <div class="note">
+      <b>Xavfsizlik qoidasi.</b> Bemor yozgan matn AI xulosasidan
+      <strong>mustaqil ravishda</strong> klinikaga boradi, butun suhbat so'rovga
+      biriktiriladi. Klinika AI nima o'ylaganini emas, bemor nima yozganini
+      ko'radi. AI hech qachon tashxis qo'ymaydi — faqat yo'nalish taklif qiladi
+      va har javobda ogohlantirish ko'rsatiladi.
+    </div>
+  </section>
+
+  <section>
+    <h2>Texnologiyalar</h2>
+    <p>
+      Monorepo — <code>npm workspaces</code> asosida uchta paket:
+      <code>shared</code> (ikkala tomon uchun yagona tip shartnomasi, 456 satr),
+      <code>server</code> va <code>webapp</code>.
+    </p>
+
+    <div class="table-wrap wide">
+      <table>
+        <thead>
+          <tr><th>Qatlam</th><th>Tanlov</th><th>Nima uchun</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Server</td>
+            <td>Node 18 · Express 4 · TypeScript</td>
+            <td>Yengil, serverda allaqachon bor, kichik mashinada ham ishlaydi</td>
+          </tr>
+          <tr>
+            <td>Ma'lumot bazasi</td>
+            <td>SQLite (better-sqlite3)</td>
+            <td>Alohida DB server kerak emas, zaxira nusxa — bitta fayl. 19 jadval, 4 migratsiya</td>
+          </tr>
+          <tr>
+            <td>Frontend</td>
+            <td>React 18 · Vite 5</td>
+            <td>Telegram WebView'da tez yuklanadi, build 1.4 soniya</td>
+          </tr>
+          <tr>
+            <td>Animatsiya</td>
+            <td>Framer Motion</td>
+            <td>Ekranlar orasidagi o'tish, kartalarning chiqishi, stepper</td>
+          </tr>
+          <tr>
+            <td>Holat</td>
+            <td>Zustand</td>
+            <td>Redux'dan yengil, Mini App hajmi uchun yetarli</td>
+          </tr>
+          <tr>
+            <td>Autentifikatsiya</td>
+            <td>Telegram initData (HMAC)</td>
+            <td>Parol yo'q, ro'yxatdan o'tish yo'q — Telegram o'zi tasdiqlaydi</td>
+          </tr>
+          <tr>
+            <td>Jonli aloqa</td>
+            <td>WebSocket (ws) + SSE</td>
+            <td>Taklif kelishi va chat — WebSocket; AI javobi oqimi — SSE</td>
+          </tr>
+          <tr>
+            <td>Sun'iy intellekt</td>
+            <td>Claude (<code>claude-opus-5</code>)</td>
+            <td>Strukturali javob (json_schema), kalit bo'lmasa lokal heuristika ishlaydi</td>
+          </tr>
+          <tr>
+            <td>Validatsiya</td>
+            <td>Zod</td>
+            <td>Har bir kiruvchi so'rov tekshiriladi, AI javobi ham qayta tekshiriladi</td>
+          </tr>
+          <tr>
+            <td>Tillar</td>
+            <td>O'z i18n qatlami</td>
+            <td>392 ta kalit × 2 til, kutubxonasiz</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Biznes qoidalari</h2>
+
+    <h3>So'rov hayoti</h3>
+    <div class="flow wide">
+      <em>NEW</em><i>→</i><em>COLLECTING</em><i>→</i><em>CHOSEN</em><i>→</i>
+      <em class="end">COMPLETED</em><i>yoki</i><em class="stop">CANCELLED</em>
+    </div>
+
+    <h3>Bitim hayoti</h3>
+    <div class="flow wide">
+      <em>SELECTED</em><i>→</i><em>AGREED</em><i>→</i><em>PERFORMED</em><i>→</i>
+      <em class="end">CONFIRMED</em><i>yoki</i><em class="stop">CANCELLED</em>
+      <i>·</i><em class="stop">DISPUTED</em>
+    </div>
+    <p style="font-size:0.92rem">
+      Bosqichni o'tkazib yuborib bo'lmaydi — masalan, sana kelishilmasdan
+      "bajarildi" deb belgilash rad etiladi. Bu server tomonda majburlanadi
+      va test bilan qoplangan.
+    </p>
+
+    <h3>Amaldagi qoidalar</h3>
+    <div class="table-wrap wide">
+      <table>
+        <thead><tr><th>Qoida</th><th class="t-num">Qiymat</th></tr></thead>
+        <tbody>
+          <tr><td>Platforma komissiyasi</td><td class="t-num">5%</td></tr>
+          <tr><td>So'rovning amal qilish muddati</td><td class="t-num">24 soat</td></tr>
+          <tr><td>Bemorning bir vaqtdagi faol so'rovlari</td><td class="t-num">3 ta</td></tr>
+          <tr><td>Real narx statistikasi uchun minimal bitim</td><td class="t-num">5 ta</td></tr>
+          <tr><td>Statistika oynasi</td><td class="t-num">30 kun</td></tr>
+          <tr><td>Bitta so'rovga hujjat</td><td class="t-num">5 ta × 8 MB</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Ishonch va maxfiylik</h3>
+    <ul>
+      <li><strong>Oferta.</strong> Har safar so'rov yuborilganda bemor ommaviy ofertani qabul qiladi. Versiya, vaqt va qurilma ma'lumoti alohida jadvalda saqlanadi — so'rov o'chirilsa ham dalil qoladi.</li>
+      <li><strong>Hujjatlar.</strong> Tibbiy faylni faqat egasi, so'rovni olgan klinika va moderator ko'radi. Fayl diskda tasodifiy nom bilan yotadi, keshlanmaydi.</li>
+      <li><strong>Chat.</strong> Telefon raqamlar avtomatik yashiriladi — muloqot platforma ichida qoladi. Narxlar yashirilmaydi.</li>
+      <li><strong>Klinika tekshiruvi.</strong> Moderator tasdiqlamaguncha va obunasi faol bo'lmaguncha klinikaga so'rov bormaydi.</li>
+      <li><strong>Narx halolligi.</strong> Real bitimlardan chiqqan narx va bozor tadqiqoti hech qachon aralashmaydi — manba doim ko'rsatiladi.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Sifat</h2>
+    <div class="table-wrap wide">
+      <table>
+        <thead><tr><th>O'lchov</th><th class="t-num">Qiymat</th></tr></thead>
+        <tbody>
+          <tr><td>Servis testlari</td><td class="t-num">65 ta — hammasi o'tadi</td></tr>
+          <tr><td>HTTP testlari</td><td class="t-num">46 ta — hammasi o'tadi</td></tr>
+          <tr><td>TypeScript</td><td class="t-num">strict, 0 xato</td></tr>
+          <tr><td>Server kodi</td><td class="t-num">6 302 satr</td></tr>
+          <tr><td>Frontend kodi</td><td class="t-num">8 278 satr + 2 349 CSS</td></tr>
+          <tr><td>Production build</td><td class="t-num">~135 KB gzip</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Testlar faqat "ishlaydimi" degan savolga emas, <strong>qoidalar
+      buzilmaydimi</strong> degan savolga javob beradi: begona odam hujjatni
+      ko'rmaydi, bemor "bajarildi" deb belgilay olmaydi, ikkinchi sharh
+      qabul qilinmaydi, ofertasiz so'rov o'tmaydi.
+    </p>
+  </section>
+
+  <section>
+    <h2>Keyingi bosqich</h2>
+    <p>MVP doirasidan tashqarida qolgan, lekin ishga tushirishdan oldin kerak bo'ladigan ishlar:</p>
+
+    <div class="table-wrap wide">
+      <table>
+        <thead><tr><th>Ish</th><th>Izoh</th><th>Holat</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Klinika profili</td>
+            <td>Yo'nalishlarni ro'yxatdan o'tgandan keyin tahrirlash ekrani. Server tomoni tayyor, ilovada forma yo'q</td>
+            <td><span class="pill pill--part">Qisman</span></td>
+          </tr>
+          <tr>
+            <td>Shifokorlar</td>
+            <td>Klinika o'z shifokorlarini kiritishi</td>
+            <td><span class="pill pill--part">Boshlanmagan</span></td>
+          </tr>
+          <tr>
+            <td>Katalog boshqaruvi</td>
+            <td>Moderator operatsiya katalogini tahrirlashi</td>
+            <td><span class="pill pill--part">Boshlanmagan</span></td>
+          </tr>
+          <tr>
+            <td>To'lov tizimi</td>
+            <td>Obuna hozir qo'lda yoziladi — Payme/Click ulanishi kerak</td>
+            <td><span class="pill pill--part">Boshlanmagan</span></td>
+          </tr>
+          <tr>
+            <td>AI kaliti</td>
+            <td><code>ANTHROPIC_API_KEY</code> qo'yilmagan — suhbat lokal heuristika bilan ishlayapti</td>
+            <td><span class="pill pill--part">Kutilmoqda</span></td>
+          </tr>
+          <tr>
+            <td>Deploy</td>
+            <td>Server ko'rildi, konfiguratsiya yozildi — domen kutilmoqda</td>
+            <td><span class="pill pill--part">Tayyor</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ishga tushirish holati</h2>
+    <p>
+      Mavjud server (<span class="num">1 GB</span> RAM, <span class="num">18 GB</span>
+      bo'sh disk, Node 18, nginx) tekshirildi. Unda hozir bitta sayt ishlayapti.
+      KlinikaTop unga <strong>yonma-yon sig'adi</strong>: taxminan
+      <span class="num">150 MB</span> xotira oladi, alohida portda turadi,
+      qo'shni saytning ma'lumot bazasiga umuman tegmaydi.
+    </p>
+    <div class="note note--warn">
+      <b>Ikkita shart.</b> Birinchi — build serverda emas, lokal mashinada
+      bajarilishi kerak: 1 GB xotirada build qo'shni saytni sekinlashtiradi.
+      Ikkinchi — KlinikaTop uchun alohida domen kerak, chunki Telegram Mini App
+      faqat HTTPS orqali ochiladi va IP manzilga sertifikat olib bo'lmaydi.
+    </div>
+    <p>
+      Konfiguratsiya fayllari (<code>systemd</code> xizmati, <code>nginx</code>
+      bloki, deploy skripti) yozib qo'yilgan. Domen aniqlangach ishga tushirish
+      bir necha daqiqa vaqt oladi.
+    </p>
+  </section>
+
+  <footer>
+    KlinikaTop — tibbiy tender platformasi · MVP bosqichi hisoboti · 2026-yil 18-avgust
+  </footer>
+
+</div>

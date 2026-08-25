@@ -1,0 +1,24 @@
+# ── Bog'liqliklar va build ──
+node_modules/
+dist/
+*.tsbuildinfo
+
+# ── MAXFIY: hech qachon repoga tushmasin ──
+# Bot tokeni, AI kaliti, ma'lumotlar bazasi yo'li shu yerda
+.env
+.env.*
+!.env.example
+
+# ── Ma'lumotlar: bemorning tibbiy hujjatlari va bazasi ──
+data/
+uploads/
+*.db
+*.db-wal
+*.db-shm
+backups/
+
+# ── Muhit ──
+.DS_Store
+*.log
+.vscode/
+.idea/

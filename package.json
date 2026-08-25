@@ -1,0 +1,25 @@
+{
+  "name": "klinikatop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "KlinikaTop \u2014 tibbiy taklif platformasi (Telegram Mini App)",
+  "workspaces": [
+    "server",
+    "webapp"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=server & npm run dev --workspace=webapp",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:web": "npm run dev --workspace=webapp",
+    "build": "npm run build --workspace=server && npm run build --workspace=webapp",
+    "seed": "npm run seed --workspace=server",
+    "typecheck": "npm run typecheck --workspace=server && npm run typecheck --workspace=webapp",
+    "test": "npm run test --workspace=server",
+    "test:http": "bash server/src/test/http.sh",
+    "grant": "npm run grant --workspace=server --",
+    "seed:demo": "npm run seed:demo --workspace=server"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

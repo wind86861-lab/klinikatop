@@ -1,0 +1,342 @@
+/**
+ * So'rov (2-bo'lim): yaratish, hayot sikli, taymer, tahrirlash/bekor qilish.
+ *
+ * Hayot sikli: NEW → COLLECTING → CHOSEN → COMPLETED
+ *                        └──(taymer / bekor)──→ CANCELLED
+ */
+import { db, hoursFromNow, parseJson, tx } from '../db';
+import { config } from '../lib/config';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { formatUzs } from '../lib/format';
+import { mapCity, mapOperation, mapRequest, mapUser } from '../lib/mappers';
+import {
+  REQUEST_TRANSITIONS,
+  UNKNOWN_OPERATION_SLUG,
+  isProfileComplete,
+  type RequestStatus,
+  type RequestWithMeta,
+  type Urgency,
+} from '../../../shared/types';
+import { bus, ch } from './events';
+import { findMatchingClinics } from './matching';
+import { notify, notifyClinic } from './notifications';
+import { TERMS_VERSION, recordAcceptance } from './terms';
+import { assertOwnedFiles, listFiles } from './files';
+
+const REQUEST_SELECT = `
+  SELECT r.*,
+         (SELECT COUNT(*) FROM request_broadcasts b WHERE b.request_id = r.id) AS broadcast_count,
+         (SELECT COUNT(*) FROM request_broadcasts b WHERE b.request_id = r.id AND b.viewed_at IS NOT NULL) AS viewed_count,
+         (SELECT COUNT(*) FROM offers o WHERE o.request_id = r.id AND o.status IN ('SENT','CHOSEN')) AS offers_count
+    FROM requests r
+`;
+
+export function hydrate(row: any): RequestWithMeta {
+  const operation = db.prepare(`SELECT * FROM operations WHERE id = ?`).get(row.operation_id);
+  const city = db.prepare(`SELECT * FROM cities WHERE id = ?`).get(row.city_id);
+  return {
+    ...mapRequest(row),
+    operation: mapOperation(operation),
+    city: mapCity(city),
+    offersCount: row.offers_count ?? 0,
+    files: listFiles(parseJson<string[]>(row.attachments, [])),
+  };
+}
+
+export function getRequest(id: number): RequestWithMeta {
+  const row = db.prepare(`${REQUEST_SELECT} WHERE r.id = ?`).get(id);
+  if (!row) throw notFound('So‘rov topilmadi');
+  return hydrate(row);
+}
+
+export function listPatientRequests(patientId: number): RequestWithMeta[] {
+  const rows = db.prepare(`${REQUEST_SELECT} WHERE r.patient_id = ? ORDER BY r.id DESC`).all(patientId) as any[];
+  return rows.map(hydrate);
+}
+
+/** Holat o'tishi ruxsat etilganmi — state machine majburlanadi. */
+export function assertTransition(from: RequestStatus, to: RequestStatus) {
+  if (!REQUEST_TRANSITIONS[from].includes(to)) {
+    throw conflict('invalid_transition', `So‘rov holatini ${from} → ${to} ga o‘zgartirib bo‘lmaydi`);
+  }
+}
+
+export interface CreateRequestInput {
+  patientId: number;
+  operationId: number;
+  cityId: number;
+  budgetUzs: number | null;
+  /** Holat tavsifi — bemor o'z so'zi bilan yozadi, majburiy */
+  conditionText: string;
+  note: string | null;
+  urgency: Urgency;
+  attachments: string[];
+  otherRegionsOk: boolean;
+  dateFrom: string | null;
+  dateTo: string | null;
+  dateFlexible: boolean;
+  /** AI suhbati — bemor nima yozganini klinika to'liq ko'radi */
+  aiConversation?: { role: 'user' | 'assistant'; content: string }[] | null;
+  aiSuggested: boolean;
+  /** Bemor ommaviy ofertani qabul qilganini tasdiqlaydi — har so'rovda majburiy */
+  acceptTerms: boolean;
+  userAgent?: string | null;
+}
+
+export function createRequest(input: CreateRequestInput): RequestWithMeta {
+  // Profil to'liq bo'lmasa so'rov yuborilmaydi: klinika kimga taklif
+  // berayotganini bilishi kerak (ism, familiya, viloyat)
+  const profile = db.prepare(`SELECT * FROM users WHERE id = ?`).get(input.patientId);
+  if (!profile) throw notFound('Foydalanuvchi topilmadi');
+  if (!isProfileComplete(mapUser(profile))) {
+    throw conflict('profile_incomplete', 'Avval ism, familiya va viloyatni to‘ldiring');
+  }
+
+  // Ommaviy oferta — har so'rovda qabul qilinadi (yuridik talab)
+  if (!input.acceptTerms) {
+    throw badRequest('terms_not_accepted', 'Ommaviy oferta shartlarini qabul qiling');
+  }
+
+  // 2.1: spam oldini olish — bir vaqtda cheklangan sondagi faol so'rov
+  const active = db
+    .prepare(`SELECT COUNT(*) AS n FROM requests WHERE patient_id = ? AND status IN ('NEW','COLLECTING')`)
+    .get(input.patientId) as { n: number };
+
+  if (active.n >= config.rules.maxActiveRequestsPerPatient) {
+    throw conflict(
+      'too_many_active_requests',
+      `Bir vaqtda ${config.rules.maxActiveRequestsPerPatient} tadan ortiq faol so‘rov bo‘lishi mumkin emas`,
+    );
+  }
+
+  // "Bilmayman" yozuvi katalogda active=0 — u ro'yxatlarda ko'rinmaydi,
+  // lekin so'rovda tanlanishi mumkin
+  const op = db
+    .prepare(`SELECT * FROM operations WHERE id = ? AND (active = 1 OR slug = ?)`)
+    .get(input.operationId, UNKNOWN_OPERATION_SLUG);
+  if (!op) throw badRequest('unknown_operation', 'Bunday operatsiya topilmadi');
+
+  const condition = (input.conditionText ?? '').trim();
+  if (condition.length < 10) {
+    throw badRequest('condition_required', 'Holatingizni kamida bir-ikki jumlada yozing');
+  }
+
+  // Hujjatlar haqiqatan bemorga tegishlimi
+  assertOwnedFiles(input.attachments ?? [], input.patientId);
+  const city = db.prepare(`SELECT * FROM cities WHERE id = ?`).get(input.cityId);
+  if (!city) throw badRequest('unknown_city', 'Bunday shahar topilmadi');
+  if (input.budgetUzs != null && (input.budgetUzs < 100_000 || input.budgetUzs > 2_000_000_000)) {
+    throw badRequest('invalid_budget', 'Byudjet noto‘g‘ri');
+  }
+
+  const requestId = tx(() => {
+    const info = db
+      .prepare(
+        `INSERT INTO requests (patient_id, operation_id, city_id, budget_uzs, condition_text, note,
+                               urgency, attachments, other_regions_ok, date_from, date_to, date_flexible,
+                               ai_conversation, status, ai_suggested, expires_at, terms_version, terms_accepted_at)
+         VALUES (@patientId, @operationId, @cityId, @budgetUzs, @conditionText, @note,
+                 @urgency, @attachments, @otherRegionsOk, @dateFrom, @dateTo, @dateFlexible,
+                 @aiConversation, 'NEW', @aiSuggested, @expiresAt, @termsVersion, datetime('now'))`,
+      )
+      .run({
+        patientId: input.patientId,
+        operationId: input.operationId,
+        cityId: input.cityId,
+        budgetUzs: input.budgetUzs,
+        conditionText: condition,
+        note: input.note,
+        urgency: input.urgency,
+        attachments: JSON.stringify(input.attachments ?? []),
+        otherRegionsOk: input.otherRegionsOk ? 1 : 0,
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        dateFlexible: input.dateFlexible ? 1 : 0,
+        aiConversation: input.aiConversation?.length ? JSON.stringify(input.aiConversation) : null,
+        aiSuggested: input.aiSuggested ? 1 : 0,
+        expiresAt: hoursFromNow(config.rules.requestTtlHours),
+        termsVersion: TERMS_VERSION,
+      });
+
+    const id = Number(info.lastInsertRowid);
+    // Qabul alohida jadvalga ham yoziladi — so'rov o'chsa ham dalil qoladi
+    recordAcceptance(input.patientId, id, input.userAgent ?? null);
+    return id;
+  });
+
+  broadcast(requestId);
+  return getRequest(requestId);
+}
+
+/** So'rovni mos klinikalarga bir vaqtda tarqatish (2.2 → COLLECTING). */
+export function broadcast(requestId: number): number {
+  const req = getRequest(requestId);
+  const clinics = findMatchingClinics(req.operationId, req.cityId, {
+    otherRegionsOk: req.otherRegionsOk,
+  });
+
+  tx(() => {
+    const ins = db.prepare(
+      `INSERT OR IGNORE INTO request_broadcasts (request_id, clinic_id) VALUES (?, ?)`,
+    );
+    for (const c of clinics) ins.run(requestId, c.id);
+    db.prepare(`UPDATE requests SET status = 'COLLECTING' WHERE id = ? AND status = 'NEW'`).run(requestId);
+  });
+
+  const fresh = getRequest(requestId);
+
+  for (const c of clinics) {
+    bus.publish(ch.clinic(c.id), { type: 'clinic:request', request: fresh });
+    notifyClinic(
+      c.id,
+      'new_request',
+      {
+        operation: fresh.operation.nameUz,
+        city: fresh.city.nameUz,
+        budget: formatUzs(fresh.budgetUzs),
+        requestId,
+      },
+      `/clinic/requests/${requestId}`,
+    );
+  }
+
+  publishProgress(requestId);
+  bus.publish(ch.request(requestId), { type: 'request:status', requestId, status: 'COLLECTING' });
+  return clinics.length;
+}
+
+export function publishProgress(requestId: number) {
+  const r = db.prepare(`${REQUEST_SELECT} WHERE r.id = ?`).get(requestId) as any;
+  if (!r) return;
+  bus.publish(ch.request(requestId), {
+    type: 'request:progress',
+    requestId,
+    broadcastCount: r.broadcast_count ?? 0,
+    viewedCount: r.viewed_count ?? 0,
+    offersCount: r.offers_count ?? 0,
+  });
+}
+
+/** Klinika so'rovni ochdi — radar vizuali uchun (4-ekran). */
+export function markViewed(requestId: number, clinicId: number) {
+  const res = db
+    .prepare(
+      `UPDATE request_broadcasts SET viewed_at = datetime('now')
+        WHERE request_id = ? AND clinic_id = ? AND viewed_at IS NULL`,
+    )
+    .run(requestId, clinicId);
+  if (res.changes > 0) publishProgress(requestId);
+}
+
+/** 2.4: TANLANGAN bo'lgunicha byudjet/izohni tahrirlash mumkin. */
+export function updateRequest(
+  requestId: number,
+  patientId: number,
+  patch: { budgetUzs?: number | null; note?: string | null; urgency?: Urgency },
+): RequestWithMeta {
+  const req = getRequest(requestId);
+  if (req.patientId !== patientId) throw forbidden('Bu so‘rov sizniki emas');
+  if (req.status !== 'NEW' && req.status !== 'COLLECTING') {
+    throw conflict('request_locked', 'Tanlov qilingandan keyin so‘rovni tahrirlab bo‘lmaydi');
+  }
+
+  db.prepare(
+    `UPDATE requests SET
+       budget_uzs = COALESCE(@budgetUzs, budget_uzs),
+       note       = COALESCE(@note, note),
+       urgency    = COALESCE(@urgency, urgency)
+     WHERE id = @id`,
+  ).run({
+    id: requestId,
+    budgetUzs: patch.budgetUzs ?? null,
+    note: patch.note ?? null,
+    urgency: patch.urgency ?? null,
+  });
+
+  return getRequest(requestId);
+}
+
+/** 2.4: bekor qilinsa barcha faol takliflar avto rad etiladi + klinikalarga xabar. */
+export function cancelRequest(requestId: number, patientId: number): RequestWithMeta {
+  const req = getRequest(requestId);
+  if (req.patientId !== patientId) throw forbidden('Bu so‘rov sizniki emas');
+  assertTransition(req.status, 'CANCELLED');
+
+  const affected = db
+    .prepare(`SELECT id, clinic_id FROM offers WHERE request_id = ? AND status = 'SENT'`)
+    .all(requestId) as { id: number; clinic_id: number }[];
+
+  tx(() => {
+    db.prepare(`UPDATE offers SET status = 'REJECTED', updated_at = datetime('now')
+                 WHERE request_id = ? AND status = 'SENT'`).run(requestId);
+    db.prepare(`UPDATE requests SET status = 'CANCELLED' WHERE id = ?`).run(requestId);
+  });
+
+  for (const o of affected) {
+    notifyClinic(o.clinic_id, 'offer_rejected', { operation: req.operation.nameUz }, `/clinic/offers`);
+  }
+  bus.publish(ch.request(requestId), { type: 'request:status', requestId, status: 'CANCELLED' });
+  return getRequest(requestId);
+}
+
+/**
+ * Taymer (2.3) — planlashtiruvchi chaqiradi.
+ *  - Muddat tugadi va taklif YO'Q  → BEKOR + "byudjetni oshiring" bildirishnomasi
+ *  - Taklif BOR                    → so'rov faol qoladi, takliflar muddati uzayadi
+ *  - Tugashiga 1 soat qolganda     → ogohlantirish
+ */
+export function processExpirations(): { expired: number; warned: number } {
+  const soon = db
+    .prepare(
+      `${REQUEST_SELECT}
+        WHERE r.status IN ('NEW','COLLECTING')
+          AND r.expiring_notified = 0
+          AND r.expires_at <= datetime('now', ?)
+          AND r.expires_at > datetime('now')`,
+    )
+    .all(`+${config.rules.expiryWarningHours} hours`) as any[];
+
+  for (const row of soon) {
+    const req = hydrate(row);
+    notify(req.patientId, 'request_expiring', { operation: req.operation.nameUz }, `/request/${req.id}`);
+    db.prepare(`UPDATE requests SET expiring_notified = 1 WHERE id = ?`).run(req.id);
+  }
+
+  const expired = db
+    .prepare(`${REQUEST_SELECT} WHERE r.status IN ('NEW','COLLECTING') AND r.expires_at <= datetime('now')`)
+    .all() as any[];
+
+  let cancelled = 0;
+  for (const row of expired) {
+    const req = hydrate(row);
+    if (req.offersCount > 0) {
+      // Taklif kelgan — so'rov yopilmaydi, muddat uzaytiriladi (bemor tanlashi kerak)
+      db.prepare(`UPDATE requests SET expires_at = datetime('now', '+24 hours') WHERE id = ?`).run(req.id);
+      continue;
+    }
+    tx(() => {
+      db.prepare(`UPDATE offers SET status = 'EXPIRED', updated_at = datetime('now')
+                   WHERE request_id = ? AND status = 'SENT'`).run(req.id);
+      db.prepare(`UPDATE requests SET status = 'CANCELLED' WHERE id = ?`).run(req.id);
+    });
+    notify(req.patientId, 'request_expired', { operation: req.operation.nameUz }, `/new`);
+    bus.publish(ch.request(req.id), { type: 'request:status', requestId: req.id, status: 'CANCELLED' });
+    cancelled++;
+  }
+
+  return { expired: cancelled, warned: soon.length };
+}
+
+/** Klinikaning so'rovlar oqimi (5.3 / 10-ekran). */
+export function listClinicRequests(clinicId: number, opts: { onlyNew?: boolean } = {}): RequestWithMeta[] {
+  const rows = db
+    .prepare(
+      `${REQUEST_SELECT}
+         JOIN request_broadcasts b ON b.request_id = r.id AND b.clinic_id = @clinicId
+        WHERE r.status IN ('NEW','COLLECTING')
+          ${opts.onlyNew ? `AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.request_id = r.id AND o.clinic_id = @clinicId AND o.status IN ('SENT','CHOSEN'))` : ''}
+        ORDER BY r.id DESC`,
+    )
+    .all({ clinicId }) as any[];
+  return rows.map(hydrate);
+}

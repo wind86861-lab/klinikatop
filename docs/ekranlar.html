@@ -1,0 +1,2583 @@
+<title>KlinikaTop Ekranlar Xaritasi</title>
+<style>
+  /* ── Tokenlar: yorug' palitra bazaviy holatda ───────────────────── */
+  :root {
+    --ground: #eff3f2;
+    --surface: #ffffff;
+    --surface-2: #f7faf9;
+    --ink: #0b2422;
+    --body: #4e615f;
+    --muted: #839895;
+    --line: rgba(11, 42, 34, 0.1);
+    --line-strong: rgba(11, 42, 34, 0.18);
+    --primary: #0e766b;
+    --primary-soft: #dcebe8;
+    --accent: #b5741f;
+    --done: #17835a;
+    --partial: #9c6a1c;
+    --missing: #b4462f;
+    --shadow: 0 1px 2px rgba(11, 42, 34, 0.05), 0 8px 24px rgba(11, 42, 34, 0.05);
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0b1615;
+      --surface: #111f1d;
+      --surface-2: #162624;
+      --ink: #e9f2ef;
+      --body: #9ab0ac;
+      --muted: #6b807d;
+      --line: rgba(233, 242, 239, 0.12);
+      --line-strong: rgba(233, 242, 239, 0.22);
+      --primary: #46ab9d;
+      --primary-soft: #14342f;
+      --accent: #e0a24f;
+      --done: #35be86;
+      --partial: #dfa44a;
+      --missing: #e0705a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0b1615;
+    --surface: #111f1d;
+    --surface-2: #162624;
+    --ink: #e9f2ef;
+    --body: #9ab0ac;
+    --muted: #6b807d;
+    --line: rgba(233, 242, 239, 0.12);
+    --line-strong: rgba(233, 242, 239, 0.22);
+    --primary: #46ab9d;
+    --primary-soft: #14342f;
+    --accent: #e0a24f;
+    --done: #35be86;
+    --partial: #dfa44a;
+    --missing: #e0705a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Karkas ─────────────────────────────────────────────────────── */
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 20px 96px;
+  }
+
+  .masthead {
+    padding: 56px 0 32px;
+    border-bottom: 1px solid var(--line-strong);
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--primary);
+    margin: 0 0 12px;
+  }
+
+  h1 {
+    font-size: clamp(30px, 5vw, 44px);
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+
+  .lede {
+    max-width: var(--measure);
+    color: var(--body);
+    font-size: 16px;
+    margin: 0;
+  }
+
+  .tally {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 26px;
+  }
+
+  .tally-item {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .tally-num {
+    font-family: var(--mono);
+    font-size: 19px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .tally-label { font-size: 12px; color: var(--body); }
+
+  /* ── Ikki ustunli tartib ────────────────────────────────────────── */
+  .layout { display: block; }
+
+  @media (min-width: 1000px) {
+    .layout {
+      display: grid;
+      grid-template-columns: 216px minmax(0, 1fr);
+      gap: 44px;
+      align-items: start;
+    }
+    .rail { position: sticky; top: 24px; }
+  }
+
+  .rail {
+    padding: 28px 0 0;
+    font-size: 13px;
+  }
+
+  .rail-group { margin-bottom: 20px; }
+
+  .rail-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 8px;
+  }
+
+  .rail a {
+    display: block;
+    padding: 4px 0;
+    color: var(--body);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    padding-left: 10px;
+  }
+  .rail a:hover { color: var(--primary); border-left-color: var(--primary); }
+  .rail a:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
+
+  main { padding-top: 28px; min-width: 0; }
+
+  section { margin-bottom: 60px; scroll-margin-top: 20px; }
+
+  h2 {
+    font-size: 25px;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+
+  .section-note {
+    color: var(--body);
+    max-width: var(--measure);
+    margin: 0 0 26px;
+  }
+
+  h3 {
+    font-size: 17px;
+    letter-spacing: -0.01em;
+    margin: 34px 0 12px;
+  }
+
+  p { max-width: var(--measure); }
+
+  /* ── Ekran kartochkasi ──────────────────────────────────────────── */
+  .screen {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 20px 20px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow);
+  }
+
+  .screen-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .screen-num {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 7px;
+    flex: 0 0 auto;
+  }
+
+  .screen-name {
+    font-size: 16px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  .route {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--primary);
+    background: var(--primary-soft);
+    border-radius: 5px;
+    padding: 2px 7px;
+    white-space: nowrap;
+  }
+
+  .pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border-radius: 100px;
+    padding: 3px 9px;
+    border: 1px solid currentColor;
+    margin-left: auto;
+    flex: 0 0 auto;
+  }
+  .pill.done { color: var(--done); }
+  .pill.partial { color: var(--partial); }
+  .pill.missing { color: var(--missing); }
+
+  .purpose {
+    color: var(--body);
+    font-size: 14px;
+    margin: 0 0 16px;
+    max-width: var(--measure);
+  }
+
+  .cols { display: grid; gap: 20px; }
+  @media (min-width: 720px) {
+    .cols { grid-template-columns: minmax(0, 230px) minmax(0, 1fr); }
+  }
+
+  .col-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 8px;
+  }
+
+  /* ── Blok-diagramma: sahifa hududlari ustma-ust ─────────────────── */
+  .blocks {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+  }
+
+  .b {
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    padding: 7px 10px;
+    background: var(--surface-2);
+    color: var(--body);
+    line-height: 1.35;
+  }
+
+  /* Yopishqoq hudud — ekranga mixlangan */
+  .b--fixed {
+    border-style: solid;
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  /* Asosiy harakat */
+  .b--cta {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* Skroll qiladigan asosiy hudud */
+  .b--scroll {
+    border-style: dashed;
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+  }
+
+  .b--split { display: flex; gap: 4px; padding: 0; border: none; background: none; }
+  .b--split > .b { flex: 1; }
+
+  .b em { font-style: normal; color: var(--muted); }
+
+  /* ── Ma'lumot ro'yxatlari ───────────────────────────────────────── */
+  .meta { display: flex; flex-direction: column; gap: 14px; }
+
+  .meta dl { margin: 0; display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 4px 12px; }
+  .meta dt {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-top: 3px;
+  }
+  .meta dd { margin: 0; font-size: 13.5px; color: var(--body); }
+  .meta dd strong { color: var(--ink); font-weight: 600; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  ul { padding-left: 18px; margin: 0; }
+  li { margin-bottom: 3px; }
+
+  /* ── Tab-bar sxemasi ────────────────────────────────────────────── */
+  .navplan {
+    display: grid;
+    gap: 14px;
+    margin-bottom: 26px;
+  }
+  @media (min-width: 760px) { .navplan { grid-template-columns: repeat(3, 1fr); } }
+
+  .navcard {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .navcard h4 {
+    margin: 0 0 3px;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+  }
+
+  .navcard .who { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
+
+  .tabbar {
+    display: flex;
+    gap: 3px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    padding: 5px;
+    background: var(--surface-2);
+  }
+
+  .tab {
+    flex: 1;
+    text-align: center;
+    font-size: 10px;
+    line-height: 1.25;
+    padding: 7px 2px;
+    border-radius: 6px;
+    color: var(--body);
+  }
+  .tab.on { background: var(--primary); color: #fff; font-weight: 600; }
+
+  /* ── Jadval ─────────────────────────────────────────────────────── */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 560px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+  /* ── Qaror bloki ────────────────────────────────────────────────── */
+  .decision {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .decision h4 { margin: 0 0 8px; font-size: 15px; }
+  .decision p { margin: 0 0 10px; font-size: 14px; color: var(--body); }
+  .decision p:last-child { margin-bottom: 0; }
+
+  hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">KlinikaTop · qurish spetsifikatsiyasi</p>
+    <h1>Ekranlar xaritasi</h1>
+    <p class="lede">
+      Uch rol, oltmish bir ekran. Har biri uchun: nima uchun kerak, sahifa hududlari qanday
+      joylashadi, qanday holatlarni ko'rsatadi va qaysi API ga tayanadi. Hozir yozilgan
+      kod bu xaritaning oltidan bir qismi.
+    </p>
+    <div class="tally">
+      <div class="tally-item"><span class="tally-num">61</span><span class="tally-label">jami ekran</span></div>
+      <div class="tally-item"><span class="tally-num" style="color: var(--done)">10</span><span class="tally-label">bor</span></div>
+      <div class="tally-item"><span class="tally-num" style="color: var(--partial)">6</span><span class="tally-label">qisman</span></div>
+      <div class="tally-item"><span class="tally-num" style="color: var(--missing)">45</span><span class="tally-label">yo'q</span></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="rail" aria-label="Bo'limlar">
+      <div class="rail-group">
+        <p class="rail-title">Asos</p>
+        <a href="#navigatsiya">Navigatsiya</a>
+        <a href="#karkas">Sahifa karkasi</a>
+      </div>
+      <div class="rail-group">
+        <p class="rail-title">Rollar</p>
+        <a href="#bemor">Bemor · 27</a>
+        <a href="#klinika">Klinika · 18</a>
+        <a href="#moderator">Moderator · 11</a>
+        <a href="#tizim">Tizim · 5</a>
+      </div>
+      <div class="rail-group">
+        <p class="rail-title">Qarorlar</p>
+        <a href="#qaror">Klinika xizmatlari</a>
+        <a href="#reja">Qurish rejasi</a>
+      </div>
+    </nav>
+
+    <main>
+      <!-- ══════════════════════ NAVIGATSIYA ══════════════════════ -->
+      <section id="navigatsiya">
+        <h2>Navigatsiya arxitekturasi</h2>
+        <p class="section-note">
+          Hozir hamma narsa bitta bosh ekrandan osilib turibdi — shuning uchun mahsulot
+          demo bo'lib ko'rinadi. Har rol o'zining doimiy pastki panelini oladi: foydalanuvchi
+          har doim qayerdaligini va yana qayerga bora olishini ko'radi.
+        </p>
+
+        <div class="navplan">
+          <div class="navcard">
+            <h4>Bemor</h4>
+            <p class="who">4 bo'lim · qo'ng'iroq va til sarlavhada</p>
+            <div class="tabbar">
+              <span class="tab on">Bosh<br />sahifa</span>
+              <span class="tab">So'rov-<br />larim</span>
+              <span class="tab">Bitim-<br />lar</span>
+              <span class="tab">Profil</span>
+            </div>
+          </div>
+
+          <div class="navcard">
+            <h4>Klinika</h4>
+            <p class="who">5 bo'lim · "Xizmatlar" — yangi va eng muhimi</p>
+            <div class="tabbar">
+              <span class="tab on">Panel</span>
+              <span class="tab">So'rov-<br />lar</span>
+              <span class="tab">Bitim-<br />lar</span>
+              <span class="tab">Xizmat-<br />lar</span>
+              <span class="tab">Klinika</span>
+            </div>
+          </div>
+
+          <div class="navcard">
+            <h4>Moderator</h4>
+            <p class="who">5 bo'lim · navbat sonlari nishonda</p>
+            <div class="tabbar">
+              <span class="tab on">Verifi-<br />katsiya</span>
+              <span class="tab">Nizolar</span>
+              <span class="tab">Katalog</span>
+              <span class="tab">Foydala-<br />nuvchi</span>
+              <span class="tab">Metrika</span>
+            </div>
+          </div>
+        </div>
+
+        <p>
+          Rol almashtirish profil ichida: bitta odam bemor ham, klinika operatori ham bo'lishi
+          mumkin — pastki panel kontekstga qarab almashadi, ikkita alohida ilova emas.
+        </p>
+      </section>
+
+      <!-- ══════════════════════ KARKAS ══════════════════════ -->
+      <section id="karkas">
+        <h2>Sahifa karkasi</h2>
+        <p class="section-note">
+          Quyidagi diagrammalarda ishlatiladigan hududlar. Har ekran shu bir xil karkasga
+          tushadi — shuning uchun ilova yaxlit his qiladi.
+        </p>
+
+        <div class="cols">
+          <div>
+            <p class="col-label">Hududlar</p>
+            <div class="blocks">
+              <div class="b b--fixed">Sarlavha — yopishqoq, orqaga + nom + amal</div>
+              <div class="b b--scroll">Kontent — skroll qiladigan asosiy hudud</div>
+              <div class="b b--cta">Harakat paneli — yopishqoq, asosiy tugma</div>
+              <div class="b b--fixed">Pastki navigatsiya — 4–5 bo'lim</div>
+            </div>
+          </div>
+          <div class="meta">
+            <dl>
+              <dt>To'q</dt>
+              <dd><strong>Yopishqoq</strong> — skrollda joyida qoladi</dd>
+              <dt>Yashil</dt>
+              <dd><strong>Asosiy harakat</strong> — ekranda bittadan ortiq emas</dd>
+              <dt>Punktir</dt>
+              <dd><strong>Skroll hududi</strong> — kontent shu yerda</dd>
+              <dt>Qoida</dt>
+              <dd>Har ekranda uchta holat majburiy: yuklanish (skeleton), bo'sh, xato</dd>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ BEMOR ══════════════════════ -->
+      <section id="bemor">
+        <h2>Bemor · 27 ekran</h2>
+        <p class="section-note">
+          Yo'l: kirish → ehtiyojni aytish → takliflarni olish → tanlash → bitim → yakun.
+          Har bosqichda chiqib ketish nuqtasi bor, hech qayerda tupik yo'q.
+        </p>
+
+        <h3>Kirish va boshlang'ich</h3>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">01</span>
+            <p class="screen-name">Splash</p>
+            <span class="route">/ (boot)</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            <code>bootstrap()</code> ishlaguncha ko'rinadi. Hozir bu paytda bo'sh skeleton
+            chiqadi — brend yo'q, ilova "yuklanmayapti"dek tuyuladi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--scroll" style="justify-content: center; text-align: center; min-height: 120px">
+                  Markazda logo belgisi<br /><em>ostida "KlinikaTop" so'zi</em>
+                </div>
+                <div class="b">Nozik progres chizig'i</div>
+                <div class="b"><em>Pastda: versiya · "Tibbiy taklif platformasi"</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Element</dt>
+                <dd>Logo (SVG, animatsiyali chizilish), progres, tagline</dd>
+                <dt>Holat</dt>
+                <dd>Ulanish yo'q → 3 s dan keyin "Qayta urinish" tugmasi</dd>
+                <dt>Chiqish</dt>
+                <dd>Onboarding (birinchi kirish) yoki Bosh sahifa</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">02</span>
+            <p class="screen-name">Onboarding</p>
+            <span class="route">/onboarding</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Uch slayd: bir so'rov → klinikalar raqobati → bemor tanlaydi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b"><em>Fon: gradient + harakatlanuvchi aurora</em></div>
+                <div class="b b--scroll" style="justify-content: center; text-align: center">
+                  Illyustratsiya → sarlavha → matn<br /><em>swipe + parallaks</em>
+                </div>
+                <div class="b">Progres nuqtalari (faoli cho'ziladi)</div>
+                <div class="b">Til: o'zbek / rus</div>
+                <div class="b b--cta">Davom etish → Boshlash</div>
+                <div class="b"><em>O'tkazib yuborish</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Slaydlarga Lottie mikro-illyustratsiya (hozir ikonka)</dd>
+                <dt>API</dt>
+                <dd><code>POST /me/onboarded</code></dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">03</span>
+            <p class="screen-name">Til tanlash</p>
+            <span class="route">/settings/language</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">
+            Onboarding ichida bor, lekin alohida ekran sifatida yo'q — foydalanuvchi keyinchalik
+            tilni almashtira olmaydi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Sarlavha: Til</div>
+                <div class="b">O'zbekcha — katta tanlov qatori, belgi bilan</div>
+                <div class="b">Русский</div>
+                <div class="b"><em>Izoh: Telegram tilidan avtomatik aniqlandi</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Xatti</dt>
+                <dd>Tanlov darhol qo'llanadi, sahifa qayta yuklanmaydi</dd>
+                <dt>API</dt>
+                <dd><code>PATCH /me</code></dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">04</span>
+            <p class="screen-name">Bosh sahifa</p>
+            <span class="route">/</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">
+            Hozir: salom + bitta tugma + ro'yxat. Kerak: bemor har safar qaytganda yangi
+            narsa topadigan boy ekran.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Salom, {ism} · qo'ng'iroq nishoni</div>
+                <div class="b b--cta">Yangi so'rov yuborish · 1 daqiqada</div>
+                <div class="b">Faol so'rov kartochkasi — <em>taymer, taklif soni, jonli</em></div>
+                <div class="b">Faol bitim kartochkasi — <em>bosqich, o'qilmagan xabar</em></div>
+                <div class="b b--split">
+                  <div class="b">Narx bilimlari<br /><em>"Katarakta — 8 mln"</em></div>
+                  <div class="b">Mashhur<br />operatsiyalar</div>
+                </div>
+                <div class="b">Tez harakatlar: rassrochka · do'stni taklif · yordam</div>
+                <div class="b b--fixed">Pastki navigatsiya</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Yangi</dt>
+                <dd>Narx bilimlari bloki, mashhur operatsiyalar, tez harakatlar</dd>
+                <dt>Bo'sh</dt>
+                <dd>So'rov yo'q → nima uchun foydali ekanini tushuntiruvchi karta</dd>
+                <dt>API</dt>
+                <dd><code>/requests</code>, <code>/deals</code>, <code>/catalog/popular</code> <em>(yangi)</em></dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <h3>So'rov yaratish oqimi</h3>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">05</span>
+            <p class="screen-name">Operatsiya tanlash</p>
+            <span class="route">/new · qadam 1</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Katalogdan qidirish yoki kategoriya bo'yicha ko'rish.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Sarlavha: Nima kerak?</div>
+                <div class="b">Segment: Katalogdan | O'z so'zim bilan</div>
+                <div class="b">Qidiruv maydoni</div>
+                <div class="b">Kategoriya chiplar — <em>gorizontal skroll</em></div>
+                <div class="b b--scroll">Operatsiyalar ro'yxati<br /><em>nom + xalq tilidagi nom + "ℹ" ma'lumot</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Har qatorga "ℹ" — 25-ekranga (o'quv ma'lumoti) olib boradi</dd>
+                <dt>Qo'shish</dt>
+                <dd>Oxirgi qidiruvlar, mashhurlar (bo'sh qidiruvda)</dd>
+                <dt>API</dt>
+                <dd><code>GET /catalog/operations?q=</code></dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">06</span>
+            <p class="screen-name">AI yordamchi</p>
+            <span class="route">/new · qadam 1b</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">
+            Bemor "o't pufagimda tosh bor" deydi — AI operatsiya yo'nalishini taklif qiladi.
+            Tashxis emas, taklif.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b">Matn maydoni — <em>shikoyatni o'z so'zi bilan</em></div>
+                <div class="b b--cta">Aniqlash</div>
+                <div class="b b--scroll"><em>O'ylash paytida: skeleton shimmer</em></div>
+                <div class="b">AI kartochkasi: operatsiya + ishonch chizig'i + izoh</div>
+                <div class="b b--cta">Ha, shu · <em>Yo'q, boshqa</em></div>
+                <div class="b b--fixed">Ogohlantirish: yakuniy so'zni shifokor aytadi</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qoida</dt>
+                <dd>Tasdiqsiz so'rovga o'tilmaydi; ogohlantirish doim ko'rinadi</dd>
+                <dt>Chekka</dt>
+                <dd>Aniqlanmasa → katalog + shifokorga murojaat tavsiyasi</dd>
+                <dt>API</dt>
+                <dd><code>POST /ai/suggest</code> (SSE)</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">07</span>
+            <p class="screen-name">Byudjet va narx statistikasi</p>
+            <span class="route">/new · qadam 2</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Bozor narxini ko'rsatib, bemorga byudjetni ongli qo'yishga yordam beradi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b">Shahar chiplar</div>
+                <div class="b">Narx grafigi + manba belgisi<br /><em>"taxminiy" yoki "N ta real bitim"</em></div>
+                <div class="b">Byudjet: katta raqam + slider</div>
+                <div class="b"><em>Ogohlantirish agar oraliqdan past</em></div>
+                <div class="b">Shoshilinchlik chiplar</div>
+                <div class="b">Izoh maydoni</div>
+                <div class="b b--cta">Davom etish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qoida</dt>
+                <dd>Past byudjet bloklamaydi — faqat yumshoq ogohlantiradi</dd>
+                <dt>API</dt>
+                <dd><code>GET /catalog/price-stats</code></dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">08</span>
+            <p class="screen-name">Tibbiy hujjat yuklash</p>
+            <span class="route">/new · qadam 3</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Analiz yoki diagnoz surati. Klinika aniqroq narx beradi. Maydonlar bazada bor,
+            UI va saqlash qatlami yo'q.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Sarlavha: Hujjatlar · ixtiyoriy</div>
+                <div class="b">Nima foyda beradi — <em>qisqa tushuntirish</em></div>
+                <div class="b b--split">
+                  <div class="b">Kameradan<br />olish</div>
+                  <div class="b">Fayldan<br />tanlash</div>
+                </div>
+                <div class="b b--scroll">Yuklangan fayllar to'ri<br /><em>eskiz + progres + o'chirish</em></div>
+                <div class="b b--fixed">Maxfiylik: faqat siz tanlagan klinikaga ko'rinadi</div>
+                <div class="b b--cta">Davom etish · <em>O'tkazib yuborish</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Kerak</dt>
+                <dd>Fayl saqlash: <code>POST /files</code>, cheklov 5 fayl · 10 MB</dd>
+                <dt>Holat</dt>
+                <dd>Yuklanmoqda (progres), xato (qayta urinish), juda katta</dd>
+                <dt>Xavfsiz</dt>
+                <dd>Fayl faqat bitim tomonlariga; imzolangan vaqtinchalik havola</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">09</span>
+            <p class="screen-name">Ko'rib chiqish va yuborish</p>
+            <span class="route">/new · qadam 4</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Yuborishdan oldin oxirgi nazar. Hozir so'rov to'g'ridan-to'g'ri ketadi — bemor
+            nima yuborayotganini ko'rmaydi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Sarlavha: Ko'rib chiqing</div>
+                <div class="b">Operatsiya + shahar — <em>o'ng tomonda "o'zgartirish"</em></div>
+                <div class="b">Byudjet + shoshilinchlik — <em>o'zgartirish</em></div>
+                <div class="b">Hujjatlar (N ta) — <em>o'zgartirish</em></div>
+                <div class="b">Izoh</div>
+                <div class="b b--fixed">Bu so'rov <strong>N ta klinikaga</strong> boradi · 24 soat</div>
+                <div class="b b--cta">So'rov yuborish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Xatti</dt>
+                <dd>Har qator o'z qadamiga qaytaradi, holat saqlanadi</dd>
+                <dt>Chekka</dt>
+                <dd>Mos klinika 0 ta → yuborishni bloklaydi, shahar o'zgartirishni taklif qiladi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <h3>Takliflar va tanlov</h3>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">10</span>
+            <p class="screen-name">Kutish holati — radar</p>
+            <span class="route">/request/:id</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">So'rov tarqalayotganini jonli ko'rsatadi — bemor kutayotganini bilib turadi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Operatsiya nomi · shahar · byudjet</div>
+                <div class="b b--scroll" style="justify-content: center; text-align: center">
+                  Radar: markaz + to'lqinlar<br /><em>klinika avatarlari atrofida yonadi</em>
+                </div>
+                <div class="b">Yuborildi N · Ko'rmoqda M · Taklif K</div>
+                <div class="b">Taymer: javob kutish muddati</div>
+                <div class="b b--fixed">Ilovani yopsangiz ham bo'ladi — bildirishnoma olasiz</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Jonli</dt>
+                <dd>WebSocket: <code>request:progress</code>, <code>offer:new</code></dd>
+                <dt>Chekka</dt>
+                <dd>24 soat, taklif yo'q → bekor + "byudjetni oshiring"</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">11</span>
+            <p class="screen-name">Takliflar ro'yxati</p>
+            <span class="route">/request/:id</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Takliflar real vaqtda oqib keladi, saralanadi, taqqoslashga belgilanadi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Takliflar · N · <em>saralash chiplar</em></div>
+                <div class="b b--scroll">Taklif kartochkalari<br /><em>klinika, narx, nishonlar, nima kiradi</em></div>
+                <div class="b b--cta">Taqqoslash (2)</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Filtr varag'i: narx oralig'i, reyting, muddat, verifikatsiya</dd>
+                <dt>Qo'shish</dt>
+                <dd>"Yangi kelganlar" ajratgichi</dd>
+                <dt>Jonli</dt>
+                <dd>Yangi taklif yuqoridan spring bilan kiradi + haptic</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">12</span>
+            <p class="screen-name">Taklif detali</p>
+            <span class="route">/request/:id/offer/:oid</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Kartochkada hamma narsa sig'maydi. Bemor katta qaror qabul qilmoqda — to'liq
+            sahifa kerak.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Klinika nomi · tasdiqlangan belgisi</div>
+                <div class="b">Narx — <em>juda katta, tagida "hammasi kiradi"</em></div>
+                <div class="b">Nima kiradi — <em>belgili ro'yxat</em></div>
+                <div class="b">Nima kirmaydi — <em>ochiq aytiladi</em></div>
+                <div class="b">Afzalliklar teglari</div>
+                <div class="b">Jarroh: ism, tajriba, ixtisos</div>
+                <div class="b">Muddat va tayyorgarlik</div>
+                <div class="b">Klinika: reyting + 2 ta sharh + <em>profilga</em></div>
+                <div class="b b--cta">Bu variantni tanlash</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Yangi</dt>
+                <dd>"Nima kirmaydi" maydoni — shaffoflik siyosatini kuchaytiradi</dd>
+                <dt>Yangi</dt>
+                <dd>Taklifga jarroh biriktirish (klinika tomonda tanlanadi)</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">13</span>
+            <p class="screen-name">Klinika profili</p>
+            <span class="route">/clinic/:id</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Ishonchning asosiy ekrani. API bor (<code>/catalog/clinics/:id</code>), UI yo'q —
+            bemor kimga ishonayotganini ko'rmaydi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b">Muqova rasmi + logo</div>
+                <div class="b">Nom · tasdiqlangan · reyting</div>
+                <div class="b b--split">
+                  <div class="b">Bitimlar<br /><em>142</em></div>
+                  <div class="b">Javob<br /><em>~25 daq</em></div>
+                  <div class="b">Tajriba<br /><em>15 yil</em></div>
+                </div>
+                <div class="b">Segment: Haqida | Shifokorlar | Xizmatlar | Sharhlar</div>
+                <div class="b b--scroll">Tanlangan bo'lim kontenti</div>
+                <div class="b">Manzil + xarita + ish vaqti</div>
+                <div class="b"><em>Litsenziya: tasdiqlangan sana</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Sharhlar</dt>
+                <dd>4 o'lchov bo'yicha o'rtacha + matnli sharhlar ro'yxati</dd>
+                <dt>Qoida</dt>
+                <dd>Faqat tasdiqlangan bitimdan kelgan sharhlar ko'rinadi</dd>
+                <dt>API</dt>
+                <dd>Kengaytirish: shifokorlar, xizmatlar, rasm, ish vaqti</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">14</span>
+            <p class="screen-name">Takliflarni taqqoslash</p>
+            <span class="route">/request/:id/compare</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">
+            Hozir pastdan chiqadigan varaqda — tor. To'liq sahifa bo'lishi kerak, gorizontal
+            surilib ko'riladi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Taqqoslash · N ta taklif</div>
+                <div class="b"><em>← gorizontal skroll: ustunlar →</em></div>
+                <div class="b b--split">
+                  <div class="b">Klinika A<br />narx<br />reyting<br />kiradi<br />muddat</div>
+                  <div class="b">Klinika B<br />narx<br />reyting<br />kiradi<br />muddat</div>
+                </div>
+                <div class="b"><em>Farqli qatorlar rang bilan urg'ulanadi</em></div>
+                <div class="b b--cta">Tanlash — <em>har ustunda</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Faqat farqlarni ko'rsatish tugmasi</dd>
+                <dt>Qo'shish</dt>
+                <dd>Bozor medianasi bilan solishtirish qatori</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <h3>Bitim va yakun</h3>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">15</span>
+            <p class="screen-name">Chat</p>
+            <span class="route">/deal/:id</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Tanlovdan keyingina ochiladi. Telefon raqam almashilmaydi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Klinika avatar · nom · tasdiqlangan</div>
+                <div class="b">Bitim holati kartochkasi (yig'iladigan)</div>
+                <div class="b b--scroll">Xabarlar<br /><em>pufakchalar, tizim xabarlari, o'qildi</em></div>
+                <div class="b">Kontekst tugmalar: sana · narx tasdiq · fayl</div>
+                <div class="b b--fixed">Yozish paneli</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Rasm/fayl yuborish, "yozmoqda", tez javob shablonlari</dd>
+                <dt>Himoya</dt>
+                <dd>Raqam/havola yashiriladi, narx yashirilmaydi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">16</span>
+            <p class="screen-name">Bitim detali</p>
+            <span class="route">/deal/:id/details</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">Hozir chat ichida siqilgan. Alohida ekran: bosqichlar, shartlar, hujjatlar.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Bitim #N · holat nishoni</div>
+                <div class="b">Bosqich chizig'i: tanlandi → kelishildi → bajarildi → tasdiqlandi</div>
+                <div class="b">Kelishilgan narx · nima kiradi</div>
+                <div class="b">Sana va manzil</div>
+                <div class="b">Jarroh</div>
+                <div class="b">Hujjatlar</div>
+                <div class="b b--cta">Bosqichga mos amal</div>
+                <div class="b"><em>Nizo ochish · bekor qilish</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qoida</dt>
+                <dd>Bosqichni o'tkazib yuborib bo'lmaydi (server majburlaydi)</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">17</span>
+            <p class="screen-name">Sana belgilash</p>
+            <span class="route">/deal/:id/schedule</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">Hozir oddiy <code>&lt;input type="date"&gt;</code>. Kerak: klinikaning bo'sh kunlari ko'rinadigan kalendar.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Sarlavha: Sana tanlang</div>
+                <div class="b">Oy navigatsiyasi ‹ Avgust 2026 ›</div>
+                <div class="b b--scroll">Kalendar to'ri<br /><em>bo'sh kunlar yashil, band kulrang</em></div>
+                <div class="b">Vaqt slotlari — <em>chiplar</em></div>
+                <div class="b">Tanlangan: 15-avgust, 10:00</div>
+                <div class="b b--cta">Taklif qilish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Kerak</dt>
+                <dd>Klinika bo'sh slot boshqaruvi (K18) — usiz hamma kun ochiq</dd>
+                <dt>Xatti</dt>
+                <dd>Ikki tomon ham taklif qiladi, ikkinchisi tasdiqlaydi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">18</span>
+            <p class="screen-name">Tasdiqlash</p>
+            <span class="route">/deal/:id/confirm</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">
+            "Operatsiya bo'ldimi? Qancha to'lading?" — butun narx shaffofligi shu javobga
+            tayanadi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Operatsiya bo'ldimi?</div>
+                <div class="b"><em>Nega muhim: boshqa bemorlarga real narx ko'rsatiladi</em></div>
+                <div class="b">Summa maydoni — <em>kelishilgan narx eslatiladi</em></div>
+                <div class="b b--cta">Ha, bo'ldi</div>
+                <div class="b">Yo'q, bo'lmadi → <em>sabab → nizo</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Natija</dt>
+                <dd>Komissiya hisoblanadi, bemor bonus oladi, sharhga o'tadi</dd>
+                <dt>Chekka</dt>
+                <dd>3 kun javob yo'q → avto eslatma</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">19</span>
+            <p class="screen-name">Sharh va reyting</p>
+            <span class="route">/deal/:id/review</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">Varaqda bor; to'liq ekran bo'lishi kerak — bu ilovaning ijtimoiy kapitali.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Klinikani baholang</div>
+                <div class="b"><em>Sharhingiz yuzlab bemorga yordam beradi</em></div>
+                <div class="b">Sifat ★★★★★</div>
+                <div class="b">Munosabat ★★★★★</div>
+                <div class="b">Tozalik ★★★★★</div>
+                <div class="b">Natija ★★★★★</div>
+                <div class="b">Matnli sharh</div>
+                <div class="b">Rasm qo'shish · <em>ixtiyoriy</em></div>
+                <div class="b b--cta">Sharh qoldirish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Yakun</dt>
+                <dd>Muvaffaqiyat animatsiyasi + bonus kartochkasi</dd>
+                <dt>Qoida</dt>
+                <dd>Faqat tasdiqlangan bitimdan, bitimga bitta</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">20</span>
+            <p class="screen-name">Mening bitimlarim</p>
+            <span class="route">/deals</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Pastki navigatsiyaning bo'limi. Hozir bosh sahifada aralashib yotibdi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Bitimlar</div>
+                <div class="b">Segment: Faol | Yakunlangan | Bekor</div>
+                <div class="b b--scroll">Bitim kartochkalari<br /><em>klinika, operatsiya, narx, bosqich, o'qilmagan</em></div>
+                <div class="b b--fixed">Pastki navigatsiya</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Yakunlangan</dt>
+                <dd>Qancha to'langan + tejalgan summa + sharh havolasi</dd>
+                <dt>Bo'sh</dt>
+                <dd>"Hali bitim yo'q" + so'rov yuborishga taklif</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <h3>Doimiy va yordamchi</h3>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">21</span>
+            <p class="screen-name">Bildirishnomalar</p>
+            <span class="route">/notifications</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Ichki markaz — Telegram push bilan yonma-yon.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Bildirishnomalar · <em>barchasini o'qildi</em></div>
+                <div class="b b--scroll">Guruhlangan ro'yxat<br /><em>Bugun / Kecha / Oldinroq</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Sana bo'yicha guruhlash, turi bo'yicha filtr</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">22</span>
+            <p class="screen-name">Profil</p>
+            <span class="route">/profile</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Pastki navigatsiyaning to'rtinchi bo'limi — hozir umuman yo'q.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b">Avatar · ism · Telegram username</div>
+                <div class="b b--split">
+                  <div class="b">Bonus<br /><em>150 ball</em></div>
+                  <div class="b">Tejadingiz<br /><em>3.5 mln</em></div>
+                </div>
+                <div class="b">So'rovlar: 4 · Bitimlar: 2 · Sharhlar: 2</div>
+                <div class="b">Menyu: Sozlamalar</div>
+                <div class="b">Menyu: Do'stni taklif qilish</div>
+                <div class="b">Menyu: Rassrochka</div>
+                <div class="b">Menyu: Yordam</div>
+                <div class="b b--fixed">Klinika rejimiga o'tish <em>(agar biriktirilgan)</em></div>
+                <div class="b b--fixed">Pastki navigatsiya</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Yangi</dt>
+                <dd>"Tejadingiz" — bozor medianasi bilan to'langan summa farqi</dd>
+                <dt>Rol</dt>
+                <dd>Rol almashtirish shu yerda, alohida ilova emas</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">23</span>
+            <p class="screen-name">Sozlamalar</p>
+            <span class="route">/settings</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Til, tema, bildirishnoma, maxfiylik — biri ham boshqarilmaydi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Sozlamalar</div>
+                <div class="b">Til → o'zbek</div>
+                <div class="b">Tema → Avto | Yorug' | Qorong'i</div>
+                <div class="b">Bildirishnomalar: yangi taklif / xabar / eslatma <em>(alohida)</em></div>
+                <div class="b">Maxfiylik: tibbiy ma'lumot kimga ko'rinadi</div>
+                <div class="b">Ma'lumotlarimni yuklab olish</div>
+                <div class="b"><em>Hisobni o'chirish</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Yuridik</dt>
+                <dd>Maxfiylik siyosati va shartlar havolasi shu yerda</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">24</span>
+            <p class="screen-name">Yordam</p>
+            <span class="route">/help</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Tibbiy pul qarori — bemorda savol ko'p bo'ladi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Yordam</div>
+                <div class="b">Qidiruv</div>
+                <div class="b">Mavzular: So'rov · To'lov · Klinika · Maxfiylik</div>
+                <div class="b b--scroll">Savol-javob akkordeoni</div>
+                <div class="b b--cta">Qo'llab-quvvatlash bilan bog'lanish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Kontent</dt>
+                <dd>FAQ statik fayl sifatida, ikki tilda</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">25</span>
+            <p class="screen-name">Operatsiya ma'lumoti</p>
+            <span class="route">/operation/:slug</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Bemor "laparoskopik xoletsistektomiya" nima ekanini bilmaydi. Bu ekran ishonch
+            va SEO qiymati beradi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Operatsiya nomi</div>
+                <div class="b"><em>Xalq tilidagi nomi</em></div>
+                <div class="b">Bu nima va kimga kerak</div>
+                <div class="b">Qanday o'tadi — <em>bosqichlar</em></div>
+                <div class="b">Tayyorgarlik</div>
+                <div class="b">Tiklanish muddati</div>
+                <div class="b">Xavflar — <em>ochiq aytiladi</em></div>
+                <div class="b">Narx oralig'i — <em>shahringizda</em></div>
+                <div class="b">Bu operatsiyani qiladigan klinikalar</div>
+                <div class="b b--cta">Shu operatsiyaga so'rov yuborish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Kontent</dt>
+                <dd>26 operatsiya × 6 bo'lim × 2 til — katalogga maydon qo'shiladi</dd>
+                <dt>Xavfsiz</dt>
+                <dd>Ma'lumot xarakterida; davolash tavsiyasi emas — pastda ogohlantirish</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">26</span>
+            <p class="screen-name">Rassrochka</p>
+            <span class="route">/installment</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Ko'p bemorda operatsiyaga pul yetmaydi. Bu ekran platformani raqobatchilardan
+            ajratadi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Bo'lib to'lash</div>
+                <div class="b">Summa maydoni</div>
+                <div class="b">Muddat: 3 · 6 · 12 · 24 oy</div>
+                <div class="b b--fixed">Oyiga <strong>1 250 000 so'm</strong> <em>— katta raqam</em></div>
+                <div class="b">Umumiy to'lov · ortiqcha to'lov</div>
+                <div class="b">Hamkor banklar ro'yxati</div>
+                <div class="b">Shartlar va talablar</div>
+                <div class="b b--cta">Ariza qoldirish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Bosqich</dt>
+                <dd>Avval kalkulyator + ariza (bank bilan qo'lda), keyin API integratsiya</dd>
+                <dt>Ulanish</dt>
+                <dd>Byudjet ekranidan "pul yetmayaptimi?" havolasi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">27</span>
+            <p class="screen-name">Do'stni taklif qilish</p>
+            <span class="route">/referral</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Telegramda o'sishning eng arzon kanali.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Do'stingizga yordam bering</div>
+                <div class="b">Qanday ishlaydi — <em>3 qadam</em></div>
+                <div class="b">Taklif kodi + nusxalash</div>
+                <div class="b b--cta">Telegramda ulashish</div>
+                <div class="b">Taklif qilingan: 3 / 5 — <em>progres chizig'i</em></div>
+                <div class="b">Mukofot shartlari</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Kerak</dt>
+                <dd>Referral kod jadvali, hisoblash, mukofot berish mantiqi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ KLINIKA ══════════════════════ -->
+      <section id="klinika">
+        <h2>Klinika · 18 ekran</h2>
+        <p class="section-note">
+          Eng katta bo'shliq shu yerda. Klinika hozir faqat qat'iy katalogdan yo'nalish
+          belgilaydi va taklif yuboradi — o'z xizmatlarini, narxlarini, shifokorlarini
+          kirita olmaydi. Haqiqiy klinika uchun bu yetarli emas.
+        </p>
+
+        <h3>Kirish va verifikatsiya</h3>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K1</span>
+            <p class="screen-name">Ro'yxatdan o'tish — 4 qadam</p>
+            <span class="route">/clinic/register</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">Hozir bitta uzun forma. Ko'p qadamli bo'lsa tashlab ketish kamayadi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Qadam 1/4 — progres chizig'i</div>
+                <div class="b">1 · Asosiy: nom, shahar, manzil, telefon</div>
+                <div class="b">2 · Yo'nalishlar: kategoriya bo'yicha tanlash</div>
+                <div class="b">3 · Hujjatlar: litsenziya, guvohnoma <em>(fayl)</em></div>
+                <div class="b">4 · Ko'rib chiqish va yuborish</div>
+                <div class="b b--cta">Davom etish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Kerak</dt>
+                <dd>Fayl yuklash — litsenziyani rasm sifatida</dd>
+                <dt>Saqlash</dt>
+                <dd>Qoralama saqlanadi, keyin davom ettiriladi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K2</span>
+            <p class="screen-name">Verifikatsiya kutish</p>
+            <span class="route">/clinic (holat)</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">Hozir kichik ogohlantirish qatori. To'liq holat ekrani bo'lishi kerak.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--scroll" style="justify-content: center; text-align: center">
+                  Holat illyustratsiyasi<br /><em>"Moderator tekshirmoqda"</em>
+                </div>
+                <div class="b">Bosqichlar: yuborildi → ko'rilmoqda → natija</div>
+                <div class="b">Odatda 1–2 ish kuni</div>
+                <div class="b">Yuborilgan hujjatlar ro'yxati</div>
+                <div class="b b--cta">Hujjat qo'shish · Bog'lanish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Rad etilsa</dt>
+                <dd>Sabab ko'rsatiladi + tuzatib qayta yuborish tugmasi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <h3>Kundalik ish</h3>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K3</span>
+            <p class="screen-name">Panel (dashboard)</p>
+            <span class="route">/clinic</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">KPI'lar bor, lekin harakatga undamaydi — klinika nima qilishi kerakligini ko'rmaydi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Klinika nomi · obuna holati</div>
+                <div class="b b--cta">Javob kutayotgan 3 ta so'rov →</div>
+                <div class="b b--split">
+                  <div class="b">Yangi<br />so'rov</div>
+                  <div class="b">Yuborilgan</div>
+                  <div class="b">Yutilgan</div>
+                </div>
+                <div class="b b--split">
+                  <div class="b">Daromad</div>
+                  <div class="b">Komissiya</div>
+                  <div class="b">Javob<br />tezligi</div>
+                </div>
+                <div class="b">Haftalik grafik</div>
+                <div class="b">Diqqat talab qiladi: <em>tasdiqlanmagan bitim, tugayotgan obuna</em></div>
+                <div class="b b--fixed">Pastki navigatsiya</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Yuqorida "hozir nima qilish kerak" bloki</dd>
+                <dt>Qo'shish</dt>
+                <dd>Raqobat: "o'rtacha narxingiz bozordan 12% yuqori"</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K4</span>
+            <p class="screen-name">So'rovlar oqimi</p>
+            <span class="route">/clinic/requests</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Mos so'rovlar — operatsiya, shahar, obuna va verifikatsiya bo'yicha.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">So'rovlar · filtr</div>
+                <div class="b">Chiplar: Javobsiz | Shoshilinch | Yuqori byudjet</div>
+                <div class="b b--scroll">So'rov kartochkalari<br /><em>operatsiya, byudjet, taymer, raqobat soni</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>"Nechta klinika allaqachon taklif berdi" — raqobat signali</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K5</span>
+            <p class="screen-name">So'rov detali va taklif</p>
+            <span class="route">/clinic/requests/:id</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Bemor konteksti + bozor narxi + taklif formasi bir ekranda.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Operatsiya · shahar</div>
+                <div class="b">Bemor: byudjet, shoshilinchlik, izoh, hujjatlar</div>
+                <div class="b">Bozor narxi grafigi + sizning narxingiz markeri</div>
+                <div class="b b--cta">Xizmatlarimdan tanlash <em>← yangi</em></div>
+                <div class="b">Narx · nima kiradi · afzalliklar · muddat</div>
+                <div class="b">Jarroh biriktirish <em>← yangi</em></div>
+                <div class="b b--cta">Taklif yuborish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Yangi</dt>
+                <dd>Tayyor xizmatdan to'ldirish — 30 soniyada taklif</dd>
+                <dt>Qoida</dt>
+                <dd>"Nima kiradi" bo'sh bo'lsa yuborilmaydi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K6</span>
+            <p class="screen-name">Xizmatlarim — prays-list</p>
+            <span class="route">/clinic/services</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            <strong>Eng muhim yetishmayotgan ekran.</strong> Klinika o'z operatsiyalarini,
+            narxlarini va shartlarini shu yerda yuritadi. Taklif yuborish bir tegishga aylanadi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Xizmatlarim · N ta</div>
+                <div class="b">Qidiruv + kategoriya filtri</div>
+                <div class="b b--scroll">
+                  Xizmat qatorlari<br />
+                  <em>nom · narx oralig'i · faol/nofaol · tahrirlash</em>
+                </div>
+                <div class="b"><em>Katalogga bog'lanmagan xizmatlar alohida belgi bilan</em></div>
+                <div class="b b--cta">+ Xizmat qo'shish</div>
+                <div class="b b--fixed">Pastki navigatsiya</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Kerak</dt>
+                <dd>Yangi jadval <code>clinic_services</code> + CRUD API</dd>
+                <dt>Qidiruv</dt>
+                <dd>Bemor qidiruvida klinika xizmat nomi ham topiladi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K7</span>
+            <p class="screen-name">Xizmat qo'shish / tahrirlash</p>
+            <span class="route">/clinic/services/:id</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Klinika o'z nomi va narxi bilan xizmat yaratadi, uni katalogga bog'laydi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Xizmat qo'shish</div>
+                <div class="b">Xizmat nomi — <em>o'z so'zingiz bilan</em></div>
+                <div class="b b--fixed">Katalogdagi operatsiya ← <strong>matching shu orqali</strong></div>
+                <div class="b"><em>Topilmadimi? → Katalogga taklif qilish (K8)</em></div>
+                <div class="b b--split">
+                  <div class="b">Narx<br />dan</div>
+                  <div class="b">Narx<br />gacha</div>
+                </div>
+                <div class="b">Nima kiradi — <em>ro'yxat, qo'shiladigan</em></div>
+                <div class="b">Nima kirmaydi</div>
+                <div class="b">Muddat · yotoq kunlari</div>
+                <div class="b">Jarroh(lar) biriktirish</div>
+                <div class="b">Tavsif</div>
+                <div class="b b--cta">Saqlash</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Muhim</dt>
+                <dd>Katalog bog'lanishi majburiy — usiz so'rov bu xizmatga yetib bormaydi</dd>
+                <dt>Yordam</dt>
+                <dd>Nom yozilganda katalogdan mos operatsiya avtomatik taklif qilinadi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K8</span>
+            <p class="screen-name">Katalogga operatsiya taklif qilish</p>
+            <span class="route">/clinic/catalog-request</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Katalogda yo'q operatsiyani klinika taklif qiladi → moderator ko'rib chiqadi →
+            umumiy katalogga qo'shiladi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Yangi operatsiya taklif qilish</div>
+                <div class="b">Tibbiy nomi</div>
+                <div class="b">Xalq tilidagi nomi</div>
+                <div class="b">Kategoriya</div>
+                <div class="b">Qisqa tavsif</div>
+                <div class="b">Odatdagi narx oralig'i</div>
+                <div class="b b--fixed"><em>Moderator 1–2 kunda ko'rib chiqadi</em></div>
+                <div class="b b--cta">Taklif yuborish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Holat</dt>
+                <dd>Kutilmoqda / tasdiqlandi / rad etildi (sabab bilan)</dd>
+                <dt>Natija</dt>
+                <dd>Tasdiqlansa hamma klinikaga ochiladi, katalog o'sadi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K9</span>
+            <p class="screen-name">Takliflarim</p>
+            <span class="route">/clinic/offers</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">Yuborilgan takliflar va ularning taqdiri.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Takliflarim</div>
+                <div class="b">Segment: Kutilmoqda | Yutilgan | Rad etilgan</div>
+                <div class="b b--scroll">Taklif qatorlari<br /><em>operatsiya, narx, holat, sana</em></div>
+                <div class="b"><em>Rad etilganda: g'olib narxi ko'rsatiladi (anonim)</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Yangi</dt>
+                <dd>Yutqazish sababi — narx qanchaga farq qilgani, o'rganish uchun</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K10</span>
+            <p class="screen-name">Bitimlar</p>
+            <span class="route">/clinic/deals</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Faol va yakunlangan bitimlar, komissiya bilan.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Bitimlar · segment</div>
+                <div class="b b--scroll">Bemor · operatsiya · narx · bosqich</div>
+                <div class="b">Jami: daromad · komissiya · to'lanadi</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Komissiya hisob-kitobi va to'lov holati</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K11</span>
+            <p class="screen-name">Bitim va chat</p>
+            <span class="route">/clinic/deals/:id</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Bemor bilan bir xil ekran, klinika tomondagi amallar bilan.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Bemor ismi · operatsiya</div>
+                <div class="b">Bosqich chizig'i</div>
+                <div class="b b--scroll">Chat</div>
+                <div class="b b--cta">Operatsiya bajarildi <em>(bosqichga qarab)</em></div>
+                <div class="b b--fixed">Yozish paneli + tez javoblar</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Tez javob shablonlari (K17) shu yerda ishlaydi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <h3>Klinika boshqaruvi</h3>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K12</span>
+            <p class="screen-name">Klinika profili tahriri</p>
+            <span class="route">/clinic/profile</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Bemorga ko'rinadigan hamma narsa shu yerdan boshqariladi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Klinika profili · <em>bemor ko'rinishi</em></div>
+                <div class="b">Muqova va logo yuklash</div>
+                <div class="b">Nom · tavsif</div>
+                <div class="b">Manzil · xarita nuqtasi</div>
+                <div class="b">Ish vaqti — <em>hafta kunlari bo'yicha</em></div>
+                <div class="b">Jihozlar va imkoniyatlar</div>
+                <div class="b">Rasmlar galereyasi</div>
+                <div class="b">Yo'nalishlar (katalog)</div>
+                <div class="b b--cta">Saqlash</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Ko'rish</dt>
+                <dd>Yuqorida "bemor qanday ko'radi" tugmasi → 13-ekran</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K13</span>
+            <p class="screen-name">Shifokorlar</p>
+            <span class="route">/clinic/doctors</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Bemor kim operatsiya qilishini bilishi kerak — ishonchning katta qismi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Shifokorlar · N ta</div>
+                <div class="b b--scroll">Shifokor qatorlari<br /><em>foto · ism · ixtisos · tajriba</em></div>
+                <div class="b b--cta">+ Shifokor qo'shish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Forma</dt>
+                <dd>Ism, foto, ixtisos, tajriba yili, toifa, qisqa bio, operatsiyalar</dd>
+                <dt>Kerak</dt>
+                <dd>Yangi jadval <code>doctors</code> + taklifga biriktirish</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K14</span>
+            <p class="screen-name">Xodimlar va rollar</p>
+            <span class="route">/clinic/staff</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Klinika admini operator qo'shadi — kim taklif yuboradi, kim chatda javob beradi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Xodimlar</div>
+                <div class="b b--scroll">Xodim qatorlari<br /><em>ism · rol · oxirgi faollik</em></div>
+                <div class="b b--cta">+ Taklif havolasi yaratish</div>
+                <div class="b"><em>Rol: admin (hammasi) / operator (chat + taklif)</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Telegram havolasi orqali — xodim bosadi va biriktiriladi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K15</span>
+            <p class="screen-name">Obuna va to'lovlar</p>
+            <span class="route">/clinic/subscription</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">Reja tanlash bor; to'lov tarixi va hisob-faktura yo'q.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Joriy reja · tugash sanasi</div>
+                <div class="b">Limit: 12 / 250 taklif — <em>progres</em></div>
+                <div class="b b--split">
+                  <div class="b">Basic<br /><em>300 ming</em></div>
+                  <div class="b">Pro<br /><em>900 ming</em></div>
+                </div>
+                <div class="b">Rejalar taqqoslash jadvali</div>
+                <div class="b">To'lovlar tarixi</div>
+                <div class="b">Komissiya hisobi</div>
+                <div class="b b--cta">Obunani yangilash</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>To'lov tarixi, hisob-faktura yuklab olish, avto-yangilash</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K16</span>
+            <p class="screen-name">Analitika</p>
+            <span class="route">/clinic/analytics</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Pro rejaning asosiy qiymati — klinika nima uchun pul to'laydi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Analitika · davr tanlash</div>
+                <div class="b">Voronka: ko'rildi → taklif → yutildi → tasdiqlandi</div>
+                <div class="b">Yutish darajasi grafigi</div>
+                <div class="b">Narx pozitsiyasi: siz vs bozor</div>
+                <div class="b">Operatsiya bo'yicha taqsimot</div>
+                <div class="b">Javob tezligi va yutish bog'liqligi</div>
+                <div class="b">Yutqazilgan takliflar tahlili</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qiymat</dt>
+                <dd>"Javobni 2 soatga tezlashtirsangiz, yutish 18% oshadi"</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K17</span>
+            <p class="screen-name">Tez javob shablonlari</p>
+            <span class="route">/clinic/templates</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Operator har safar bir xil matnni yozmasin — javob tezligi ko'rsatkichga ta'sir qiladi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Shablonlar</div>
+                <div class="b b--scroll">Shablon qatorlari<br /><em>nom · matn boshi · ishlatilgan soni</em></div>
+                <div class="b b--cta">+ Shablon</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Ishlatish</dt>
+                <dd>Chatda "/" bosilganda ro'yxat chiqadi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">K18</span>
+            <p class="screen-name">Bo'sh slot boshqaruvi</p>
+            <span class="route">/clinic/schedule</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Bo'sh kunni to'ldirish uchun arzon taklif — klinika uchun kuchli vosita,
+            bemor uchun chegirma.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Jadval · oy ko'rinishi</div>
+                <div class="b b--scroll">Kalendar to'ri<br /><em>band / bo'sh / yopiq</em></div>
+                <div class="b">Kunni belgilash: bo'sh · yopiq</div>
+                <div class="b b--fixed">Bo'sh kunga chegirma taklif qilish</div>
+                <div class="b b--cta">Saqlash</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Ulanish</dt>
+                <dd>17-ekran (bemor sana tanlashi) shu ma'lumotdan foydalanadi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ MODERATOR ══════════════════════ -->
+      <section id="moderator">
+        <h2>Moderator va admin · 11 ekran</h2>
+        <p class="section-note">
+          Ishonch va yuridik himoyaning tayanchi. API'larning yarmi tayyor, UI yo'q —
+          moderator hozir foydalanuvchini bloklay, sharhni moderatsiya qila yoki katalogni
+          tahrirlay olmaydi.
+        </p>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M1</span>
+            <p class="screen-name">Verifikatsiya navbati</p>
+            <span class="route">/admin/verifications</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Kutayotgan klinika arizalari.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Verifikatsiya · N ta kutmoqda</div>
+                <div class="b b--scroll">Ariza kartochkalari<br /><em>klinika, shahar, sana, hujjat soni</em></div>
+                <div class="b b--fixed">Pastki navigatsiya</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Navbat yoshi bo'yicha saralash, kechikkanlar urg'usi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M2</span>
+            <p class="screen-name">Verifikatsiya detali</p>
+            <span class="route">/admin/verifications/:id</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Hozir moderator litsenziya <em>raqamini</em> ko'radi, hujjatning o'zini emas —
+            ya'ni haqiqiy tekshiruv qilib bo'lmaydi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Klinika nomi · ariza sanasi</div>
+                <div class="b b--scroll">Hujjat ko'rish oynasi<br /><em>zoom, aylantirish, keyingi</em></div>
+                <div class="b">Ariza ma'lumotlari: manzil, telefon, yo'nalishlar</div>
+                <div class="b">Tekshiruv ro'yxati — <em>belgilanadigan</em></div>
+                <div class="b">Oldingi arizalar tarixi</div>
+                <div class="b b--cta">Tasdiqlash · <em>Rad etish (sabab majburiy)</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Kerak</dt>
+                <dd>Fayl saqlash va xavfsiz ko'rish (imzolangan havola)</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M3</span>
+            <p class="screen-name">Nizolar</p>
+            <span class="route">/admin/disputes</span>
+            <span class="pill done">bor</span>
+          </div>
+          <p class="purpose">Kelishmagan bitimlar navbati.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Nizolar · N ta</div>
+                <div class="b b--scroll">Nizo qatorlari<br /><em>bitim, summa, sabab, ochilgan sana</em></div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Yoshi bo'yicha urg'u, kim ochgani</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M4</span>
+            <p class="screen-name">Nizo detali</p>
+            <span class="route">/admin/disputes/:id</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">Varaqda siqilgan. Moderator to'liq chat va hujjatlarni ko'rishi kerak.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Bitim #N · nizo sababi</div>
+                <div class="b">Tomonlar: bemor · klinika</div>
+                <div class="b">Bitim vaqt chizig'i — <em>har bosqich sanasi</em></div>
+                <div class="b b--scroll">To'liq chat tarixi</div>
+                <div class="b">Hujjatlar</div>
+                <div class="b">Qaror: summa · izoh</div>
+                <div class="b b--cta">Tasdiqlash · Bekor qilish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Jurnal</dt>
+                <dd>Har qaror <code>moderation_log</code> ga yoziladi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M5</span>
+            <p class="screen-name">Katalog boshqaruvi</p>
+            <span class="route">/admin/catalog</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Katalog hozir faqat seed fayldan keladi. Klinika taklifi (K8) shu ekranga tushadi.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Katalog · 26 operatsiya</div>
+                <div class="b b--fixed">Kutayotgan takliflar: 3 →</div>
+                <div class="b">Kategoriyalar ro'yxati + qo'shish</div>
+                <div class="b b--scroll">Operatsiyalar<br /><em>nom · kategoriya · klinika soni · so'rov soni</em></div>
+                <div class="b b--cta">+ Operatsiya</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Signal</dt>
+                <dd>Hech kim tanlamagan operatsiyalar belgilanadi — katalogni tozalash uchun</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M6</span>
+            <p class="screen-name">Operatsiya tahriri</p>
+            <span class="route">/admin/catalog/:id</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Nom, xalq tilidagi nom, kalit so'zlar — AI va qidiruv aniqligi shunga bog'liq.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Operatsiya tahriri</div>
+                <div class="b b--split">
+                  <div class="b">Nomi<br />(uz)</div>
+                  <div class="b">Nomi<br />(ru)</div>
+                </div>
+                <div class="b">Xalq tilidagi nom — <em>ikki tilda</em></div>
+                <div class="b">Kategoriya</div>
+                <div class="b">Kalit so'zlar — <em>teg sifatida, AI uchun</em></div>
+                <div class="b">Tavsif · o'quv matni (25-ekran uchun)</div>
+                <div class="b">Faol / nofaol</div>
+                <div class="b b--cta">Saqlash</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Sinov</dt>
+                <dd>"Kalit so'zlarni sinash" — matn yozib AI natijasini tekshirish</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M7</span>
+            <p class="screen-name">Katalog takliflari</p>
+            <span class="route">/admin/catalog/requests</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Klinikalardan kelgan yangi operatsiya takliflari navbati.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Takliflar · N ta</div>
+                <div class="b b--scroll">Taklif kartochkalari<br /><em>nom, klinika, sana</em></div>
+                <div class="b">O'xshash mavjud operatsiyalar — <em>dublikat oldini olish</em></div>
+                <div class="b b--cta">Katalogga qo'shish · Mavjudga birlashtirish · Rad etish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Muhim</dt>
+                <dd>Birlashtirish — klinika xizmati mavjud operatsiyaga bog'lanadi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M8</span>
+            <p class="screen-name">Foydalanuvchilar</p>
+            <span class="route">/admin/users</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">API tayyor (<code>/admin/users</code>), UI yo'q.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Foydalanuvchilar · qidiruv</div>
+                <div class="b">Filtr: rol · bloklangan · klinika</div>
+                <div class="b b--scroll">Qatorlar<br /><em>ism, rol, ro'yxatdan o'tgan, faollik</em></div>
+                <div class="b">Amal: rol berish · bloklash</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Xavfsiz</dt>
+                <dd>Faqat admin; har amal jurnalga yoziladi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M9</span>
+            <p class="screen-name">Sharh moderatsiyasi</p>
+            <span class="route">/admin/reviews</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">Shubhali sharhlar avtomatik belgilanadi, API bor, ko'rish ekrani yo'q.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Belgilangan sharhlar</div>
+                <div class="b b--scroll">Sharh kartochkalari<br /><em>matn, baho, klinika, bemor, sabab</em></div>
+                <div class="b b--cta">Tasdiqlash · O'chirish</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Natija</dt>
+                <dd>Klinika reytingi qayta hisoblanadi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M10</span>
+            <p class="screen-name">Metrikalar</p>
+            <span class="route">/admin/metrics</span>
+            <span class="pill partial">qisman</span>
+          </div>
+          <p class="purpose">Raqamlar bor, lekin dinamika yo'q — o'sish ko'rinmaydi.</p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Metrikalar · davr</div>
+                <div class="b">Voronka: so'rov → taklif → bitim → tasdiq</div>
+                <div class="b">Daromad: obuna + komissiya, vaqt bo'yicha</div>
+                <div class="b">Faol klinikalar · o'rtacha taklif soni</div>
+                <div class="b">Shahar va operatsiya kesimida</div>
+                <div class="b">Salomatlik: javobsiz so'rovlar, kechikkan verifikatsiya</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qo'shish</dt>
+                <dd>Vaqt qatorlari, davr taqqoslash, CSV eksport</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-head">
+            <span class="screen-num">M11</span>
+            <p class="screen-name">Narx ma'lumotlari</p>
+            <span class="route">/admin/prices</span>
+            <span class="pill missing">yo'q</span>
+          </div>
+          <p class="purpose">
+            Cold start narxlari hozir faqat seed faylda. Yangi operatsiya qo'shilganda
+            narx kiritish yo'li yo'q.
+          </p>
+          <div class="cols">
+            <div>
+              <p class="col-label">Bloklar</p>
+              <div class="blocks">
+                <div class="b b--fixed">Narx ma'lumotlari</div>
+                <div class="b">Filtr: operatsiya · shahar</div>
+                <div class="b b--scroll">Qatorlar<br /><em>min · p25 · median · p75 · max · manba</em></div>
+                <div class="b"><em>Real bitim yetarli bo'lgan qatorlar belgilanadi</em></div>
+                <div class="b b--cta">Tahrirlash · CSV import</div>
+              </div>
+            </div>
+            <div class="meta">
+              <dl>
+                <dt>Qoida</dt>
+                <dd>Qo'lda va real ma'lumot aralashmaydi — manba doim ko'rinadi</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ TIZIM ══════════════════════ -->
+      <section id="tizim">
+        <h2>Tizim ekranlari · 5</h2>
+        <p class="section-note">
+          Hech biri yo'q. Xato yuz berganda foydalanuvchi bo'sh ekran ko'radi — bu eng
+          tez "demo" degan taassurot qoldiradigan narsa.
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Ekran</th>
+                <th>Qachon</th>
+                <th>Nima ko'rinadi</th>
+                <th>Chiqish</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Tarmoq xatosi</td>
+                <td>API javob bermadi</td>
+                <td>Illyustratsiya, "Ulanib bo'lmadi", texnik tafsilotsiz</td>
+                <td>Qayta urinish</td>
+              </tr>
+              <tr>
+                <td>Offline</td>
+                <td>Internet yo'q</td>
+                <td>Yuqorida doimiy chiziq, keshdagi kontent o'qiladi</td>
+                <td>Avtomatik tiklanadi</td>
+              </tr>
+              <tr>
+                <td>Bloklangan</td>
+                <td>Hisob bloklangan</td>
+                <td>Sabab, murojaat yo'li</td>
+                <td>Qo'llab-quvvatlash</td>
+              </tr>
+              <tr>
+                <td>Topilmadi</td>
+                <td>Noto'g'ri havola</td>
+                <td>"Bu sahifa yo'q"</td>
+                <td>Bosh sahifaga</td>
+              </tr>
+              <tr>
+                <td>Ruxsat yo'q</td>
+                <td>Rol yetmaydi</td>
+                <td>Nima kerakligini tushuntiradi</td>
+                <td>Orqaga</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr />
+
+      <!-- ══════════════════════ QAROR ══════════════════════ -->
+      <section id="qaror">
+        <h2>Arxitektura qarori: klinika xizmatlari</h2>
+        <p class="section-note">
+          Siz "klinikalar o'z operatsiyalarini kirita olishi kerak" dedingiz. Bu yerda
+          ehtiyotkorlik kerak, chunki noto'g'ri yechim <strong>matching</strong>ni buzadi:
+          bemor katalogdan tanlaydi, klinika o'z nomini yozadi — ular bir-biriga ulanmaydi
+          va so'rov hech kimga bormaydi.
+        </p>
+
+        <div class="decision">
+          <h4>Tavsiya: xizmat + katalog bog'lanishi</h4>
+          <p>
+            Klinika <strong>xizmat</strong> yaratadi — o'z nomi, o'z narx oralig'i, nima
+            kirishi, jarrohi, muddati. Har xizmat katalogdagi bitta operatsiyaga
+            <strong>bog'lanadi</strong>. Bemor katalogdan qidiradi, so'rov operatsiya
+            bo'yicha yo'naladi, klinika esa o'z prays-listini to'liq boshqaradi.
+          </p>
+          <p>
+            Katalogda mos operatsiya bo'lmasa — klinika uni taklif qiladi (K8), moderator
+            ko'rib chiqadi (M7) va katalog o'sadi. Ya'ni katalog qotib qolmaydi, lekin
+            nazoratsiz ham tarqab ketmaydi.
+          </p>
+        </div>
+
+        <h3>Nima o'zgaradi</h3>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Qatlam</th>
+                <th>Qo'shiladi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Baza</td>
+                <td>
+                  <code>clinic_services</code> (klinika, katalog operatsiyasi, nom, narx oralig'i,
+                  kiradi/kirmaydi, muddat, jarroh, faol) · <code>doctors</code> ·
+                  <code>catalog_requests</code> · <code>clinic_schedule</code>
+                </td>
+              </tr>
+              <tr>
+                <td>API</td>
+                <td>
+                  Xizmat CRUD · shifokor CRUD · katalog taklifi · moderator katalog boshqaruvi ·
+                  fayl yuklash
+                </td>
+              </tr>
+              <tr>
+                <td>Matching</td>
+                <td>
+                  O'zgarmaydi — hamon operatsiya + shahar + obuna + verifikatsiya bo'yicha.
+                  Xizmat faqat taklifni tez to'ldirish uchun ishlatiladi.
+                </td>
+              </tr>
+              <tr>
+                <td>Qidiruv</td>
+                <td>
+                  Bemor qidiruvi klinika xizmat nomlarini ham qamrab oladi — "lazer bilan
+                  o't pufagi" deb qidirsa ham topiladi
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ REJA ══════════════════════ -->
+      <section id="reja">
+        <h2>Qurish rejasi</h2>
+        <p class="section-note">
+          Tartib qiymat bo'yicha: avval mahsulotni "haqiqiy" qiladigan narsalar, keyin
+          o'stiradiganlar. Har bosqich oxirida ilova ishlab turadi.
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Bosqich</th>
+                <th>Nima</th>
+                <th>Ekranlar</th>
+                <th>Nega shu tartibda</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="num">1</span> · Karkas</td>
+                <td>Pastki navigatsiya, profil, sozlamalar, tizim ekranlari, splash</td>
+                <td class="num">01, 03, 20, 22, 23 + 5 tizim</td>
+                <td>Ilova shu bilan "ilova"ga aylanadi; qolgan hamma narsa shu karkasga tushadi</td>
+              </tr>
+              <tr>
+                <td><span class="num">2</span> · Klinika yadrosi</td>
+                <td>Xizmatlar, xizmat tahriri, katalog taklifi, profil, shifokorlar</td>
+                <td class="num">K6, K7, K8, K12, K13</td>
+                <td>Sizning asosiy talabingiz; klinikasiz platforma bo'sh</td>
+              </tr>
+              <tr>
+                <td><span class="num">3</span> · Moderator</td>
+                <td>Katalog boshqaruvi, takliflar navbati, verifikatsiya detali</td>
+                <td class="num">M2, M5, M6, M7</td>
+                <td>2-bosqich usiz ishlamaydi — kim katalogni tasdiqlaydi?</td>
+              </tr>
+              <tr>
+                <td><span class="num">4</span> · Bemor ishonchi</td>
+                <td>Klinika profili, taklif detali, fayl yuklash, ko'rib chiqish</td>
+                <td class="num">08, 09, 12, 13</td>
+                <td>Bemor kimga ishonayotganini ko'radi — konversiya shunga bog'liq</td>
+              </tr>
+              <tr>
+                <td><span class="num">5</span> · Chuqurlik</td>
+                <td>Kalendar, bitim detali, sharh ekrani, taqqoslash, analitika</td>
+                <td class="num">14, 16, 17, 19, K16</td>
+                <td>Mavjud oqimlarni sayqallaydi</td>
+              </tr>
+              <tr>
+                <td><span class="num">6</span> · O'sish</td>
+                <td>O'quv sahifalari, rassrochka, referral, shablonlar, slot</td>
+                <td class="num">24, 25, 26, 27, K17, K18</td>
+                <td>Yadro ishlagandan keyin o'sishga kuch beradi</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Birinchi bosqichning aniq tarkibi</h3>
+        <p>
+          Karkas eng arzon va eng ko'p farq qiladigan ish: pastki navigatsiya, to'rtta
+          bemor bo'limi, xato/bo'sh/offline holatlari. Bugungi 10 ta ekran shu karkasga
+          ko'chiriladi, keyin ustiga qolgan 45 tasi bosqichma-bosqich qo'shiladi.
+        </p>
+      </section>
+    </main>
+  </div>
+</div>

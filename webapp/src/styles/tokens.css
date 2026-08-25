@@ -1,0 +1,114 @@
+/* KlinikaTop — dizayn tizimi tokenlari.
+   Hamma ekran shu bitta manbaga bo'ysunadi. */
+
+:root {
+  /* ── Ranglar: brend ── */
+  --primary: #0e766b;
+  --primary-deep: #0a4d46;
+  --primary-soft: #d7ebe7;
+  --accent: #e4933a;
+  --accent-pale: #fbebd4;
+  --accent-ink: #7a4a12;
+  --success: #1fa971;
+  --warning: #e4933a;
+  --danger: #e5533c;
+
+  /* ── Neytral (light) ── */
+  --bg: #eaf0ee;
+  --bg-elevated: #f4f8f6;
+  --card: #ffffff;
+  --ink: #0b2422;
+  --body: #516361;
+  --muted: #859895;
+  --line: rgba(11, 42, 34, 0.09);
+
+  /* ── Glass qatlam ── */
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --scrim: rgba(11, 36, 34, 0.42);
+
+  /* ── Fazoviy tizim ── */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-12: 48px;
+
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --r-pill: 100px;
+
+  /* ── Elevation ── */
+  --shadow: 0 8px 24px rgba(11, 42, 34, 0.06);
+  --shadow-lg: 0 16px 40px rgba(11, 42, 34, 0.12);
+  --shadow-inset: inset 0 0 0 1px var(--line);
+
+  /* ── Tipografiya ── */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+
+  --t-xs: clamp(11px, 2.8vw, 12px);
+  --t-sm: clamp(13px, 3.2vw, 14px);
+  --t-md: clamp(15px, 3.8vw, 16px);
+  --t-lg: clamp(17px, 4.2vw, 18px);
+  --t-xl: clamp(20px, 5.2vw, 22px);
+  --t-2xl: clamp(25px, 6.6vw, 28px);
+  --t-3xl: clamp(30px, 8.4vw, 36px);
+
+  /* ── Motion ── */
+  --d-micro: 120ms;
+  --d-base: 240ms;
+  --d-sheet: 360ms;
+  --d-page: 500ms;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Telegram xavfsiz zonalari */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Dark: aniq tanlov ustun turadi, aks holda tizim sozlamasi */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0c1817;
+    --bg-elevated: #0f1e1c;
+    --card: #12211f;
+    --ink: #eaf3f0;
+    --body: #9db2ae;
+    --muted: #6d817e;
+    --line: rgba(234, 243, 240, 0.1);
+    --primary-soft: #12332f;
+    --accent-pale: #3a2a12;
+    --accent-ink: #edb56a;
+
+    --glass: rgba(18, 33, 31, 0.72);
+    --glass-border: rgba(234, 243, 240, 0.08);
+    --scrim: rgba(0, 0, 0, 0.6);
+
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0c1817;
+  --bg-elevated: #0f1e1c;
+  --card: #12211f;
+  --ink: #eaf3f0;
+  --body: #9db2ae;
+  --muted: #6d817e;
+  --line: rgba(234, 243, 240, 0.1);
+  --primary-soft: #12332f;
+  --accent-pale: #3a2a12;
+  --accent-ink: #edb56a;
+
+  --glass: rgba(18, 33, 31, 0.72);
+  --glass-border: rgba(234, 243, 240, 0.08);
+  --scrim: rgba(0, 0, 0, 0.6);
+
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
