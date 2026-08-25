@@ -466,6 +466,16 @@ TAMPER=$(npx tsx "$ROOT/server/src/test/sign.ts" 900001 | sed 's/900001/900003/'
 code=$(status "${JSON[@]}" -H "x-init-data: $TAMPER" "$API/me")
 check "buzilgan imzo rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
+# Imzo oxiriga axlat qo'shilsa ham rad etilishi kerak.
+# Node'ning hex tahlilchisi yaroqsiz belgini jimgina tashlab yuboradi,
+# shuning uchun hash shakli alohida tekshiriladi.
+VALID=$(npx tsx "$ROOT/server/src/test/sign.ts" 900001)
+code=$(status "${JSON[@]}" -H "x-init-data: ${VALID}xyz" "$API/me")
+check "imzo oxiridagi axlat rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+code=$(status "${JSON[@]}" -H "x-init-data: $(echo "$VALID" | sed 's/hash=.*/hash=zzzz/')" "$API/me")
+check "hash shakli noto'g'ri bo'lsa rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
 # Eskirgan imzo (24 soatdan katta)
 OLD=$(npx tsx -e "
 import {signInitData} from '$ROOT/server/src/test/initData';

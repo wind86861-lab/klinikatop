@@ -21,6 +21,17 @@ export function verifyInitData(initData: string): { ok: true; user: TelegramUser
   const hash = params.get('hash');
   if (!hash) return { ok: false, reason: 'hash yo‘q' };
 
+  /*
+   * Hash shakli QAT'IY tekshiriladi: aynan 64 ta o'n oltilik belgi.
+   *
+   * Nima uchun kerak: Node'ning `Buffer.from(str, 'hex')` yaroqsiz belgiga
+   * duch kelganda xato bermaydi — o'sha joygacha o'qib to'xtaydi. Shuning
+   * uchun `hash=<to'g'ri 64 belgi>axlat` ham 32 baytga aylanardi va
+   * `timingSafeEqual` uni to'g'ri deb topardi. Imzoni soxtalashtirish
+   * imkonini bermasa ham, tekshiruv qat'iy bo'lishi kerak.
+   */
+  if (!/^[0-9a-f]{64}$/i.test(hash)) return { ok: false, reason: 'hash shakli noto‘g‘ri' };
+
   params.delete('hash');
   params.delete('signature');
 
