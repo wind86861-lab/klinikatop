@@ -42,12 +42,25 @@ if [ -z "$RESOLVED" ]; then
 fi
 
 if [ -n "$SERVER_IP" ] && [ "$RESOLVED" != "$SERVER_IP" ]; then
-  echo "✗ Domen boshqa serverga qarayapti. A yozuvini tekshiring."
+  echo "✗ Domen boshqa serverga qarayapti ($RESOLVED)."
+  echo "  A yozuvini $SERVER_IP ga o'zgartiring va DNS tarqalishini kuting."
   exit 1
 fi
 
 echo "▸ nginx bloki"
-sed -i "s/KLINIKATOP_DOMAIN/$DOMAIN/g" /etc/nginx/sites-available/klinikatop
+# Asosiy domen bo'lsa (klinikatop.uz) www varianti ham shu blokka tushishi
+# kerak. Aks holda www.* nginx'ning birinchi blokiga — banisa.uz ga tushadi.
+LABELS=$(echo "$DOMAIN" | awk -F. '{print NF}')
+if [ "$LABELS" -le 2 ]; then
+  NAMES="$DOMAIN www.$DOMAIN"
+  CERT_ARGS="-d $DOMAIN -d www.$DOMAIN"
+else
+  NAMES="$DOMAIN"
+  CERT_ARGS="-d $DOMAIN"
+fi
+echo "  server_name: $NAMES"
+
+sed -i "s/KLINIKATOP_DOMAIN/$NAMES/g" /etc/nginx/sites-available/klinikatop
 ln -sf /etc/nginx/sites-available/klinikatop /etc/nginx/sites-enabled/klinikatop
 
 # banisa.uz bloki buzilmaganini tekshiramiz — buzilgan bo'lsa qaytaramiz
@@ -64,12 +77,17 @@ echo "▸ HTTPS sertifikati"
 if ! command -v certbot >/dev/null; then
   apt-get update -qq && apt-get install -y -qq certbot python3-certbot-nginx
 fi
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos \
+# shellcheck disable=SC2086
+certbot --nginx $CERT_ARGS --non-interactive --agree-tos \
   --register-unsafely-without-email --redirect
 
 echo "▸ Muhit o'zgaruvchilari"
 sed -i "s|^WEBAPP_URL=.*|WEBAPP_URL=https://$DOMAIN|"     /etc/klinikatop.env
-sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$DOMAIN|" /etc/klinikatop.env
+if [ "$LABELS" -le 2 ]; then
+  sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$DOMAIN,https://www.$DOMAIN|" /etc/klinikatop.env
+else
+  sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$DOMAIN|" /etc/klinikatop.env
+fi
 
 systemctl restart klinikatop
 sleep 4
