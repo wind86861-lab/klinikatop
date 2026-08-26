@@ -20,6 +20,11 @@ export const config = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
     webappUrl: process.env.WEBAPP_URL ?? 'http://localhost:5173',
+    /**
+     * Webhook siri — Telegram har so'rovda sarlavhada qaytaradi.
+     * Marshrut ochiq internetda turgani uchun yagona himoya shu.
+     */
+    webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET ?? '',
   },
 
   db: {

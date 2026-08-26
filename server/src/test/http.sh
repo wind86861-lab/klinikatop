@@ -521,6 +521,21 @@ done
 check "AI marshruti cheklandi (429)" "$([ "$RL" = 429 ] && echo 1)" "$RL"
 
 echo
+echo "13. Telegram webhook"
+
+# Sirsiz kirish yopiq — bu marshrut ochiq internetda turadi
+code=$(status "${JSON[@]}" -X POST "$API/telegram/webhook" -d '{"message":{"chat":{"id":1},"text":"/start"}}')
+check "sirsiz webhook rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+code=$(status "${JSON[@]}" -H "x-telegram-bot-api-secret-token: notogri" \
+  -X POST "$API/telegram/webhook" -d '{"message":{"chat":{"id":1},"text":"/start"}}')
+check "noto'g'ri sir rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+# initData bilan ham o'tmaydi — himoya boshqacha
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/telegram/webhook" -d '{}')
+check "initData webhook uchun yaramaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+echo
 echo "──────────────────────────────────────────────────"
 echo "HTTP natija: $pass o'tdi, $fail yiqildi"
 [ "$fail" -eq 0 ]

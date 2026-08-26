@@ -9,6 +9,7 @@ import { clinicRouter } from './clinic';
 import { adminRouter } from './admin';
 import { aiRouter } from './ai';
 import { filesRouter } from './files';
+import { telegramRouter } from './telegram';
 import { limits } from '../middleware/rateLimit';
 
 export const apiRouter = Router();
@@ -17,6 +18,12 @@ apiRouter.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toIS
 
 // Katalog ochiq — bemor kirmasdan ham ko'ra oladi
 apiRouter.use('/catalog', catalogRouter);
+
+/*
+ * Telegram webhook autentifikatsiyadan OLDIN turadi: Telegram bizga
+ * `initData` yubormaydi. Uning himoyasi — maxfiy sarlavha (telegram.ts).
+ */
+apiRouter.use('/telegram', telegramRouter);
 
 // Qolgan hammasi Telegram initData bilan himoyalangan
 apiRouter.use(authenticate);

@@ -1,6 +1,7 @@
 import http from 'node:http';
 import express from 'express';
 import cors from 'cors';
+import { configureBot } from './services/bot';
 import { limits } from './middleware/rateLimit';
 import { ZodError } from 'zod';
 import { config, isProd } from './lib/config';
@@ -113,6 +114,8 @@ server.listen(config.port, config.host, () => {
   console.log(`[server] http://localhost:${config.port} (${config.env})`);
   console.log(`[server] websocket: ws://localhost:${config.port}/ws`);
   console.log('[server] telegram bot: ulangan');
+  // Menyu tugmasi va buyruqlar ro'yxati — har ko'tarilishda tasdiqlanadi
+  void configureBot();
   console.log(`[server] AI: ${aiEnabled() ? config.ai.model : 'lokal heuristika (API kaliti yo‘q)'}`);
 });
 
