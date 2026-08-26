@@ -33,6 +33,20 @@ const createSchema = z.object({
     .nullable()
     .optional(),
   aiSuggested: z.boolean().default(false),
+  /*
+   * So'rov kimga. O'ziga bo'lsa profil ma'lumotlari ishlatiladi;
+   * tanishiga bo'lsa quyidagi maydonlar to'ldiriladi.
+   */
+  forSelf: z.boolean().default(true),
+  subjectName: z.string().trim().min(2).max(120).nullable().default(null),
+  subjectBirthYear: z
+    .number()
+    .int()
+    .min(new Date().getFullYear() - 120)
+    .max(new Date().getFullYear())
+    .nullable()
+    .default(null),
+  subjectGender: z.enum(['male', 'female']).nullable().default(null),
   // Ommaviy oferta — har so'rovda aniq qabul qilinishi kerak
   acceptTerms: z.literal(true, {
     errorMap: () => ({ message: 'Ommaviy oferta shartlarini qabul qiling' }),
@@ -61,6 +75,10 @@ requestsRouter.post('/', (req, res) => {
     dateFlexible: body.dateFlexible,
     aiConversation: body.aiConversation ?? null,
     aiSuggested: body.aiSuggested,
+    forSelf: body.forSelf,
+    subjectName: body.subjectName,
+    subjectBirthYear: body.subjectBirthYear,
+    subjectGender: body.subjectGender,
     acceptTerms: body.acceptTerms,
     userAgent: req.header('user-agent') ?? null,
   });

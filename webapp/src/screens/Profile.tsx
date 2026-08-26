@@ -17,10 +17,11 @@ import {
   IconClinic,
   IconInfo,
   IconShield,
+  IconStethoscope,
   Screen,
   Skeleton,
 } from '@/ui';
-import type { DealDetail, RequestWithMeta } from '@shared/types';
+import { medicalProfileFilled, type DealDetail, RequestWithMeta } from '@shared/types';
 
 export function Profile() {
   const { t, lang, user, session, cities } = useApp();
@@ -55,6 +56,15 @@ export function Profile() {
   );
 
   const isModerator = user.roles.some((r) => r === 'moderator' || r === 'admin');
+
+  // Anketa to'ldirilganmi — profil ekranida holatini ko'rsatish uchun
+  const [medicalFilled, setMedicalFilled] = useState(false);
+  useEffect(() => {
+    void api
+      .medicalProfile()
+      .then((p) => setMedicalFilled(medicalProfileFilled(p)))
+      .catch(() => setMedicalFilled(false));
+  }, []);
 
   return (
     <Screen title={t('profile.title')} tabBar={<TabBar role="patient" />}>
@@ -133,6 +143,18 @@ export function Profile() {
             onClick={() => navigate('/clinic/register')}
           />
         )}
+        {/*
+          Tibbiy anketa — ixtiyoriy, shuning uchun profil ichida turadi,
+          ro'yxatdan o'tishga tiqilmaydi. Holati ko'rinib turadi, chunki
+          to'ldirilmagan anketa ham normal holat.
+        */}
+        <MenuRow
+          icon={<IconStethoscope size={18} />}
+          title={t('med.open')}
+          sub={medicalFilled ? t('med.filled') : t('med.empty')}
+          onClick={() => navigate('/profile/medical')}
+        />
+
         {isModerator && (
           <MenuRow
             icon={<IconShield size={18} />}

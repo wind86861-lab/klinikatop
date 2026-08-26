@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { getNotificationPrefs, setNotificationPrefs } from '../services/clinicCabinet';
+import { getMedicalProfile, saveMedicalProfile } from '../services/medicalProfile';
+import { BLOOD_TYPES, GENDERS } from '../../../shared/types';
 
 /** Sokin soatlar uchun haqiqiy vaqt: 00:00–23:59. Shakl emas, qiymat tekshiriladi. */
 const TIME_HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -53,7 +55,20 @@ meRouter.patch('/', (req, res) => {
       firstName: z.string().trim().min(2).max(80).optional(),
       lastName: z.string().trim().min(2).max(80).optional(),
       cityId: z.number().int().positive().optional(),
-      phone: z.string().trim().max(30).nullable().optional(),
+      /*
+       * `phone` ataylab QABUL QILINMAYDI: u Telegram tasdiqlagan raqam va
+       * bot orqali keladi. Foydalanuvchi uni o'zgartira olsa, tasdiqlangan
+       * bo'lishining ma'nosi qolmasdi. Qo'shimcha aloqa uchun `extraPhone`.
+       */
+      extraPhone: z.string().trim().max(30).nullable().optional(),
+      birthYear: z
+        .number()
+        .int()
+        .min(new Date().getFullYear() - 120)
+        .max(new Date().getFullYear() - 1)
+        .nullable()
+        .optional(),
+      gender: z.enum(GENDERS).nullable().optional(),
     })
     .parse(req.body);
 
@@ -67,7 +82,10 @@ meRouter.patch('/', (req, res) => {
        first_name = COALESCE(@firstName, first_name),
        last_name  = COALESCE(@lastName, last_name),
        city_id    = COALESCE(@cityId, city_id),
-       phone      = COALESCE(@phone, phone)
+       birth_year = COALESCE(@birthYear, birth_year),
+       gender     = COALESCE(@gender, gender),
+       -- Bo'sh qator yuborilsa tozalanadi; berilmasa tegilmaydi
+       extra_phone = CASE WHEN @extraPhoneSet = 1 THEN @extraPhone ELSE extra_phone END
      WHERE id = @id`,
   ).run({
     id: req.user!.id,
@@ -75,12 +93,15 @@ meRouter.patch('/', (req, res) => {
     firstName: body.firstName ?? null,
     lastName: body.lastName ?? null,
     cityId: body.cityId ?? null,
-    phone: body.phone ?? null,
+    birthYear: body.birthYear ?? null,
+    gender: body.gender ?? null,
+    extraPhoneSet: body.extraPhone !== undefined ? 1 : 0,
+    extraPhone: body.extraPhone ?? null,
   });
 
   const updated = mapUser(db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.user!.id));
 
-  // Uchala maydon to'lgan payt bir marta belgilanadi
+  // Barcha majburiy maydon to'lgan payt bir marta belgilanadi
   if (isProfileComplete(updated) && !updated.profileCompletedAt) {
     db.prepare(`UPDATE users SET profile_completed_at = datetime('now') WHERE id = ?`).run(req.user!.id);
     return res.json(mapUser(db.prepare(`SELECT * FROM users WHERE id = ?`).get(req.user!.id)));
@@ -124,4 +145,30 @@ meRouter.patch('/notification-prefs', (req, res) => {
     })
     .parse(req.body);
   res.json(setNotificationPrefs(req.user!.id, body));
+});
+
+
+/* ═════════════════  Tibbiy anketa  ═════════════════ */
+
+/** Faqat o'z anketasi. Boshqa birovnikini olishning yo'li yo'q. */
+meRouter.get('/medical', (req, res) => {
+  res.json(getMedicalProfile(req.user!.id));
+});
+
+meRouter.patch('/medical', (req, res) => {
+  const list = z.array(z.string().trim().min(1).max(200)).max(20);
+  const body = z
+    .object({
+      chronicConditions: list.optional(),
+      pastSurgeries: list.optional(),
+      allergies: list.optional(),
+      medications: list.optional(),
+      bloodType: z.enum(BLOOD_TYPES).nullable().optional(),
+      heightCm: z.number().int().min(40).max(250).nullable().optional(),
+      weightKg: z.number().int().min(2).max(400).nullable().optional(),
+      notes: z.string().trim().max(2000).nullable().optional(),
+    })
+    .parse(req.body);
+
+  res.json(saveMedicalProfile(req.user!.id, body));
 });

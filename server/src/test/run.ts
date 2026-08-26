@@ -67,6 +67,7 @@ async function main() {
   const ai = require('../services/ai');
   const scheduler = require('../services/scheduler');
   const business = require('../services/terms.business');
+  const { isProfileComplete } = require('../../../shared/types');
   const { upsertUser } = require('../middleware/auth');
 
   const tashkent = catalog.listCities().find((c: any) => c.slug === 'tashkent')!;
@@ -119,7 +120,11 @@ async function main() {
     'profile_incomplete',
   );
 
-  db.prepare(`UPDATE users SET last_name = 'Karimov', city_id = ? WHERE id = ?`).run(
+  // Yosh va jins ham majburiy: bir xil operatsiya turli yoshda boshqacha
+  // narxlanadi va ba'zilari jinsga bog'liq
+  db.prepare(
+    `UPDATE users SET last_name = 'Karimov', city_id = ?, birth_year = 1990, gender = 'male' WHERE id = ?`,
+  ).run(
     tashkent.id,
     patient.id,
   );
@@ -618,6 +623,92 @@ async function main() {
     String(autoClosed.commissionUzs),
   );
   check('ikkinchi marta yopilmaydi', deals.autoConfirmStaleDeals() === 0);
+
+
+  section('13. Profil, tibbiy anketa va so‘rov egasi');
+
+  // ── Yosh va jins majburiy ──
+  check('yoshsiz profil to‘liq emas', !isProfileComplete({ firstName: 'A', lastName: 'B', cityId: 1, birthYear: null, gender: 'male' } as any));
+  check('jinssiz profil to‘liq emas', !isProfileComplete({ firstName: 'A', lastName: 'B', cityId: 1, birthYear: 1990, gender: null } as any));
+  check('to‘liq profil qabul qilinadi', isProfileComplete({ firstName: 'A', lastName: 'B', cityId: 1, birthYear: 1990, gender: 'male' } as any));
+
+  // ── Tibbiy anketa ──
+  const med = require('../services/medicalProfile');
+  check('anketa dastlab bo‘sh', med.getMedicalProfile(patient.id).chronicConditions.length === 0);
+
+  const saved = med.saveMedicalProfile(patient.id, {
+    chronicConditions: ['Qandli diabet', '  ', 'Gipertoniya'],
+    allergies: ['Penitsillin'],
+    bloodType: 'A+',
+    heightCm: 178,
+    weightKg: 82,
+  });
+  check('bo‘sh qatorlar tashlab yuborildi', saved.chronicConditions.length === 2, String(saved.chronicConditions.length));
+  check('qon guruhi saqlandi', saved.bloodType === 'A+');
+
+  throws('haqiqatga to‘g‘ri kelmaydigan bo‘y rad etiladi', () => med.saveMedicalProfile(patient.id, { heightCm: 300 }), 'bad_height');
+  throws('haqiqatga to‘g‘ri kelmaydigan vazn rad etiladi', () => med.saveMedicalProfile(patient.id, { weightKg: 900 }), 'bad_weight');
+
+  // Qisman yangilash qolganini o'chirmasligi kerak
+  const partial = med.saveMedicalProfile(patient.id, { allergies: ['Yod'] });
+  check('qisman yangilash qolganini saqladi', partial.bloodType === 'A+' && partial.chronicConditions.length === 2);
+
+  // ── So'rov kimga ──
+  const forFriend = requests.createRequest({
+    patientId: patient.id,
+    operationId: gallbladder.id,
+    cityId: tashkent.id,
+    conditionText: 'Onamning biqinida og‘riq bor, tekshiruvda tosh topildi.',
+    budgetUzs: null,
+    note: null,
+    urgency: 'normal',
+    attachments: [],
+    otherRegionsOk: false,
+    dateFrom: null,
+    dateTo: null,
+    dateFlexible: true,
+    aiConversation: null,
+    aiSuggested: false,
+    forSelf: false,
+    subjectName: 'Malika Karimova',
+    subjectBirthYear: 1958,
+    subjectGender: 'female',
+    acceptTerms: true,
+  });
+  const friendReq = requests.getRequest(forFriend.id);
+  check('tanish uchun so‘rov belgilandi', friendReq.forSelf === false);
+  check('tanishning ismi saqlandi', friendReq.subjectName === 'Malika Karimova', String(friendReq.subjectName));
+  check('tanishning yoshi saqlandi', friendReq.subjectBirthYear === 1958);
+  check('tanishning jinsi saqlandi', friendReq.subjectGender === 'female');
+  requests.cancelRequest(forFriend.id, patient.id);
+
+  // O'ziga bo'lsa subject maydonlari TOZA qolishi kerak — aks holda
+  // klinika noto'g'ri odamning ma'lumotini ko'radi
+  const forMe = requests.createRequest({
+    patientId: patient.id,
+    operationId: gallbladder.id,
+    cityId: tashkent.id,
+    conditionText: 'O‘zimning biqinimda og‘riq, tekshiruvda tosh topildi.',
+    budgetUzs: null,
+    note: null,
+    urgency: 'normal',
+    attachments: [],
+    otherRegionsOk: false,
+    dateFrom: null,
+    dateTo: null,
+    dateFlexible: true,
+    aiConversation: null,
+    aiSuggested: false,
+    forSelf: true,
+    subjectName: 'Ataylab yuborilgan begona ism',
+    subjectBirthYear: 1900,
+    subjectGender: 'male',
+    acceptTerms: true,
+  });
+  const mine = requests.getRequest(forMe.id);
+  check('o‘ziga bo‘lsa begona ism yozilmaydi', mine.subjectName === null, String(mine.subjectName));
+  check('o‘ziga bo‘lsa forSelf true', mine.forSelf === true);
+  requests.cancelRequest(forMe.id, patient.id);
 
   section('11. Spam cheklovi');
   db.prepare(`UPDATE clinics SET subscription_status = 'active', subscription_until = datetime('now','+30 days') WHERE id = ?`).run(clinic.id);

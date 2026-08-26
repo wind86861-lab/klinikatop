@@ -7,6 +7,8 @@ import type {
   AiResult,
   CapacitySlot,
   City,
+  Gender,
+  MedicalProfile,
   Clinic,
   ClinicAnalytics,
   ClinicDashboard,
@@ -148,8 +150,17 @@ export const api = {
     firstName?: string;
     lastName?: string;
     cityId?: number;
-    phone?: string | null;
+    birthYear?: number | null;
+    gender?: Gender | null;
+    /** Telegram raqami o'zgartirilmaydi — bu qo'shimcha aloqa uchun */
+    extraPhone?: string | null;
+    lang?: Lang;
   }) => patch<User>('/me', body),
+
+  /* Tibbiy anketa — ixtiyoriy, faqat o'ziniki */
+  medicalProfile: () => get<MedicalProfile>('/me/medical'),
+  saveMedicalProfile: (body: Partial<Omit<MedicalProfile, 'updatedAt'>>) =>
+    patch<MedicalProfile>('/me/medical', body),
   terms: () => get<TermsDocument>('/me/terms'),
   markOnboarded: () => post<{ ok: true }>('/me/onboarded'),
 
@@ -191,6 +202,11 @@ export const api = {
     dateFlexible?: boolean;
     aiConversation?: ChatTurn[] | null;
     aiSuggested?: boolean;
+    /** So'rov kimga: o'ziga (true) yoki tanishiga */
+    forSelf?: boolean;
+    subjectName?: string | null;
+    subjectBirthYear?: number | null;
+    subjectGender?: Gender | null;
     /** Ommaviy oferta qabuli — serverda majburiy */
     acceptTerms: true;
   }) => post<RequestWithMeta>('/requests', body),

@@ -78,6 +78,16 @@ export interface CreateRequestInput {
   /** AI suhbati — bemor nima yozganini klinika to'liq ko'radi */
   aiConversation?: { role: 'user' | 'assistant'; content: string }[] | null;
   aiSuggested: boolean;
+  /**
+   * So'rov kimga: o'ziga (true) yoki tanishiga (false).
+   * Tanishiga bo'lsa quyidagi maydonlar to'ldiriladi va profil
+   * ma'lumotlari ISHLATILMAYDI — klinika noto'g'ri odamning yoshini
+   * ko'rmasligi kerak.
+   */
+  forSelf?: boolean;
+  subjectName?: string | null;
+  subjectBirthYear?: number | null;
+  subjectGender?: 'male' | 'female' | null;
   /** Bemor ommaviy ofertani qabul qilganini tasdiqlaydi — har so'rovda majburiy */
   acceptTerms: boolean;
   userAgent?: string | null;
@@ -134,10 +144,12 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
       .prepare(
         `INSERT INTO requests (patient_id, operation_id, city_id, budget_uzs, condition_text, note,
                                urgency, attachments, other_regions_ok, date_from, date_to, date_flexible,
-                               ai_conversation, status, ai_suggested, expires_at, terms_version, terms_accepted_at)
+                               ai_conversation, status, ai_suggested, expires_at, terms_version, terms_accepted_at,
+                               for_self, subject_name, subject_birth_year, subject_gender)
          VALUES (@patientId, @operationId, @cityId, @budgetUzs, @conditionText, @note,
                  @urgency, @attachments, @otherRegionsOk, @dateFrom, @dateTo, @dateFlexible,
-                 @aiConversation, 'NEW', @aiSuggested, @expiresAt, @termsVersion, datetime('now'))`,
+                 @aiConversation, 'NEW', @aiSuggested, @expiresAt, @termsVersion, datetime('now'),
+                 @forSelf, @subjectName, @subjectBirthYear, @subjectGender)`,
       )
       .run({
         patientId: input.patientId,
@@ -149,6 +161,11 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
         urgency: input.urgency,
         attachments: JSON.stringify(input.attachments ?? []),
         otherRegionsOk: input.otherRegionsOk ? 1 : 0,
+        // Tanishiga bo'lsa profil ma'lumotlari ishlatilmaydi
+        forSelf: input.forSelf === false ? 0 : 1,
+        subjectName: input.forSelf === false ? (input.subjectName?.trim()?.slice(0, 120) || null) : null,
+        subjectBirthYear: input.forSelf === false ? (input.subjectBirthYear ?? null) : null,
+        subjectGender: input.forSelf === false ? (input.subjectGender ?? null) : null,
         dateFrom: input.dateFrom,
         dateTo: input.dateTo,
         dateFlexible: input.dateFlexible ? 1 : 0,

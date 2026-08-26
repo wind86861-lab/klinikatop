@@ -33,7 +33,7 @@ import {
   Skeleton,
   Textarea,
 } from '@/ui';
-import type { ChatTurn, Operation, PriceStats, StoredFile, Urgency } from '@shared/types';
+import { GENDERS, ageFromBirthYear, type ChatTurn, type Gender, type Operation, type PriceStats, type StoredFile, type Urgency } from '@shared/types';
 
 /** Vizard qoralamasi — bitta manba. */
 export interface Draft {
@@ -51,9 +51,19 @@ export interface Draft {
   urgency: Urgency;
   /** AI suhbati — klinika bemor nima yozganini to'liq ko'radi */
   aiConversation: ChatTurn[] | null;
+  /** So'rov kimga: o'ziga yoki tanishiga */
+  forSelf: boolean;
+  subjectName: string;
+  subjectBirthYear: number | null;
+  subjectGender: Gender | null;
 }
 
-const STEPS = ['operation', 'condition', 'documents', 'region', 'budget', 'date', 'note', 'review'] as const;
+/*
+ * "Kimga" eng boshida turadi: javob keyingi qadamlarga ta'sir qiladi
+ * (o'ziga bo'lsa profil ma'lumotlari ishlatiladi), shuning uchun uni
+ * oxirida so'rash kech bo'lardi.
+ */
+const STEPS = ['who', 'operation', 'condition', 'documents', 'region', 'budget', 'date', 'note', 'review'] as const;
 type Step = (typeof STEPS)[number];
 
 export function NewRequest() {
@@ -79,6 +89,10 @@ export function NewRequest() {
     note: '',
     urgency: 'normal',
     aiConversation: null,
+    forSelf: true,
+    subjectName: '',
+    subjectBirthYear: null,
+    subjectGender: null,
   });
 
   const patch = (part: Partial<Draft>) => setDraft((d) => ({ ...d, ...part }));
@@ -100,6 +114,12 @@ export function NewRequest() {
   /** Har qadamning "davom etish" sharti. Ixtiyoriy qadamlar doim o'tadi. */
   const canAdvance = useMemo(() => {
     switch (step) {
+      case 'who':
+        // Tanishiga bo'lsa uning ma'lumotlari to'liq bo'lishi kerak
+        return (
+          draft.forSelf ||
+          (draft.subjectName.trim().length >= 2 && draft.subjectBirthYear !== null && draft.subjectGender !== null)
+        );
       case 'operation':
         return draft.operation !== null;
       case 'condition':
@@ -149,6 +169,10 @@ export function NewRequest() {
         dateTo: draft.dateTo,
         dateFlexible: draft.dateFlexible,
         aiConversation: draft.aiConversation,
+        forSelf: draft.forSelf,
+        subjectName: draft.forSelf ? null : draft.subjectName.trim(),
+        subjectBirthYear: draft.forSelf ? null : draft.subjectBirthYear,
+        subjectGender: draft.forSelf ? null : draft.subjectGender,
         aiSuggested: draft.aiSuggested,
         acceptTerms: true,
       });
@@ -200,6 +224,8 @@ export function NewRequest() {
           exit={{ opacity: 0, x: direction * -28 }}
           transition={{ duration: 0.26, ease: EASE }}
         >
+          {step === 'who' && <WhoStep draft={draft} patch={patch} />}
+
           {step === 'operation' && (
             <OperationStep
               draft={draft}
@@ -207,7 +233,7 @@ export function NewRequest() {
                 patch({ operation, aiSuggested });
                 // Tanlangach avtomatik keyingi qadamga — bitta tegish kamayadi
                 setDirection(1);
-                setIndex(1);
+                setIndex(2);
                 haptic.press();
                 window.scrollTo({ top: 0 });
               }}
@@ -220,7 +246,7 @@ export function NewRequest() {
                   aiConversation: turns,
                 });
                 setDirection(1);
-                setIndex(1);
+                setIndex(2);
                 haptic.press();
                 window.scrollTo({ top: 0 });
               }}
@@ -663,5 +689,107 @@ export function ToggleRow({
         <motion.span className="toggle-row__knob" animate={{ x: on ? 18 : 0 }} transition={spring} />
       </span>
     </button>
+  );
+}
+
+
+/* ─────────────────────────  1. So'rov kimga  ───────────────────────── */
+
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 120 }, (_, i) => CURRENT_YEAR - i);
+
+/**
+ * Bemor o'zi uchun ham, yaqini uchun ham so'rov qoldirishi mumkin.
+ *
+ * O'ziga bo'lsa profil ma'lumotlari ishlatiladi va hech narsa so'ralmaydi.
+ * Tanishiga bo'lsa profil ma'lumotlari ISHLATILMAYDI — aks holda klinika
+ * noto'g'ri odamning yoshi va jinsini ko'rib, noto'g'ri taklif berardi.
+ */
+function WhoStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {
+  const { t, user } = useApp();
+
+  const profileSummary = [
+    `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim(),
+    ageFromBirthYear(user?.birthYear) != null ? t('reg.age', { n: ageFromBirthYear(user?.birthYear)! }) : null,
+    user?.gender ? t(`reg.gender.${user.gender}` as any) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <>
+      <StepHead title={t('wz.who.title')} sub={t('wz.who.sub')} />
+
+      <div className="stack" style={{ gap: 8 }}>
+        <Card
+          className={`who-card ${draft.forSelf ? 'is-active' : ''}`}
+          onClick={() => patch({ forSelf: true })}
+        >
+          <strong>{t('wz.who.self')}</strong>
+          <span className="tiny">{t('wz.who.selfHint')}</span>
+        </Card>
+
+        <Card
+          className={`who-card ${!draft.forSelf ? 'is-active' : ''}`}
+          onClick={() => patch({ forSelf: false })}
+        >
+          <strong>{t('wz.who.other')}</strong>
+          <span className="tiny">{t('wz.who.otherHint')}</span>
+        </Card>
+      </div>
+
+      <AnimatePresence mode="wait">
+        {draft.forSelf ? (
+          <motion.div key="self" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <Notice tone="info">{t('wz.who.usingProfile', { v: profileSummary })}</Notice>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="other"
+            className="stack"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={spring}
+          >
+            <Field label={t('wz.who.name')}>
+              <Input
+                value={draft.subjectName}
+                maxLength={120}
+                placeholder={t('wz.who.namePh')}
+                onChange={(e) => patch({ subjectName: e.target.value })}
+              />
+            </Field>
+
+            <Field label={t('wz.who.birthYear')}>
+              <Select
+                value={draft.subjectBirthYear ?? ''}
+                aria-label={t('wz.who.birthYear')}
+                onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                  patch({ subjectBirthYear: e.target.value ? Number(e.target.value) : null })
+                }
+              >
+                <option value="">{t('reg.choose')}</option>
+                {YEARS.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label={t('wz.who.gender')}>
+              <div className="row" style={{ gap: 6 }}>
+                {GENDERS.map((g) => (
+                  <Chip key={g} active={draft.subjectGender === g} onClick={() => patch({ subjectGender: g })}>
+                    {t(`reg.gender.${g}` as any)}
+                  </Chip>
+                ))}
+              </div>
+            </Field>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

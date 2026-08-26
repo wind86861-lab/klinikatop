@@ -73,7 +73,10 @@ check "obuna faollashtirildi" "$([ "$SUB" = "active" ] && echo 1)" "$SUB"
 echo
 echo "3. Bemor profili va oferta"
 # Profil to'ldirilmagan bo'lsa so'rov yuborilmaydi
-curl -s "${PATIENT[@]}" "${JSON[@]}" -X PATCH "$API/me" -d '{"firstName":"Aziz","lastName":"Karimov","cityId":1}' > /dev/null
+# Yosh va jins ham majburiy: bir xil operatsiya turli yoshda boshqacha
+# narxlanadi va ba'zilari jinsga bog'liq
+curl -s "${PATIENT[@]}" "${JSON[@]}" -X PATCH "$API/me" \
+  -d '{"firstName":"Aziz","lastName":"Karimov","cityId":1,"birthYear":1990,"gender":"male"}' > /dev/null
 COMPLETE=$(curl -s "${PATIENT[@]}" "$API/me" | jqv '.profileComplete')
 check "profil to'ldirildi" "$([ "$COMPLETE" = "true" ] && echo 1)" "$COMPLETE"
 
@@ -554,6 +557,54 @@ code=$(status "${JSON[@]}" -H "x-telegram-bot-api-secret-token: $SEC" \
   -X POST "$API/telegram/webhook" \
   -d '{"message":{"chat":{"id":1},"from":{"id":1},"contact":{"phone_number":"+998901112233","user_id":999}}}')
 check "begona kontaktda ham 200 (Telegram qayta yubormasin)" "$([ "$code" = 200 ] && echo 1)" "$code"
+
+echo
+echo "14. Bemor profili va tibbiy anketa"
+
+# Telegram raqami o'zgartirilmaydi — `phone` maydoni umuman qabul qilinmaydi
+BEFORE=$(curl -s "${PATIENT[@]}" "$API/me" | jqv '.user.phone')
+curl -s "${PATIENT[@]}" "${JSON[@]}" -X PATCH "$API/me" -d '{"phone":"+998900000000"}' > /dev/null
+AFTER=$(curl -s "${PATIENT[@]}" "$API/me" | jqv '.user.phone')
+check "Telegram raqami o'zgartirilmaydi" "$([ "$BEFORE" = "$AFTER" ] && echo 1)" "$AFTER"
+
+EXTRA=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X PATCH "$API/me" \
+  -d '{"extraPhone":"+998901234567"}' | jqv '.extraPhone')
+check "qo'shimcha raqam saqlandi" "$([ "$EXTRA" = "+998901234567" ] && echo 1)" "$EXTRA"
+
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X PATCH "$API/me" -d '{"birthYear":1700}')
+check "haqiqatga to'g'ri kelmaydigan yil rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X PATCH "$API/me" -d '{"gender":"other"}')
+check "noma'lum jins rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# Tibbiy anketa
+MED=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X PATCH "$API/me/medical" \
+  -d '{"chronicConditions":["Gipertoniya"],"allergies":["Penitsillin"],"bloodType":"A+","heightCm":178}' | jqv '.bloodType')
+check "tibbiy anketa saqlandi" "$([ "$MED" = "A+" ] && echo 1)" "$MED"
+
+KEEP=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X PATCH "$API/me/medical" \
+  -d '{"allergies":["Yod"]}' | jqv '.chronicConditions.length')
+check "qisman yangilash qolganini saqladi" "$([ "$KEEP" = 1 ] && echo 1)" "$KEEP"
+
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X PATCH "$API/me/medical" -d '{"heightCm":300}')
+check "haqiqatga to'g'ri kelmaydigan bo'y rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+code=$(status "${STRANGER[@]}" "$API/me/medical")
+check "anketa faqat o'ziniki (begona bo'sh oladi)" "$([ "$code" = 200 ] && echo 1)" "$code"
+
+# So'rov kimga
+FRIEND=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d '{"operationId":1,"cityId":1,"urgency":"normal","conditionText":"Onamning biqinida ogriq bor, tekshiruvda tosh topildi.","forSelf":false,"subjectName":"Malika Karimova","subjectBirthYear":1958,"subjectGender":"female","acceptTerms":true}' | jqv '.id')
+SUBJ=$(curl -s "${PATIENT[@]}" "$API/requests/$FRIEND" | jqv '.request.subjectName')
+check "tanish uchun so'rov saqlandi" "$([ "$SUBJ" = "Malika Karimova" ] && echo 1)" "$SUBJ"
+curl -s "${PATIENT[@]}" -X POST "$API/requests/$FRIEND/cancel" > /dev/null
+
+# O'ziga bo'lsa begona ism yozilmaydi
+MINE=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d '{"operationId":1,"cityId":1,"urgency":"normal","conditionText":"Ozimning biqinimda ogriq, tekshiruvda tosh topildi.","forSelf":true,"subjectName":"Begona ism","acceptTerms":true}' | jqv '.id')
+MSUBJ=$(curl -s "${PATIENT[@]}" "$API/requests/$MINE" | jqv '.request.subjectName')
+check "o'ziga bo'lsa begona ism yozilmadi" "$([ -z "$MSUBJ" ] && echo 1)" "${MSUBJ:-bo_sh}"
+curl -s "${PATIENT[@]}" -X POST "$API/requests/$MINE/cancel" > /dev/null
 
 echo
 echo "──────────────────────────────────────────────────"

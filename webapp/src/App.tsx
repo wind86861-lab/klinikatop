@@ -9,6 +9,7 @@ import { Home } from '@/screens/Home';
 import { MyRequests } from '@/screens/MyRequests';
 import { MyDeals } from '@/screens/MyDeals';
 import { Profile } from '@/screens/Profile';
+import { MedicalProfileScreen } from '@/screens/MedicalProfile';
 import { Settings } from '@/screens/Settings';
 import { NewRequest } from '@/screens/NewRequest';
 import { RequestDetail } from '@/screens/RequestDetail';
@@ -91,6 +92,7 @@ export function App() {
           <Route path="/requests" element={<MyRequests />} />
           <Route path="/deals" element={<MyDeals />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/medical" element={<MedicalProfileScreen />} />
           <Route path="/settings" element={<Settings />} />
 
           {/* Bemor oqimlari */}

@@ -455,6 +455,53 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    /**
+     * Bemor profili va tibbiy anketa.
+     *
+     * Tug'ilgan YIL saqlanadi, yosh emas: yosh har yili eskirib qoladi va
+     * bir marta kiritilgan qiymat keyin yolg'on bo'lib qolardi. Yosh
+     * ko'rsatilganda hisoblanadi.
+     *
+     * Tibbiy anketa alohida jadvalda: u ixtiyoriy, maxfiyroq va
+     * profildan ko'ra kamroq o'qiladi.
+     */
+    id: '010_patient_profile',
+    up: (db) => {
+      addColumn(db, 'users', 'birth_year', 'INTEGER');
+      addColumn(db, 'users', 'gender', "TEXT CHECK (gender IN ('male','female'))");
+      // Telegram bergan raqam o'zgartirilmaydi; bu qo'shimcha aloqa uchun
+      addColumn(db, 'users', 'extra_phone', 'TEXT');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS medical_profiles (
+          user_id             INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          -- JSON massivlar: har biri erkin matnli qatorlar ro'yxati
+          chronic_conditions  TEXT NOT NULL DEFAULT '[]',
+          past_surgeries      TEXT NOT NULL DEFAULT '[]',
+          allergies           TEXT NOT NULL DEFAULT '[]',
+          medications         TEXT NOT NULL DEFAULT '[]',
+          blood_type          TEXT,
+          height_cm           INTEGER,
+          weight_kg           INTEGER,
+          notes               TEXT,
+          updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      /*
+       * So'rov kimga tegishli.
+       *
+       * Bemor o'zi uchun ham, tanishi uchun ham so'rov qoldirishi mumkin.
+       * Tanishi uchun bo'lsa profil ma'lumotlari ISHLATILMAYDI — aks holda
+       * klinika noto'g'ri odamning yoshi va kasalligini ko'radi.
+       */
+      addColumn(db, 'requests', 'for_self', 'INTEGER NOT NULL DEFAULT 1');
+      addColumn(db, 'requests', 'subject_name', 'TEXT');
+      addColumn(db, 'requests', 'subject_birth_year', 'INTEGER');
+      addColumn(db, 'requests', 'subject_gender', "TEXT CHECK (subject_gender IN ('male','female'))");
+    },
+  },
 ];
 
 /**

@@ -10,6 +10,16 @@ export type Role = (typeof ROLES)[number];
 
 export type Lang = 'uz' | 'ru';
 
+export const GENDERS = ['male', 'female'] as const;
+export type Gender = (typeof GENDERS)[number];
+
+/** Tug'ilgan yildan yosh. Yosh saqlanmaydi — u har yili eskiradi. */
+export function ageFromBirthYear(birthYear: number | null | undefined): number | null {
+  if (!birthYear) return null;
+  const age = new Date().getFullYear() - birthYear;
+  return age >= 0 && age <= 130 ? age : null;
+}
+
 /* ─────────────────────────  Lifecycle  ───────────────────────── */
 
 /** So'rov: YANGI → TAKLIFLAR_KELMOQDA → TANLANGAN → YAKUNLANGAN | BEKOR */
@@ -89,6 +99,10 @@ export interface User {
   /** Bemorning viloyati — so'rovda standart shahar sifatida ishlatiladi */
   cityId: number | null;
   phone: string | null;
+  /** Telegram tasdiqlagan raqam o'zgartirilmaydi; bu qo'shimchasi */
+  extraPhone: string | null;
+  birthYear: number | null;
+  gender: Gender | null;
   /** Ism, familiya va viloyat to'ldirilgan payt. Bo'sh bo'lsa — ro'yxatdan o'tish tugallanmagan */
   profileCompletedAt: string | null;
   onboardedAt: string | null;
@@ -98,9 +112,21 @@ export interface User {
 }
 
 /** Profil to'liq to'ldirilganmi — so'rov yuborish uchun shart. */
+/**
+ * Profil so'rov yuborish uchun yetarlimi.
+ *
+ * Yosh va jins tibbiy jihatdan muhim: bir xil operatsiya 30 va 70 yoshda
+ * boshqacha narxlanadi va ba'zilari jinsga bog'liq. Shuning uchun ular
+ * ixtiyoriy emas.
+ */
 export function isProfileComplete(user: User | null | undefined): boolean {
   return Boolean(
-    user && user.firstName.trim() && user.lastName?.trim() && user.cityId,
+    user &&
+      user.firstName.trim() &&
+      user.lastName?.trim() &&
+      user.cityId &&
+      user.birthYear &&
+      user.gender,
   );
 }
 
@@ -238,6 +264,14 @@ export interface MedicalRequest {
   dateFlexible: boolean;
   /** AI bilan bo'lgan suhbat — klinika bemor nima yozganini to'liq ko'radi */
   aiConversation: ChatTurn[] | null;
+  /**
+   * So'rov kimga tegishli. O'ziga bo'lsa bemorning profil ma'lumotlari
+   * ishlatiladi; tanishiga bo'lsa shu yerdagi qiymatlar.
+   */
+  forSelf: boolean;
+  subjectName: string | null;
+  subjectBirthYear: number | null;
+  subjectGender: Gender | null;
   status: RequestStatus;
   aiSuggested: boolean;
   expiresAt: string;
@@ -706,4 +740,62 @@ export interface PlatformSettings {
   commissionPercent: number;
   trialMonths: number;
   autoConfirmDays: number;
+}
+
+
+/* ═══════════════════════  Tibbiy anketa  ═══════════════════════
+ *
+ * To'liq ixtiyoriy. To'ldirilgan bo'lsa so'rovga biriktiriladi va klinika
+ * aniqroq taklif bera oladi — masalan surunkali kasallik operatsiya
+ * narxiga va tayyorgarlikka ta'sir qiladi.
+ */
+export interface MedicalProfile {
+  chronicConditions: string[];
+  pastSurgeries: string[];
+  allergies: string[];
+  medications: string[];
+  bloodType: string | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  notes: string | null;
+  updatedAt: string | null;
+}
+
+export const EMPTY_MEDICAL_PROFILE: MedicalProfile = {
+  chronicConditions: [],
+  pastSurgeries: [],
+  allergies: [],
+  medications: [],
+  bloodType: null,
+  heightCm: null,
+  weightKg: null,
+  notes: null,
+  updatedAt: null,
+};
+
+export const BLOOD_TYPES = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'] as const;
+
+/** Anketa qanchalik to'ldirilgan — profil ekranida ko'rsatiladi. */
+export function medicalProfileFilled(p: MedicalProfile | null | undefined): boolean {
+  if (!p) return false;
+  return (
+    p.chronicConditions.length > 0 ||
+    p.pastSurgeries.length > 0 ||
+    p.allergies.length > 0 ||
+    p.medications.length > 0 ||
+    Boolean(p.bloodType || p.heightCm || p.weightKg || p.notes)
+  );
+}
+
+/**
+ * So'rov kimga tegishli.
+ *
+ * O'ziga bo'lsa profil ma'lumotlari ishlatiladi. Tanishiga bo'lsa
+ * ISHLATILMAYDI — klinika noto'g'ri odamning yoshini ko'rmasligi kerak.
+ */
+export interface RequestSubject {
+  forSelf: boolean;
+  name: string | null;
+  birthYear: number | null;
+  gender: Gender | null;
 }

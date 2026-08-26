@@ -2570,3 +2570,18 @@
   text-align: right;
 }
 .terms-row__value .tiny { font-weight: 400; color: var(--muted); }
+
+/* ── "So'rov kimga" tanlovi ── */
+.who-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: border-color var(--d-base) var(--ease), background var(--d-base) var(--ease);
+}
+.who-card.is-active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.who-card.is-active strong { color: var(--primary); }
