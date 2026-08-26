@@ -5,13 +5,22 @@ import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
 import { EASE, spring } from '@/lib/motion';
-import { Button, Chip, IconChat, IconSparkle, IconWallet } from '@/ui';
+import { Button, Chip, IconChart, IconChat, IconSparkle, IconWallet } from '@/ui';
 import type { TranslationKey } from '@/i18n';
 import type { Lang } from '@shared/types';
 
+/*
+ * Slaydlar bemor bosib o'tadigan yo'l tartibida:
+ *   so'rov yuborish -> klinikalar taklif beradi -> byudjet -> tanlov
+ *
+ * Byudjet aynan shu yerda turadi, chunki u "narx ochiq" va'dasining
+ * davomi: bemor bozor narxini ko'radi va shundan keyin o'z raqamini
+ * qo'yadi. Tanlovdan keyin aytilsa kech bo'lardi.
+ */
 const SLIDES = [
   { key: '1', Icon: IconWallet },
   { key: '2', Icon: IconSparkle },
+  { key: '4', Icon: IconChart },
   { key: '3', Icon: IconChat },
 ] as const;
 

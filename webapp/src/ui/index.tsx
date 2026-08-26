@@ -747,6 +747,13 @@ export const IconClinic = ({ size = 20 }) => (
   </svg>
 );
 
+export const IconChart = ({ size = 20 }) => (
+  <svg {...svg(size)}>
+    <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+    <path d="M7 15l3.5-4 3 3L20 7" />
+  </svg>
+);
+
 export const IconWallet = ({ size = 20 }) => (
   <svg {...svg(size)}>
     <path d="M20 12V8H6a2 2 0 010-4h12v4" />

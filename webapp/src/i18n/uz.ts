@@ -31,6 +31,8 @@ export const uz = {
   'onb.2.text': 'Siz emas — ular narx taklif qiladi. Nima kirishi ochiq ko‘rsatiladi, yashirin qo‘shimcha yo‘q.',
   'onb.3.title': 'Eng mosini o‘zingiz tanlaysiz',
   'onb.3.text': 'Takliflarni yonma-yon taqqoslang. Tanlaganingizdan keyingina chat ochiladi.',
+  'onb.4.title': 'Byudjetingizni o‘zingiz belgilaysiz',
+  'onb.4.text': 'Ixtiyoriy. Bozordagi real narxni ko‘rib turib qo‘yasiz — klinikalar shundan kelib chiqib taklif beradi. Ko‘rsatmasangiz ham bo‘ladi.',
   'onb.start': 'Boshlash',
   'onb.lang': 'Til',
 
