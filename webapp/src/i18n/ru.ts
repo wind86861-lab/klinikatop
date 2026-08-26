@@ -825,4 +825,7 @@ export const ru: Record<TranslationKey, string> = {
   'wz.who.birthYear': 'Год рождения',
   'wz.who.gender': 'Пол',
   'wz.who.usingProfile': 'Используем данные из вашего профиля: {v}',
+  'profile.completeness': 'Заполненность профиля',
+  'profile.completenessHint': 'Заполните медицинскую анкету — рост, вес, хронические болезни — и клиника предложит точнее.',
+  'profile.completeNow': 'Заполнить анкету',
 };

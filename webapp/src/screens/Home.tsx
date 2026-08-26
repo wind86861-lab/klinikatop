@@ -28,7 +28,6 @@ import {
   IconClinic,
   IconInbox,
   IconPlus,
-  IconShield,
   IconStar,
   Skeleton,
   SkeletonList,
@@ -427,10 +426,18 @@ function PanelLinks() {
   const { t, user } = useApp();
   const navigate = useNavigate();
 
+  /*
+   * Bosh sahifada FAQAT klinika paneli ko'rsatiladi.
+   *
+   * Moderator paneli ataylab bu yerda yo'q: u imtiyozli kirish nuqtasi va
+   * bosh ekranda turishi kerak emas. Yonidagi odam yelkangiz osha qarasa,
+   * platformada boshqaruv paneli borligini va sizda unga huquq borligini
+   * bilib oladi. Moderator uchun kirish Profil ichida — kundalik ish emas,
+   * ataylab qidiriladigan joy.
+   */
   const isClinic = user?.roles.some((r) => r === 'clinic_admin' || r === 'clinic_operator');
-  const isModerator = user?.roles.some((r) => r === 'moderator' || r === 'admin');
 
-  if (!isClinic && !isModerator) return null;
+  if (!isClinic) return null;
 
   return (
     <div className="stack" style={{ marginTop: 'var(--s-4)' }}>
@@ -458,27 +465,6 @@ function PanelLinks() {
         </motion.button>
       )}
 
-      {isModerator && (
-        <motion.button
-          type="button"
-          className="panel-link panel-link--admin"
-          whileTap={{ scale: 0.985 }}
-          transition={spring}
-          onClick={() => {
-            haptic.press();
-            navigate('/admin');
-          }}
-        >
-          <span className="panel-link__icon">
-            <IconShield size={20} />
-          </span>
-          <span className="panel-link__text">
-            <strong>{t('home.adminPanel')}</strong>
-            <span className="tiny">{t('home.adminPanelHint')}</span>
-          </span>
-          <IconChevronRight />
-        </motion.button>
-      )}
     </div>
   );
 }

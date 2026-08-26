@@ -5,12 +5,14 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { money } from '@/lib/format';
-import { spring } from '@/lib/motion';
+import { popVariants, spring } from '@/lib/motion';
 import { cityName } from '@/i18n';
 import { TabBar } from '@/components/TabBar';
 import { TermsSheet } from '@/components/Terms';
+import { Meter } from './clinic/shell';
 import {
   Avatar,
+  Button,
   Card,
   CountUp,
   IconBell,
@@ -59,6 +61,8 @@ export function Profile() {
 
   // Anketa to'ldirilganmi — profil ekranida holatini ko'rsatish uchun
   const [medicalFilled, setMedicalFilled] = useState(false);
+  // Asosiy profil doim to'liq (aks holda ilovaga kirib bo'lmaydi), anketa ixtiyoriy
+  const completedSteps = 1 + (medicalFilled ? 1 : 0);
   useEffect(() => {
     void api
       .medicalProfile()
@@ -111,12 +115,45 @@ export function Profile() {
         </Card>
       )}
 
+      {/*
+        To'ldirilganlik.
+        Bemor nima yetishmayotganini bilishi kerak — aks holda "to'liq
+        to'ldirish" degan narsa ko'rinmay qoladi. Tibbiy anketa ixtiyoriy,
+        shuning uchun u alohida, yumshoqroq ohangda ko'rsatiladi.
+      */}
+      {!medicalFilled && (
+        <motion.div variants={popVariants} initial="initial" animate="animate">
+          <Card className="stack" style={{ gap: 8 }}>
+            <div className="between">
+              <strong>{t('profile.completeness')}</strong>
+              <span className="tiny num">{completedSteps}/2</span>
+            </div>
+            <Meter value={completedSteps / 2} tone={completedSteps === 2 ? 'success' : 'accent'} />
+            <span className="tiny">{t('profile.completenessHint')}</span>
+            <Button size="sm" variant="secondary" block onClick={() => navigate('/profile/medical')}>
+              {t('profile.completeNow')}
+            </Button>
+          </Card>
+        </motion.div>
+      )}
+
       {/* Menyu */}
       <div className="menu-group">
         <MenuRow
           icon={<IconUserEdit />}
           title={t('profile.edit')}
           onClick={() => navigate('/register', { state: { next: '/profile' } })}
+        />
+        {/*
+          Tibbiy anketa profilning bir qismi — shuning uchun shu yerda,
+          "Ma'lumotlarni tahrirlash" yonida. Ilgari eng pastda turardi va
+          ko'zga tashlanmasdi.
+        */}
+        <MenuRow
+          icon={<IconStethoscope size={18} />}
+          title={t('med.open')}
+          sub={medicalFilled ? t('med.filled') : t('med.empty')}
+          onClick={() => navigate('/profile/medical')}
         />
         <MenuRow icon={<IconGear />} title={t('profile.settings')} onClick={() => navigate('/settings')} />
         <MenuRow
@@ -143,18 +180,6 @@ export function Profile() {
             onClick={() => navigate('/clinic/register')}
           />
         )}
-        {/*
-          Tibbiy anketa — ixtiyoriy, shuning uchun profil ichida turadi,
-          ro'yxatdan o'tishga tiqilmaydi. Holati ko'rinib turadi, chunki
-          to'ldirilmagan anketa ham normal holat.
-        */}
-        <MenuRow
-          icon={<IconStethoscope size={18} />}
-          title={t('med.open')}
-          sub={medicalFilled ? t('med.filled') : t('med.empty')}
-          onClick={() => navigate('/profile/medical')}
-        />
-
         {isModerator && (
           <MenuRow
             icon={<IconShield size={18} />}

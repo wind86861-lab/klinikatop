@@ -848,6 +848,9 @@ export const uz = {
   'wz.who.birthYear': 'Tug‘ilgan yil',
   'wz.who.gender': 'Jins',
   'wz.who.usingProfile': 'Profildagi ma’lumotlaringiz ishlatiladi: {v}',
+  'profile.completeness': 'Profil to‘ldirilganligi',
+  'profile.completenessHint': 'Tibbiy anketani to‘ldirsangiz klinika aniqroq taklif beradi — bo‘y, vazn, surunkali kasalliklar.',
+  'profile.completeNow': 'Anketani to‘ldirish',
 } as const;
 
 export type TranslationKey = keyof typeof uz;
