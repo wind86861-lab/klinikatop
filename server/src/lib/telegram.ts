@@ -32,8 +32,16 @@ export function verifyInitData(initData: string): { ok: true; user: TelegramUser
    */
   if (!/^[0-9a-f]{64}$/i.test(hash)) return { ok: false, reason: 'hash shakli noto‘g‘ri' };
 
+  /*
+   * Faqat `hash` chiqariladi — qolgan HAMMA maydon imzoga kiradi.
+   *
+   * Ilgari bu yerda `signature` ham chiqarilardi va shu sababli Telegram
+   * mijozlaridan kelgan haqiqiy initData rad etilardi. `signature` —
+   * uchinchi tomon tekshiruvi uchun qo'shilgan yangi maydon, lekin u ham
+   * data-check-string ning bir qismi. Uni tashlab yuborish hisoblangan
+   * hashni butunlay boshqa qiladi.
+   */
   params.delete('hash');
-  params.delete('signature');
 
   const checkString = [...params.entries()]
     .map(([k, v]) => [k, v] as const)

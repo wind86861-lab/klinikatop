@@ -23,11 +23,21 @@ export interface FakeUser {
  *   secret = HMAC_SHA256("WebAppData", botToken)
  *   hash   = HMAC_SHA256(secret, "k=v\n..." kalitlar bo'yicha saralangan)
  */
-export function signInitData(user: FakeUser, botToken: string, authDate = Math.floor(Date.now() / 1000)): string {
+export function signInitData(
+  user: FakeUser,
+  botToken: string,
+  authDate = Math.floor(Date.now() / 1000),
+  /**
+   * Telegramning yangi mijozlari `signature` maydonini ham yuboradi.
+   * U data-check-string ga KIRADI — shuni sinash uchun qo'shiladi.
+   */
+  withSignature = false,
+): string {
   const params = new URLSearchParams();
   params.set('auth_date', String(authDate));
   params.set('query_id', `test_${user.id}`);
   params.set('user', JSON.stringify(user));
+  if (withSignature) params.set('signature', 'AAHt3st_sign4ture_v4lue');
 
   const checkString = [...params.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))

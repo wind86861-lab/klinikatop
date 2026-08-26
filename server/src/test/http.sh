@@ -490,6 +490,13 @@ check "imzo oxiridagi axlat rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" 
 code=$(status "${JSON[@]}" -H "x-init-data: $(echo "$VALID" | sed 's/hash=.*/hash=zzzz/')" "$API/me")
 check "hash shakli noto'g'ri bo'lsa rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
+# Telegramning yangi mijozlari `signature` maydonini ham yuboradi va u
+# data-check-string ga KIRADI. Ilgari uni chiqarib tashlardik — shu sababli
+# haqiqiy Telegram foydalanuvchilari ilovaga kira olmasdi.
+SIG=$(npx tsx "$ROOT/server/src/test/sign.ts" 900001 signature)
+code=$(status "${JSON[@]}" -H "x-init-data: $SIG" "$API/me")
+check "signature maydoni bilan imzo qabul qilinadi (200)" "$([ "$code" = 200 ] && echo 1)" "$code"
+
 # Eskirgan imzo (24 soatdan katta)
 OLD=$(npx tsx -e "
 import {signInitData} from '$ROOT/server/src/test/initData';

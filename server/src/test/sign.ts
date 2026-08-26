@@ -25,6 +25,14 @@ const NAMES: Record<number, { first_name: string; last_name?: string }> = {
   900777: { first_name: 'Begona' },
 };
 
+// Ikkinchi argument berilsa — `signature` maydoni bilan (yangi mijozlar shunday yuboradi)
+const withSignature = process.argv[3] === 'signature';
+
 process.stdout.write(
-  signInitData({ id, language_code: 'uz', ...(NAMES[id] ?? { first_name: `User ${id}` }) }, config.telegram.botToken),
+  signInitData(
+    { id, language_code: 'uz', ...(NAMES[id] ?? { first_name: `User ${id}` }) },
+    config.telegram.botToken,
+    Math.floor(Date.now() / 1000),
+    withSignature,
+  ),
 );
