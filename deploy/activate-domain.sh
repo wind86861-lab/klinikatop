@@ -51,12 +51,25 @@ echo "▸ nginx bloki"
 # Asosiy domen bo'lsa (klinikatop.uz) www varianti ham shu blokka tushishi
 # kerak. Aks holda www.* nginx'ning birinchi blokiga — banisa.uz ga tushadi.
 LABELS=$(echo "$DOMAIN" | awk -F. '{print NF}')
+NAMES="$DOMAIN"
+CERT_ARGS="-d $DOMAIN"
+
 if [ "$LABELS" -le 2 ]; then
+  # www har doim server_name ga qo'shiladi — aks holda u nginx'ning
+  # birinchi blokiga (banisa.uz) tushib ketadi.
   NAMES="$DOMAIN www.$DOMAIN"
-  CERT_ARGS="-d $DOMAIN -d www.$DOMAIN"
-else
-  NAMES="$DOMAIN"
-  CERT_ARGS="-d $DOMAIN"
+
+  # Sertifikatga esa FAQAT www haqiqatan shu serverga qarasa qo'shiladi.
+  # Let's Encrypt har bir domenni HTTP so'rov bilan tekshiradi; www hali
+  # eski manzilda bo'lsa butun buyruq yiqiladi va sertifikat umuman
+  # olinmaydi. Keshi yangilangach `certbot --expand` bilan qo'shiladi.
+  WWW_IP=$(getent hosts "www.$DOMAIN" | awk '{print $1}' | head -1 || echo '')
+  if [ "$WWW_IP" = "$SERVER_IP" ]; then
+    CERT_ARGS="$CERT_ARGS -d www.$DOMAIN"
+  else
+    echo "  ⚠ www hali eski manzilda ($WWW_IP) — sertifikatga qo'shilmaydi"
+    echo "    DNS keshi yangilangach: certbot --nginx --expand -d $DOMAIN -d www.$DOMAIN"
+  fi
 fi
 echo "  server_name: $NAMES"
 
