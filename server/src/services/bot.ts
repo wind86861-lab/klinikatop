@@ -8,7 +8,9 @@
  * Shuning uchun bu yerda holat mashinasi ham, sessiya ham yo'q: har xabar
  * mustaqil ko'rib chiqiladi.
  */
+import { db } from '../db';
 import { config } from '../lib/config';
+import { upsertUser } from '../middleware/auth';
 
 const API = () => `https://api.telegram.org/bot${config.telegram.botToken}`;
 
@@ -16,6 +18,12 @@ interface InlineButton {
   text: string;
   web_app?: { url: string };
   url?: string;
+}
+
+/** Pastdagi klaviatura tugmasi — kontakt so'rash uchun. */
+interface ReplyButton {
+  text: string;
+  request_contact?: boolean;
 }
 
 /**
@@ -46,7 +54,7 @@ async function call(method: string, body: unknown): Promise<boolean> {
 export function sendMessage(
   chatId: number,
   text: string,
-  buttons?: InlineButton[][],
+  markup?: { inline_keyboard: InlineButton[][] } | { keyboard: ReplyButton[][]; resize_keyboard: true; one_time_keyboard: true } | { remove_keyboard: true },
 ): Promise<boolean> {
   return call('sendMessage', {
     chat_id: chatId,
@@ -54,21 +62,27 @@ export function sendMessage(
     parse_mode: 'HTML',
     // Havolalarning oldindan ko'rinishi xabarni cho'zadi — kerak emas
     link_preview_options: { is_disabled: true },
-    ...(buttons ? { reply_markup: { inline_keyboard: buttons } } : {}),
+    ...(markup ? { reply_markup: markup } : {}),
   });
 }
 
 /* ─────────────────────────  Matnlar  ───────────────────────── */
 
-const WELCOME = `<b>KlinikaTop</b> — tibbiy tender platformasi
+const INTRO = `<b>KlinikaTop</b> — tibbiy tender platformasi
 
 Bitta so'rov qoldiring — shahringizdagi mos klinikalar narx taklif qiladi. Taqqoslab, o'zingizga qulayini tanlaysiz.
 
 • Narxlar ochiq: nima kirishi ro'yxat bilan ko'rsatiladi
 • Tanlagunizcha hech kim sizga qo'ng'iroq qilmaydi
-• Xizmat bemor uchun bepul
+• Xizmat bemor uchun bepul`;
 
-Boshlash uchun quyidagi tugmani bosing.`;
+const ASK_CONTACT = `Boshlashdan oldin telefon raqamingizni tasdiqlang.
+
+Bu <b>klinikaga ko'rsatilmaydi</b> — faqat siz bilan bog'lana olmay qolgan holatda zaxira aloqa uchun saqlanadi.
+
+Quyidagi tugmani bosing.`;
+
+const READY = `Raqamingiz saqlandi. Endi ilovani ochib so'rov qoldirsangiz bo'ladi.`;
 
 const HELP = `<b>Qanday ishlaydi</b>
 
@@ -80,9 +94,27 @@ const HELP = `<b>Qanday ishlaydi</b>
 Savol bo'lsa shu yerga yozing.`;
 
 /** Ilovani ochadigan tugma — Mini App shu orqali ishga tushadi. */
-function openButton(): InlineButton[][] {
-  const url = config.telegram.webappUrl;
-  return [[{ text: '🩺 Ilovani ochish', web_app: { url } }]];
+function openButton() {
+  return {
+    inline_keyboard: [[{ text: '🩺 Ilovani ochish', web_app: { url: config.telegram.webappUrl } }]],
+  };
+}
+
+/** Kontakt so'rash klaviaturasi — Telegram raqamni o'zi tasdiqlab beradi. */
+function contactKeyboard() {
+  return {
+    keyboard: [[{ text: '📱 Raqamni yuborish', request_contact: true }]],
+    resize_keyboard: true as const,
+    one_time_keyboard: true as const,
+  };
+}
+
+/** Foydalanuvchining raqami allaqachon saqlanganmi. */
+function hasPhone(telegramId: number): boolean {
+  const row = db
+    .prepare(`SELECT phone FROM users WHERE telegram_id = ? AND phone IS NOT NULL AND phone <> ''`)
+    .get(telegramId);
+  return Boolean(row);
 }
 
 /* ─────────────────────────  Yangilanishlar  ───────────────────────── */
@@ -91,7 +123,8 @@ interface TelegramUpdate {
   message?: {
     chat: { id: number };
     text?: string;
-    from?: { first_name?: string };
+    from?: { id: number; first_name?: string; last_name?: string; username?: string; language_code?: string };
+    contact?: { phone_number: string; user_id?: number; first_name?: string; last_name?: string };
   };
 }
 
@@ -103,16 +136,60 @@ interface TelegramUpdate {
  */
 export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   const message = update.message;
-  if (!message?.text) return;
+  if (!message) return;
 
   const chatId = message.chat.id;
+  const from = message.from;
+
+  /*
+   * Kontakt keldi — ro'yxatdan o'tishning asosiy qadami.
+   *
+   * Raqamni Telegramning o'zi tasdiqlaydi, ya'ni bu qo'lda yozilgan
+   * raqamdan ishonchliroq. Boshqa odamning kontaktini yuborish mumkin
+   * bo'lgani uchun `user_id` tekshiriladi.
+   */
+  if (message.contact) {
+    if (from && message.contact.user_id !== from.id) {
+      await sendMessage(chatId, 'Iltimos, <b>o‘z</b> raqamingizni yuboring.', contactKeyboard());
+      return;
+    }
+
+    if (from) {
+      // Foydalanuvchi hali bazada bo'lmasligi mumkin — avval yaratamiz
+      const user = upsertUser({
+        id: from.id,
+        first_name: from.first_name ?? 'Foydalanuvchi',
+        last_name: from.last_name,
+        username: from.username,
+        language_code: from.language_code,
+      });
+      db.prepare(`UPDATE users SET phone = ? WHERE id = ?`).run(
+        message.contact.phone_number.slice(0, 32),
+        user.id,
+      );
+    }
+
+    // Klaviaturani olib tashlaymiz — kerak emas, joyni egallaydi
+    await sendMessage(chatId, READY, { remove_keyboard: true });
+    await sendMessage(chatId, 'Ilovani ochish uchun:', openButton());
+    return;
+  }
+
+  if (!message.text) return;
   const text = message.text.trim();
 
   // `/start payload` shaklida ham kelishi mumkin — faqat buyruqni olamiz
   const command = text.split(/\s+/)[0].toLowerCase();
 
   if (command === '/start') {
-    await sendMessage(chatId, WELCOME, openButton());
+    await sendMessage(chatId, INTRO);
+
+    // Raqam allaqachon bo'lsa qayta so'ramaymiz — bir marta yetarli
+    if (from && hasPhone(from.id)) {
+      await sendMessage(chatId, 'Ilovani ochish uchun:', openButton());
+    } else {
+      await sendMessage(chatId, ASK_CONTACT, contactKeyboard());
+    }
     return;
   }
 

@@ -535,6 +535,19 @@ check "noto'g'ri sir rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/telegram/webhook" -d '{}')
 check "initData webhook uchun yaramaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
+# To'g'ri sir bilan — yangilanish qabul qilinadi va 200 qaytadi.
+# Telegram 200 dan boshqa javob olsa xabarni cheksiz qayta yuboradi.
+SEC=$(grep -m1 '^TELEGRAM_WEBHOOK_SECRET=' "$ROOT/.env" | cut -d= -f2-)
+code=$(status "${JSON[@]}" -H "x-telegram-bot-api-secret-token: $SEC" \
+  -X POST "$API/telegram/webhook" -d '{"message":{"chat":{"id":1},"from":{"id":1},"text":"/start"}}')
+check "to'g'ri sir bilan qabul qilinadi (200)" "$([ "$code" = 200 ] && echo 1)" "$code"
+
+# Begona kontakt rad etiladi: boshqa odamning raqamini yuborib bo'lmaydi
+code=$(status "${JSON[@]}" -H "x-telegram-bot-api-secret-token: $SEC" \
+  -X POST "$API/telegram/webhook" \
+  -d '{"message":{"chat":{"id":1},"from":{"id":1},"contact":{"phone_number":"+998901112233","user_id":999}}}')
+check "begona kontaktda ham 200 (Telegram qayta yubormasin)" "$([ "$code" = 200 ] && echo 1)" "$code"
+
 echo
 echo "──────────────────────────────────────────────────"
 echo "HTTP natija: $pass o'tdi, $fail yiqildi"
