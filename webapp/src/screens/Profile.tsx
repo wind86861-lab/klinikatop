@@ -166,18 +166,18 @@ export function Profile() {
 
       {/* Rol almashtirish — alohida ilova emas */}
       <div className="menu-group">
-        {session?.clinic ? (
+        {/*
+          Klinikasi bor odamga kabinetga o'tish yo'li kerak.
+          RO'YXATDAN O'TISH esa bu yerda emas — u bot ichidagi tugma orqali
+          boshlanadi. Klinika egasi bemor profilini kavlab, uning ichidan
+          ariza formasini qidirmasligi kerak.
+        */}
+        {session?.clinic && (
           <MenuRow
             icon={<IconClinic size={18} />}
             title={t('profile.switchClinic')}
             sub={session.clinic.name}
             onClick={() => navigate('/clinic')}
-          />
-        ) : (
-          <MenuRow
-            icon={<IconClinic size={18} />}
-            title={t('profile.registerClinic')}
-            onClick={() => navigate('/clinic/register')}
           />
         )}
         {isModerator && (

@@ -44,19 +44,31 @@ export function App() {
   }, [bootstrap]);
 
   /**
-   * Kirish oqimi: onboarding → profil (ism, familiya, viloyat) → ilova.
+   * Kirish oqimi: onboarding → bemor profili → ilova.
    * Ikkalasi ham server tomonda majburlanadi, bu faqat yo'naltirish.
    */
   useEffect(() => {
     if (!ready || !user) return;
     const path = location.pathname;
 
-    if (!user.onboardedAt && path !== '/onboarding') {
+    /*
+     * Klinika yo'li bemor oqimidan MUSTAQIL.
+     *
+     * Bot ichidagi "Klinikani ro'yxatdan o'tkazish" tugmasi to'g'ridan-to'g'ri
+     * ariza formasiga olib keladi. Klinika egasi bemor uchun yozilgan
+     * onboardingni ko'rishi ham, o'z tug'ilgan yilini kiritishi ham
+     * mantiqsiz — u yerda boshqa odam ro'yxatdan o'tyapti.
+     */
+    const clinicPath = path === '/clinic/register';
+
+    if (!user.onboardedAt && path !== '/onboarding' && !clinicPath) {
       navigate('/onboarding', { replace: true });
       return;
     }
-    // Onboardingdan o'tgan, lekin profili to'ldirilmagan
-    if (user.onboardedAt && !user.profileCompletedAt && path !== '/register' && path !== '/onboarding') {
+
+    const exempt = path === '/register' || path === '/onboarding' || clinicPath;
+
+    if (user.onboardedAt && !user.profileCompletedAt && !exempt) {
       navigate('/register', { replace: true, state: { next: path === '/' ? '/' : path } });
     }
   }, [ready, user, location.pathname, navigate]);
@@ -105,14 +117,12 @@ export function App() {
           {/* Klinika kabineti — 23 ekran, 8 soha bo'yicha */}
 
           {/* Ro'yxatdan o'tish va verifikatsiya (1–4) */}
-          <Route
-            path="/clinic/register"
-            element={
-              <RequireRole roles={CLINIC_ROLES}>
-                <ClinicRegister />
-              </RequireRole>
-            }
-          />
+          {/*
+            Ariza formasi rol TALAB QILMAYDI — aynan shu yerda odam
+            klinika xodimiga aylanadi. `clinic_admin` roli ariza
+            yuborilgandan keyin beriladi, oldin emas.
+          */}
+          <Route path="/clinic/register" element={<ClinicRegister />} />
           <Route
             path="/clinic/verification/documents"
             element={

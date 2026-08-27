@@ -82,7 +82,19 @@ Bu <b>klinikaga ko'rsatilmaydi</b> — faqat siz bilan bog'lana olmay qolgan hol
 
 Quyidagi tugmani bosing.`;
 
-const READY = `Raqamingiz saqlandi. Endi ilovani ochib so'rov qoldirsangiz bo'ladi.`;
+const READY = `Raqamingiz saqlandi.`;
+
+const CHOOSE = `Nima qilmoqchisiz?`;
+
+const CLINIC_INTRO = `<b>Klinika uchun</b>
+
+So'rovlar shahringizdagi mos klinikalarga boradi. Siz narx taklif qilasiz, bemor tanlaydi.
+
+• Birinchi oylar bepul — obuna to'lovi yo'q
+• Komissiya faqat bemor tasdiqlagan bitimdan olinadi
+• So'rovlarni ko'rish har doim bepul
+
+Ro'yxatdan o'tish uchun litsenziya va yo'nalishlaringiz kerak bo'ladi.`;
 
 const HELP = `<b>Qanday ishlaydi</b>
 
@@ -93,11 +105,31 @@ const HELP = `<b>Qanday ishlaydi</b>
 
 Savol bo'lsa shu yerga yozing.`;
 
-/** Ilovani ochadigan tugma — Mini App shu orqali ishga tushadi. */
-function openButton() {
-  return {
-    inline_keyboard: [[{ text: '🩺 Ilovani ochish', web_app: { url: config.telegram.webappUrl } }]],
-  };
+/**
+ * Asosiy tugmalar.
+ *
+ * Ikki xil odam keladi: bemor va klinika egasi. Ikkalasiga ham botning
+ * o'zida yo'l ko'rsatiladi — klinika egasi bemor profilini kavlab, uning
+ * ichidan ro'yxatdan o'tish havolasini qidirmasligi kerak.
+ *
+ * `web_app` tugmasi Mini App'ni ANIQ ekrandan ochadi, shuning uchun
+ * klinika to'g'ridan-to'g'ri ariza formasiga tushadi.
+ */
+function openButton(hasClinic = false) {
+  const base = config.telegram.webappUrl.replace(/\/$/, '');
+
+  const rows: InlineButton[][] = [
+    [{ text: '🩺 Ilovani ochish', web_app: { url: base } }],
+  ];
+
+  // Klinikasi bor odamga qayta ro'yxatdan o'tish taklif qilinmaydi
+  rows.push(
+    hasClinic
+      ? [{ text: '🏥 Klinika paneli', web_app: { url: `${base}/clinic` } }]
+      : [{ text: '🏥 Klinikani ro‘yxatdan o‘tkazish', web_app: { url: `${base}/clinic/register` } }],
+  );
+
+  return { inline_keyboard: rows };
 }
 
 /** Kontakt so'rash klaviaturasi — Telegram raqamni o'zi tasdiqlab beradi. */
@@ -107,6 +139,14 @@ function contactKeyboard() {
     resize_keyboard: true as const,
     one_time_keyboard: true as const,
   };
+}
+
+/** Foydalanuvchi allaqachon klinikaga biriktirilganmi. */
+function hasClinic(telegramId: number): boolean {
+  const row = db
+    .prepare(`SELECT clinic_id FROM users WHERE telegram_id = ? AND clinic_id IS NOT NULL`)
+    .get(telegramId);
+  return Boolean(row);
 }
 
 /** Foydalanuvchining raqami allaqachon saqlanganmi. */
@@ -171,7 +211,7 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
 
     // Klaviaturani olib tashlaymiz — kerak emas, joyni egallaydi
     await sendMessage(chatId, READY, { remove_keyboard: true });
-    await sendMessage(chatId, 'Ilovani ochish uchun:', openButton());
+    await sendMessage(chatId, CHOOSE, openButton(from ? hasClinic(from.id) : false));
     return;
   }
 
@@ -186,7 +226,7 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
 
     // Raqam allaqachon bo'lsa qayta so'ramaymiz — bir marta yetarli
     if (from && hasPhone(from.id)) {
-      await sendMessage(chatId, 'Ilovani ochish uchun:', openButton());
+      await sendMessage(chatId, CHOOSE, openButton(hasClinic(from.id)));
     } else {
       await sendMessage(chatId, ASK_CONTACT, contactKeyboard());
     }
@@ -194,7 +234,13 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   }
 
   if (command === '/help') {
-    await sendMessage(chatId, HELP, openButton());
+    await sendMessage(chatId, HELP, openButton(from ? hasClinic(from.id) : false));
+    return;
+  }
+
+  // Klinika egasi uchun to'g'ridan-to'g'ri yo'l
+  if (command === '/clinic' || command === '/klinika') {
+    await sendMessage(chatId, CLINIC_INTRO, openButton(from ? hasClinic(from.id) : false));
     return;
   }
 
@@ -202,7 +248,7 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   await sendMessage(
     chatId,
     'Savolingizni ilova ichidagi chatda yozsangiz, klinika ko‘radi va javob beradi.',
-    openButton(),
+    openButton(from ? hasClinic(from.id) : false),
   );
 }
 
@@ -227,6 +273,7 @@ export async function configureBot(): Promise<void> {
   await call('setMyCommands', {
     commands: [
       { command: 'start', description: 'Ilovani ochish' },
+      { command: 'clinic', description: 'Klinika uchun' },
       { command: 'help', description: 'Qanday ishlaydi' },
     ],
   });
