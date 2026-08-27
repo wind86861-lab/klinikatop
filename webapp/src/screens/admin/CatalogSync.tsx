@@ -106,7 +106,7 @@ export function CatalogSync() {
                   <Card className="stack" style={{ gap: 6 }}>
                     <Row k="Manbada operatsiyalar" v={plan.sourceTotal} />
                     <Row k="Yangi kategoriya" v={plan.categories.add} />
-                    <Row k="Qo‘lda kiritilgan (teginilmaydi)" v={plan.manualKept} />
+                    <Row k="Qo‘lda kiritilgan (ro‘yxatdan chiqadi)" v={plan.manualHidden} />
                     {plan.skippedDuplicates > 0 && (
                       <Row k="Manbada takrorlangan (olinmaydi)" v={plan.skippedDuplicates} />
                     )}
@@ -116,11 +116,12 @@ export function CatalogSync() {
                     <Notice tone="info">Katalog manba bilan bir xil — o‘zgarish yo‘q.</Notice>
                   ) : (
                     <>
-                      {plan.operations.some((c) => c.kind === 'deactivate') && (
+                      {(plan.operations.some((c) => c.kind === 'deactivate') ||
+                        plan.manualHidden > 0) && (
                         <Notice tone="warning">
-                          Yashiriladigan operatsiyalar o‘chirilmaydi. Ularni tanlagan klinikalarning
-                          sozlamasi va o‘tgan bitimlar saqlanadi — faqat yangi so‘rovlarda
-                          ko‘rinmaydi.
+                          Katalog to‘liq banisa.uz dan bo‘ladi: qo‘lda kiritilganlar ro‘yxatdan
+                          chiqariladi. Ular o‘chirilmaydi — klinikalarning sozlamasi va o‘tgan
+                          bitimlar saqlanadi, faqat yangi so‘rovlarda ko‘rinmaydi.
                         </Notice>
                       )}
 

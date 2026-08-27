@@ -898,9 +898,19 @@ async function main() {
   const visible = catalog.listOperations().some((o: any) => o.id === importedOp);
   check('yashirilgan operatsiya katalogda yo‘q', visible === false);
 
-  // Qo'lda kiritilganlarga teginilmaydi
-  const manualCount = db.prepare("SELECT COUNT(*) c FROM operations WHERE source = 'manual'").get().c;
-  check('qo‘lda kiritilganlar saqlanib qoldi', manualCount > 0, manualCount);
+  /*
+   * Katalog 100% manbadan bo'lishi kerak. Qo'lda kiritilganlar
+   * ro'yxatdan chiqadi, lekin O'CHIRILMAYDI: `requests.operation_id`
+   * ularga ishora qilishi mumkin.
+   */
+  const manualRows = db
+    .prepare("SELECT COUNT(*) c FROM operations WHERE external_id IS NULL AND slug <> 'unknown'")
+    .get().c;
+  check('qo‘lda kiritilganlar bazada saqlanib qoldi', manualRows > 0, manualRows);
+
+  // "Bilmayman" sentineli mavjud bo'lishi shart — usiz bemor oqimi buziladi
+  const sentinel = db.prepare("SELECT active FROM operations WHERE slug = 'unknown'").get();
+  check('“Bilmayman” yozuvi mavjud', Boolean(sentinel));
 
   // Jurnal
   const before = db.prepare('SELECT COUNT(*) c FROM catalog_sync_log').get().c;
@@ -977,6 +987,67 @@ async function main() {
   check(
     'yashirilgach ham klinika bog‘lanishi buzilmadi',
     db.prepare('SELECT COUNT(*) c FROM clinic_operations WHERE operation_id = ?').get(importedOp2).c === 1,
+  );
+
+  /*
+   * Manbadan bo'lmagan yozuvni yashirish qoidasini to'g'ridan-to'g'ri
+   * tekshiramiz: sinxronizatsiya SQL'i shu shartga tayanadi va uni
+   * bexosdan o'zgartirish katalogga begona yozuvlarni qaytarardi.
+   */
+  const hiddenByRule = db
+    .prepare(
+      "SELECT COUNT(*) c FROM operations WHERE active = 1 AND external_id IS NULL AND slug <> 'unknown'",
+    )
+    .get().c;
+  const willHide = db
+    .prepare(
+      "UPDATE operations SET active = 0 WHERE active = 1 AND external_id IS NULL AND slug <> 'unknown'",
+    )
+    .run().changes;
+  check('qoida barcha begona yozuvni topdi', willHide === hiddenByRule, { willHide, hiddenByRule });
+
+  const leftOver = db
+    .prepare("SELECT COUNT(*) c FROM operations WHERE active = 1 AND external_id IS NULL AND slug <> 'unknown'")
+    .get().c;
+  check('katalogda faqat manbadan kelganlar qoldi', leftOver === 0, leftOver);
+
+  /*
+   * Sentinel katalogda `active = 0` bilan turadi — u ro'yxat elementi
+   * emas, oqim belgisi. Muhimi qoida unga TEGMASLIGI: uni faol qilib
+   * ko'ramiz va qoidadan keyin faol qolganini tekshiramiz.
+   */
+  db.prepare("UPDATE operations SET active = 1 WHERE slug = 'unknown'").run();
+  db.prepare(
+    "UPDATE operations SET active = 0 WHERE active = 1 AND external_id IS NULL AND slug <> 'unknown'",
+  ).run();
+  const sentinelAfter = db.prepare("SELECT active FROM operations WHERE slug = 'unknown'").get();
+  check('qoida “Bilmayman” yozuviga tegmadi', sentinelAfter?.active === 1, sentinelAfter);
+  db.prepare("UPDATE operations SET active = 0 WHERE slug = 'unknown'").run();
+
+  /*
+   * Bo'shab qolgan kategoriyalar ro'yxatga chiqmasligi kerak. Ular
+   * o'chirilmaydi — ichidagi yashirilgan yozuvlarga o'tgan so'rovlar
+   * ishora qiladi — lekin bemor ochib bo'sh bo'limga tushmasin.
+   */
+  const emptyCat = db
+    .prepare("INSERT INTO operation_categories (slug, name_uz, name_ru, icon) VALUES ('bosh-kat','Bo‘sh','Пустая','')")
+    .run().lastInsertRowid;
+
+  // Oldingi tekshiruvlar `catId` ichidagi hamma narsani yashirgan edi
+  db.prepare(
+    "INSERT INTO operations (category_id, slug, name_uz, name_ru, active, source, external_id) VALUES (?, 'kat-tirik', 'Tirik yozuv', 'Живая', 1, 'banisa', 'op-alive')",
+  ).run(catId);
+
+  const listed = catalog.listCategories();
+  check(
+    'bo‘sh kategoriya ro‘yxatda yo‘q',
+    !listed.some((c: any) => c.id === emptyCat),
+    listed.length,
+  );
+  check(
+    'ichida yozuvi bori ro‘yxatda bor',
+    listed.some((c: any) => c.id === catId),
+    listed.map((c: any) => c.id),
   );
 
   console.log(`\n${'─'.repeat(50)}`);

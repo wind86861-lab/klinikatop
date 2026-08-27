@@ -36,6 +36,14 @@ import { normalize, slugify } from '../lib/format';
 
 const SOURCE = 'banisa';
 
+/**
+ * "Bilmayman" — bemor operatsiyani tanlay olmaganda ishlatiladigan
+ * maxsus yozuv. U katalog elementi emas, oqimning bir qismi: shunday
+ * so'rov shahardagi HAMMA klinikaga boradi. Manbada bunday narsa yo'q
+ * va bo'lishi ham kerak emas, shuning uchun u qoidadan chetda qoladi.
+ */
+const SENTINEL_SLUG = 'unknown';
+
 /** So'rov shu vaqtdan uzoq ketsa uziladi — qo'shni bazani band qilmaymiz. */
 const STATEMENT_TIMEOUT_MS = 15_000;
 const CONNECT_TIMEOUT_MS = 8_000;
@@ -130,8 +138,8 @@ export interface SyncPlan {
   operations: SyncChange[];
   /** Manbada nechta operatsiya bor */
   sourceTotal: number;
-  /** Qo'lda kiritilgan, teginilmaydigan operatsiyalar */
-  manualKept: number;
+  /** Qo'lda kiritilgan — katalogdan chiqariladi (o'chirilmaydi) */
+  manualHidden: number;
   /** Manbada nomi takrorlangani uchun olinmaydiganlar */
   skippedDuplicates: number;
 }
@@ -223,15 +231,25 @@ export async function planSync(): Promise<SyncPlan> {
     }
   }
 
-  const manualKept = (
-    db.prepare(`SELECT COUNT(*) c FROM operations WHERE source = 'manual'`).get() as { c: number }
+  /*
+   * Qo'lda kiritilganlar endi "saqlanadi" emas, "yashiriladi": katalog
+   * to'liq manbadan bo'lishi kerak. Rejada shuni ochiq ko'rsatamiz —
+   * admin qo'llashdan oldin nechta yozuv ro'yxatdan chiqishini bilsin.
+   */
+  const manualHidden = (
+    db
+      .prepare(
+        `SELECT COUNT(*) c FROM operations
+          WHERE active = 1 AND external_id IS NULL AND slug <> ?`,
+      )
+      .get(SENTINEL_SLUG) as { c: number }
   ).c;
 
   return {
     categories: { add: catAdd, update: catUpdate },
     operations: changes,
     sourceTotal: operations.length,
-    manualKept,
+    manualHidden,
     skippedDuplicates: skipped,
   };
 }
@@ -512,17 +530,52 @@ export async function runSync(startedBy: number | null): Promise<SyncResult> {
        * unga tegishli so'rovlar, takliflar, bitimlar bor. O'chirish
        * ularning barchasini uzib qo'yardi.
        */
+      const hide = db.prepare(`UPDATE operations SET active = 0, synced_at = datetime('now') WHERE id = ?`);
+
       const stillActive = db
         .prepare(`SELECT id, external_id FROM operations WHERE source = ? AND active = 1`)
         .all(SOURCE) as { id: number; external_id: string }[];
 
-      const hide = db.prepare(`UPDATE operations SET active = 0, synced_at = datetime('now') WHERE id = ?`);
       for (const row of stillActive) {
         if (!seen.has(row.external_id)) {
           hide.run(row.id);
           deactivated++;
         }
       }
+
+      /*
+       * Katalog 100% MANBADAN bo'lishi kerak.
+       *
+       * Qo'lda kiritilgan operatsiyalar aralashib qolsa, ro'yxatda
+       * banisa'da yo'q yo'nalishlar paydo bo'ladi: bemor shuni tanlaydi,
+       * klinika esa uni o'z ro'yxatida ko'rmaydi va so'rov javobsiz
+       * qoladi. Bitta manba — bitta haqiqat.
+       *
+       * Ular O'CHIRILMAYDI, yashiriladi: `requests.operation_id` ularga
+       * ishora qilishi mumkin va o'chirish o'tgan so'rovlarni buzardi.
+       * Shu bilan birga nomi manbadagi bilan bir xil bo'lganlar
+       * yuqorida allaqachon EGALLANGAN — ularning xalq tilidagi
+       * nomlari saqlanib qoladi.
+       */
+      const leftovers = db
+        .prepare(
+          `UPDATE operations
+              SET active = 0, synced_at = datetime('now')
+            WHERE active = 1 AND external_id IS NULL AND slug <> ?`,
+        )
+        .run(SENTINEL_SLUG).changes;
+      deactivated += leftovers;
+
+      /*
+       * Bo'shab qolgan qo'lda kiritilgan kategoriyalar olib tashlanadi.
+       * Ular ekranda ochiladigan, lekin ichi bo'sh bo'limlar bo'lib
+       * qolardi. Ichida biror narsa qolgani teginilmaydi.
+       */
+      db.prepare(
+        `DELETE FROM operation_categories
+          WHERE external_id IS NULL
+            AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.category_id = operation_categories.id)`,
+      ).run();
 
       return {
         added,

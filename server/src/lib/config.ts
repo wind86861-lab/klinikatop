@@ -32,8 +32,24 @@ export const config = {
   },
 
   ai: {
+    /**
+     * Qaysi provayder: 'anthropic' | 'gemini' | 'auto'.
+     *
+     * `auto` — qaysi kalit sozlangan bo'lsa, o'shanisi. Ikkalasi ham
+     * bo'lsa Anthropic ustun; boshqacha kerak bo'lsa ochiq yoziladi.
+     */
+    provider: (process.env.AI_PROVIDER ?? 'auto') as 'anthropic' | 'gemini' | 'auto',
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
-    model: process.env.AI_MODEL ?? 'claude-opus-5',
+    geminiKey: process.env.GEMINI_API_KEY ?? '',
+    /*
+     * Model nomi provayderga bog'liq, shuning uchun sukut bo'yicha
+     * qiymat ham shunga qarab tanlanadi. Ochiq ko'rsatilsa — o'sha.
+     */
+    model:
+      process.env.AI_MODEL ??
+      (process.env.GEMINI_API_KEY && !process.env.ANTHROPIC_API_KEY
+        ? 'gemini-3.6-flash'
+        : 'claude-opus-5'),
   },
 
   rules: {

@@ -10,7 +10,7 @@ import { migrate } from './db';
 import { apiRouter } from './routes';
 import { attachWebSocket } from './services/ws';
 import { startScheduler } from './services/scheduler';
-import { aiEnabled } from './services/ai';
+import { aiProvider } from './services/aiProvider';
 
 migrate();
 
@@ -116,7 +116,7 @@ server.listen(config.port, config.host, () => {
   console.log('[server] telegram bot: ulangan');
   // Menyu tugmasi va buyruqlar ro'yxati — har ko'tarilishda tasdiqlanadi
   void configureBot();
-  console.log(`[server] AI: ${aiEnabled() ? config.ai.model : 'lokal heuristika (API kaliti yo‘q)'}`);
+  console.log(`[server] AI: ${aiProvider()?.name ?? 'lokal heuristika (API kaliti yo‘q)'}`);
 });
 
 const shutdown = () => {

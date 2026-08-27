@@ -60,7 +60,7 @@ export interface SyncPlan {
   categories: { add: number; update: number };
   operations: SyncChange[];
   sourceTotal: number;
-  manualKept: number;
+  manualHidden: number;
   skippedDuplicates: number;
 }
 

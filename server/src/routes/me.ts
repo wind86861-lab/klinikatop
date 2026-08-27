@@ -12,7 +12,7 @@ import { mapUser } from '../lib/mappers';
 import { touchOnboarded } from '../middleware/auth';
 import { listNotifications, markRead, unreadCount } from '../services/notifications';
 import { getClinic, getClinicOperations } from '../services/clinics';
-import { aiEnabled } from '../services/ai';
+import { aiEnabled } from '../services/aiProvider';
 import { getTerms, TERMS_VERSION } from '../services/terms';
 import { isProfileComplete } from '../../../shared/types';
 import { config } from '../lib/config';

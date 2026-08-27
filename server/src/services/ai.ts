@@ -12,21 +12,17 @@
  *
  * Manba: Claude API (mavjud bo'lsa) yoki lokal kalit so'z heuristikasi.
  */
-import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { config } from '../lib/config';
 import { normalize } from '../lib/format';
 import { listOperations } from './catalog';
+import { aiProvider } from './aiProvider';
 import type { AiResult, AiSuggestion, Lang, Operation } from '../../../shared/types';
 
 export const DISCLAIMER: Record<Lang, string> = {
   uz: 'Bu — taxminiy yo‘nalish, tashxis emas. Yakuniy so‘zni shifokor aytadi.',
   ru: 'Это предположительное направление, а не диагноз. Окончательное слово за врачом.',
 };
-
-const client = config.ai.apiKey ? new Anthropic({ apiKey: config.ai.apiKey }) : null;
-
-export const aiEnabled = () => client !== null;
 
 /* ─────────────────────────  Lokal heuristika (fallback)  ───────────────────────── */
 
@@ -167,38 +163,19 @@ export async function suggestOperations(
     };
   };
 
-  if (!client || trimmed.length < 3) return fallback();
+  const provider = aiProvider();
+  if (!provider || trimmed.length < 3) return fallback();
 
   try {
-    const stream = client.messages.stream({
-      model: config.ai.model,
-      max_tokens: 2048,
+    const { text: raw, refused } = await provider.complete({
       system: systemPrompt(lang, operations),
-      // Sodda tasniflash vazifasi — past effort yetarli va tez javob beradi
-      output_config: {
-        effort: 'low',
-        format: { type: 'json_schema', schema: buildOutputSchema(operations) },
-      },
       messages: [{ role: 'user', content: trimmed }],
-    } as Anthropic.MessageStreamParams);
-
-    if (handlers.onProgress) {
-      let chars = 0;
-      stream.on('text', (delta: string) => {
-        chars += delta.length;
-        handlers.onProgress!(chars);
-      });
-    }
-
-    const message = await stream.finalMessage();
+      schema: buildOutputSchema(operations),
+      onProgress: handlers.onProgress,
+    });
 
     // Xavfsizlik klassifikatori rad etsa — jimgina katalogga tushamiz
-    if (message.stop_reason === 'refusal') return fallback();
-
-    const raw = message.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
+    if (refused || !raw) return fallback();
 
     const parsed = ResultSchema.safeParse(JSON.parse(raw));
     if (!parsed.success) {

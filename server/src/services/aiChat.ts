@@ -10,14 +10,13 @@
  * boradi. Klinika AI taxminini emas, bemorning o'z so'zlarini o'qiydi —
  * shuning uchun AI xato qilsa ham klinika to'g'ri narx beradi.
  */
-import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import { config } from '../lib/config';
+import { aiProvider } from './aiProvider';
 import { DISCLAIMER, heuristicSuggest } from './ai';
 import { listOperations } from './catalog';
 import { UNKNOWN_OPERATION_SLUG, type Lang, type Operation } from '../../../shared/types';
 
-const client = config.ai.apiKey ? new Anthropic({ apiKey: config.ai.apiKey }) : null;
+
 
 /** Suhbat qancha davom etishi mumkin — cheksiz savol bermasin. */
 export const MAX_TURNS = 4;
@@ -194,29 +193,19 @@ export async function continueChat(turns: ChatTurn[], lang: Lang = 'uz'): Promis
   const asked = turns.filter((t) => t.role === 'assistant').length;
   const turnsLeft = Math.max(0, MAX_TURNS - asked);
 
-  if (!client || turns.length === 0) {
+  const provider = aiProvider();
+  if (!provider || turns.length === 0) {
     return heuristicChat(turns, lang, operations);
   }
 
   try {
-    const stream = client.messages.stream({
-      model: config.ai.model,
-      max_tokens: 2048,
+    const { text: raw, refused } = await provider.complete({
       system: systemPrompt(lang, operations, turnsLeft),
-      output_config: {
-        effort: 'low',
-        format: { type: 'json_schema', schema: outputSchema(operations) },
-      },
       messages: turns.map((turn) => ({ role: turn.role, content: turn.content })),
-    } as Anthropic.MessageStreamParams);
+      schema: outputSchema(operations),
+    });
 
-    const message = await stream.finalMessage();
-    if (message.stop_reason === 'refusal') return heuristicChat(turns, lang, operations);
-
-    const raw = message.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
+    if (refused || !raw) return heuristicChat(turns, lang, operations);
 
     const parsed = ResponseSchema.safeParse(JSON.parse(raw));
     if (!parsed.success) return heuristicChat(turns, lang, operations);

@@ -9,8 +9,27 @@ export function listCities(): City[] {
   return (db.prepare(`SELECT * FROM cities ORDER BY id`).all() as any[]).map(mapCity);
 }
 
+/**
+ * Faqat ichida faol operatsiyasi bor kategoriyalar.
+ *
+ * Katalog banisa.uz dan olinadigan bo'lgach, eski qo'lda kiritilgan
+ * kategoriyalar bo'shab qoldi. Ularni o'chirib bo'lmaydi: ichidagi
+ * yozuvlar yashirilgan bo'lsa ham o'tgan so'rovlar ularga ishora
+ * qiladi va o'chirish kaskad bilan o'sha so'rovlarni uzardi.
+ *
+ * Shuning uchun ma'lumot joyida qoladi, ro'yxatga esa faqat ichi
+ * bo'sh bo'lmaganlari chiqadi — bemor ochib, ichidan hech narsa
+ * chiqmaydigan bo'limga tushmasin.
+ */
 export function listCategories(): OperationCategory[] {
-  return (db.prepare(`SELECT * FROM operation_categories ORDER BY id`).all() as any[]).map(mapCategory);
+  const rows = db
+    .prepare(
+      `SELECT c.* FROM operation_categories c
+        WHERE EXISTS (SELECT 1 FROM operations o WHERE o.category_id = c.id AND o.active = 1)
+        ORDER BY c.name_uz`,
+    )
+    .all() as any[];
+  return rows.map(mapCategory);
 }
 
 export function listOperations(categoryId?: number): Operation[] {
