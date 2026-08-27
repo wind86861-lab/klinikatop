@@ -11,6 +11,12 @@ import {
   setClinicCommission,
   setSetting,
 } from '../services/terms.business';
+import {
+  approveApplication,
+  deleteApplication,
+  listApplications,
+  rejectApplication,
+} from '../services/clinicApplications';
 import { ADMIN_CLINIC_FILTERS, type AdminClinicFilter } from '../../../shared/types';
 
 /** Moderator amalini mavjud audit jurnaliga yozadi. */
@@ -219,4 +225,37 @@ adminRouter.get('/clinics', (req, res) => {
     ? (req.query.filter as AdminClinicFilter)
     : 'all';
   res.json(listClinicsForAdmin(filter));
+});
+
+
+/* ═════════════════  Klinika arizalari  ═════════════════ */
+
+adminRouter.get('/applications', (req, res) => {
+  const status = (req.query.status as any) ?? 'pending';
+  res.json(listApplications(['pending', 'approved', 'rejected', 'all'].includes(status) ? status : 'pending'));
+});
+
+/**
+ * Tasdiqlash: klinika yaratiladi va ulanish kodi beriladi.
+ * Kod javobda qaytadi — moderator uni klinikaga telefonda aytadi.
+ */
+adminRouter.post('/applications/:id/approve', (req, res) => {
+  const app = approveApplication(Number(req.params.id), req.user!.id);
+  logModeration(req.user!.id, 'application', app.id, 'approve', app.connectCode);
+  res.json(app);
+});
+
+adminRouter.post('/applications/:id/reject', (req, res) => {
+  const body = z.object({ note: z.string().trim().min(3).max(500) }).parse(req.body);
+  const app = rejectApplication(Number(req.params.id), req.user!.id, body.note);
+  logModeration(req.user!.id, 'application', app.id, 'reject', body.note);
+  res.json(app);
+});
+
+
+/** Spam arizani o'chirish. Tasdiqlangani o'chirilmaydi. */
+adminRouter.delete('/applications/:id', (req, res) => {
+  deleteApplication(Number(req.params.id));
+  logModeration(req.user!.id, 'application', Number(req.params.id), 'delete', null);
+  res.status(204).end();
 });

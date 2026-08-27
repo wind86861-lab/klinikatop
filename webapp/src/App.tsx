@@ -26,6 +26,7 @@ import { ClinicProfile, Doctors, ClinicReviews, Team } from '@/screens/clinic/Pr
 import { AdminHome } from '@/screens/admin/AdminHome';
 import { Blocked, NotFound, OfflineBanner, Splash } from '@/screens/SystemStates';
 import { Login } from '@/screens/Login';
+import { ClinicSignup } from '@/screens/ClinicSignup';
 import { RequireRole } from '@/components/RequireRole';
 import type { Role } from '@shared/types';
 
@@ -72,6 +73,15 @@ export function App() {
       navigate('/register', { replace: true, state: { next: path === '/' ? '/' : path } });
     }
   }, [ready, user, location.pathname, navigate]);
+
+  /*
+   * Klinika arizasi — OCHIQ sahifa.
+   *
+   * Autentifikatsiya tekshiruvidan OLDIN chiziladi: klinika egasida
+   * Telegram bo'lmasligi mumkin va bo'lishi shart emas. Bu yagona
+   * shunday sahifa; qolgan hamma narsa imzo talab qiladi.
+   */
+  if (location.pathname === '/klinika') return <ClinicSignup />;
 
   if (!ready) return <Splash />;
 

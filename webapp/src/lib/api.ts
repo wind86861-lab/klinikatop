@@ -281,6 +281,15 @@ export const api = {
   /* ── Moderator / admin ── */
   metrics: () => get<AdminMetrics>('/admin/metrics'),
   /* Moderator: klinikalar va platforma sozlamalari */
+  /* Klinika arizalari (ochiq veb-formadan keladi) */
+  applications: (status: 'pending' | 'approved' | 'rejected' | 'all' = 'pending') =>
+    get<ClinicApplication[]>(`/admin/applications?status=${status}`),
+  approveApplication: (id: number) => post<ClinicApplication>(`/admin/applications/${id}/approve`),
+  rejectApplication: (id: number, note: string) =>
+    post<ClinicApplication>(`/admin/applications/${id}/reject`, { note }),
+  /* Ulanish kodi bilan klinikaga biriktirilish */
+  connectClinic: (code: string) => post<{ clinic: Clinic }>('/clinic/connect', { code }),
+
   adminClinics: (filter: AdminClinicFilter = 'all') =>
     get<AdminClinicRow[]>(`/admin/clinics?filter=${filter}`),
   platformSettings: () => get<PlatformSettings>('/admin/settings'),
@@ -450,6 +459,25 @@ export interface TemplateBody {
   advantages: string[];
   leadTimeDays: number;
   note: string | null;
+}
+
+export interface ClinicApplication {
+  id: number;
+  name: string;
+  cityId: number;
+  address: string;
+  about: string;
+  licenseNo: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string | null;
+  operationIds: number[];
+  status: 'pending' | 'approved' | 'rejected';
+  note: string | null;
+  clinicId: number | null;
+  connectCode: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
 }
 
 export interface ClinicProfileBody {

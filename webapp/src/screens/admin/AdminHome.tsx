@@ -29,16 +29,17 @@ import {
   Textarea,
 } from '@/ui';
 import { FileThumb } from '@/components/wizard/FileThumb';
+import { Applications } from './Applications';
 import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
 import type { AdminMetrics, ChatMessage, Clinic, ClinicDocument, Deal, DealDetail } from '@shared/types';
 
-type Tab = 'verifications' | 'clinics' | 'disputes' | 'metrics' | 'settings';
+type Tab = 'applications' | 'verifications' | 'clinics' | 'disputes' | 'metrics' | 'settings';
 
 export function AdminHome() {
   const { t, lang, toast } = useApp();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<Tab>('verifications');
+  const [tab, setTab] = useState<Tab>('applications');
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
   const [pending, setPending] = useState<Clinic[] | null>(null);
   const [disputes, setDisputes] = useState<Deal[] | null>(null);
@@ -110,6 +111,7 @@ export function AdminHome() {
         value={tab}
         onChange={setTab}
         options={[
+          { value: 'applications', label: t('admin.tabApplications') },
           { value: 'verifications', label: `${t('admin.verifications')}${pending?.length ? ` (${pending.length})` : ''}` },
           { value: 'disputes', label: `${t('admin.disputes')}${disputes?.length ? ` (${disputes.length})` : ''}` },
           { value: 'clinics', label: t('admin.tabClinics') },
@@ -117,6 +119,9 @@ export function AdminHome() {
           { value: 'settings', label: t('admin.tabSettings') },
         ]}
       />
+
+      {/* Arizalar — ochiq veb-formadan keladi, moderatorning birinchi filtri */}
+      {tab === 'applications' && <Applications />}
 
       {tab === 'verifications' &&
         (pending === null ? (

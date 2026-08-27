@@ -10,6 +10,7 @@ import { adminRouter } from './admin';
 import { aiRouter } from './ai';
 import { filesRouter } from './files';
 import { telegramRouter } from './telegram';
+import { publicRouter } from './publicRoutes';
 import { limits } from '../middleware/rateLimit';
 
 export const apiRouter = Router();
@@ -18,6 +19,12 @@ apiRouter.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toIS
 
 // Katalog ochiq — bemor kirmasdan ham ko'ra oladi
 apiRouter.use('/catalog', catalogRouter);
+
+/*
+ * Ochiq marshrutlar — autentifikatsiyadan OLDIN.
+ * Klinika Telegramsiz ariza qoldira olishi uchun (publicRoutes.ts).
+ */
+apiRouter.use('/public', publicRouter);
 
 /*
  * Telegram webhook autentifikatsiyadan OLDIN turadi: Telegram bizga

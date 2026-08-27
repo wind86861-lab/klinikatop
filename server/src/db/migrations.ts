@@ -502,6 +502,54 @@ export const MIGRATIONS: Migration[] = [
       addColumn(db, 'requests', 'subject_gender', "TEXT CHECK (subject_gender IN ('male','female'))");
     },
   },
+  {
+    /**
+     * Klinika arizasi — Telegramdan TASHQARIDA to'ldiriladi.
+     *
+     * Nima uchun alohida jadval, to'g'ridan-to'g'ri `clinics` emas:
+     * ariza ochiq internetdan keladi va hali hech kim tekshirmagan. Uni
+     * darhol klinika qilib qo'ysak, tasdiqlanmagan yozuvlar haqiqiy
+     * klinikalar bilan aralashib ketardi va matching ularni ko'rardi.
+     *
+     * Oqim: ariza (ochiq veb) -> moderator tekshiradi -> klinika yaratiladi
+     * va ulanish kodi beriladi -> klinika bot orqali kodni kiritib, o'z
+     * Telegram hisobini biriktiradi.
+     */
+    id: '011_clinic_applications',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS clinic_applications (
+          id             INTEGER PRIMARY KEY AUTOINCREMENT,
+          name           TEXT NOT NULL,
+          city_id        INTEGER NOT NULL REFERENCES cities(id),
+          address        TEXT NOT NULL DEFAULT '',
+          about          TEXT NOT NULL DEFAULT '',
+          license_no     TEXT NOT NULL,
+          -- Bog'lanish uchun: moderator shu odamga qo'ng'iroq qiladi
+          contact_name   TEXT NOT NULL,
+          contact_phone  TEXT NOT NULL,
+          contact_email  TEXT,
+          -- JSON: qaysi operatsiyalarni bajaradi
+          operation_ids  TEXT NOT NULL DEFAULT '[]',
+          status         TEXT NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending','approved','rejected')),
+          note           TEXT,
+          -- Tasdiqlangach yaratilgan klinika va ulanish kodi
+          clinic_id      INTEGER REFERENCES clinics(id) ON DELETE SET NULL,
+          connect_code   TEXT,
+          reviewed_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          reviewed_at    TEXT,
+          -- Spamni cheklash uchun
+          submitted_ip   TEXT,
+          created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_clinic_applications_status
+          ON clinic_applications(status, created_at DESC);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_applications_code
+          ON clinic_applications(connect_code) WHERE connect_code IS NOT NULL;
+      `);
+    },
+  },
 ];
 
 /**

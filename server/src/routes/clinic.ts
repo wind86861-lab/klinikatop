@@ -41,6 +41,7 @@ import {
   recordCommissionPayment,
   verificationChecklist,
 } from '../services/clinicCabinet';
+import { useConnectCode } from '../services/clinicApplications';
 import { CLINIC_DOC_KINDS } from '../../../shared/types';
 import { forbidden } from '../lib/errors';
 
@@ -352,4 +353,17 @@ clinicRouter.post('/commission/pay', (req, res) => {
       reference: body.reference,
     }),
   );
+});
+
+
+/**
+ * Ulanish kodi bilan klinikaga biriktirilish.
+ *
+ * Klinika veb-sahifada ariza qoldirgan, moderator tasdiqlagan va kod
+ * bergan. Endi egasi Telegram orqali kirib, shu kodni kiritadi.
+ * Rol shu paytda beriladi — oldin emas.
+ */
+clinicRouter.post('/connect', (req, res) => {
+  const body = z.object({ code: z.string().trim().min(4).max(32) }).parse(req.body);
+  res.json(useConnectCode(body.code, req.user!.id));
 });

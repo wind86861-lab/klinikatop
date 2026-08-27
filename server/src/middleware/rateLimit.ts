@@ -92,8 +92,16 @@ export const limits = {
   upload: rateLimit({ name: 'upload', windowSec: 60, max: 20 }),
   /** Yozuv amallari: so'rov, taklif, xabar */
   write: rateLimit({ name: 'write', windowSec: 60, max: 60 }),
-  /** Umumiy himoya — barcha API uchun */
-  global: rateLimit({ name: 'global', windowSec: 60, max: 300 }),
+  /**
+   * Umumiy himoya — barcha API uchun, IP bo'yicha.
+   *
+   * Bu qatlam faqat toshqinni to'xtatadi, aniq cheklov emas: u
+   * autentifikatsiyadan OLDIN turgani uchun har doim IP bo'yicha
+   * hisoblanadi. Butun shifoxona yoki ofis bitta NAT ortida bo'lishi
+   * mumkin, shuning uchun chegara keng. Haqiqiy himoya quyidagi
+   * marshrut cheklovlarida — ular foydalanuvchi bo'yicha yuritiladi.
+   */
+  global: rateLimit({ name: 'global', windowSec: 60, max: 1200 }),
 };
 
 /** Testlar orasida holatni tozalash uchun. */

@@ -607,6 +607,81 @@ check "o'ziga bo'lsa begona ism yozilmadi" "$([ -z "$MSUBJ" ] && echo 1)" "${MSU
 curl -s "${PATIENT[@]}" -X POST "$API/requests/$MINE/cancel" > /dev/null
 
 echo
+echo "15. Klinika arizasi (ochiq veb-forma)"
+
+# Ochiq marshrut autentifikatsiyasiz ishlaydi
+REF=$(status "$API/public/reference")
+check "ma'lumotnoma autentifikatsiyasiz ochiladi (200)" "$([ "$REF" = 200 ] && echo 1)" "$REF"
+
+LIC="LIC-$(date +%s)"
+APP=$(curl -s "${JSON[@]}" -X POST "$API/public/clinic-application" \
+  -d "{\"name\":\"Sinov Klinikasi\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"+998901112233\",\"operationIds\":[1]}" | jqv '.id')
+check "ariza autentifikatsiyasiz qabul qilindi" "$([ -n "$APP" ] && echo 1)" "#$APP"
+
+# Bir xil litsenziya bilan takror ariza
+code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
+  -d "{\"name\":\"Takror\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"+998901112233\",\"operationIds\":[1]}")
+check "takroriy litsenziya rad etiladi (409)" "$([ "$code" = 409 ] && echo 1)" "$code"
+
+# Yo'nalishsiz ariza
+code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
+  -d '{"name":"Yonalishsiz","cityId":1,"address":"Toshkent","licenseNo":"LIC-X","contactName":"A","contactPhone":"+998901112233","operationIds":[]}')
+check "yo'nalishsiz ariza rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# Ochiq marshrut faqat YOZUV uchun: GET ta'riflanmagan, shuning uchun
+# so'rov autentifikatsiyaga tushadi va 401 qaytadi. Muhimi — 200 EMAS:
+# arizalar ro'yxati ochiq internetdan o'qilmaydi.
+code=$(status "$API/public/clinic-application")
+check "arizalarni ochiq o'qib bo'lmaydi" "$([ "$code" != 200 ] && echo 1)" "$code"
+
+code=$(status "$API/admin/applications")
+check "arizalar ro'yxati autentifikatsiyasiz yopiq (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+code=$(status "${PATIENT[@]}" "$API/admin/applications")
+check "bemor arizalarni ko'ra olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
+# Moderator tasdiqlaydi va kod oladi
+CODE=$(curl -s "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/applications/$APP/approve" | jqv '.connectCode')
+check "tasdiqlangach ulanish kodi berildi" "$([ -n "$CODE" ] && echo 1)" "$CODE"
+
+code=$(status "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/applications/$APP/approve")
+check "ikkinchi marta tasdiqlab bo'lmaydi (409)" "$([ "$code" = 409 ] && echo 1)" "$code"
+
+# Ulanish uchun ALOHIDA foydalanuvchi: STRANGER boshqa testlarda
+# "klinikasiz odam" sifatida ishlatiladi, uni klinikaga bog'lasak
+# o'sha tekshiruvlar buzilardi.
+# Har yugurishda YANGI foydalanuvchi: klinikaga ulanish qaytarib
+# bo'lmaydigan amal, shuning uchun bir foydalanuvchini qayta ishlatsak
+# ikkinchi yugurish "allaqachon ulangan" deb yiqilardi.
+NEWCLINIC=(-H "x-init-data: $(sign 9$(date +%H%M%S))")
+CONNECTED=$(curl -s "${NEWCLINIC[@]}" "${JSON[@]}" -X POST "$API/clinic/connect" \
+  -d "{\"code\":\"$CODE\"}" | jqv '.clinic.name')
+check "kod bilan klinikaga ulandi" "$([ "$CONNECTED" = "Sinov Klinikasi" ] && echo 1)" "$CONNECTED"
+
+# Kod bir martalik
+code=$(status "${JSON[@]}" -H "x-init-data: $(npx tsx "$ROOT/server/src/test/sign.ts" 900999)" \
+  -X POST "$API/clinic/connect" -d "{\"code\":\"$CODE\"}")
+check "kod ikkinchi marta ishlamaydi (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
+
+# Ulangan odam endi klinika kabinetini ko'radi
+code=$(status "${NEWCLINIC[@]}" "$API/clinic")
+check "ulangach kabinet ochildi (200)" "$([ "$code" = 200 ] && echo 1)" "$code"
+
+# Tasdiqlangan arizani o'chirib bo'lmaydi — undan klinika yaratilgan
+code=$(status "${MOD[@]}" -X DELETE "$API/admin/applications/$APP")
+check "tasdiqlangan arizani o'chirib bo'lmaydi (409)" "$([ "$code" = 409 ] && echo 1)" "$code"
+
+# ── Tozalash ──
+# Test yaratgan arizalar kunlik IP chegarasini yeb qo'ymasligi uchun
+# rad etilganlarini o'chiramiz. Bu moderatorning spam tozalash yo'li.
+for a in $(curl -s "${MOD[@]}" "$API/admin/applications?status=rejected" | jqv '.map(x=>x.id).join(" ")'); do
+  curl -s "${MOD[@]}" -X DELETE "$API/admin/applications/$a" > /dev/null
+done
+for a in $(curl -s "${MOD[@]}" "$API/admin/applications?status=pending" | jqv '.map(x=>x.id).join(" ")'); do
+  curl -s "${MOD[@]}" -X DELETE "$API/admin/applications/$a" > /dev/null
+done
+
+echo
 echo "──────────────────────────────────────────────────"
 echo "HTTP natija: $pass o'tdi, $fail yiqildi"
 [ "$fail" -eq 0 ]

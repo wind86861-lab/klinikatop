@@ -11,6 +11,7 @@
 import { db } from '../db';
 import { config } from '../lib/config';
 import { upsertUser } from '../middleware/auth';
+import { useConnectCode } from './clinicApplications';
 
 const API = () => `https://api.telegram.org/bot${config.telegram.botToken}`;
 
@@ -94,7 +95,15 @@ So'rovlar shahringizdagi mos klinikalarga boradi. Siz narx taklif qilasiz, bemor
 • Komissiya faqat bemor tasdiqlagan bitimdan olinadi
 • So'rovlarni ko'rish har doim bepul
 
-Ro'yxatdan o'tish uchun litsenziya va yo'nalishlaringiz kerak bo'ladi.`;
+<b>Qanday boshlanadi</b>
+1. Quyidagi havolada ariza to'ldirasiz (Telegram kerak emas)
+2. Moderator litsenziyangizni tekshiradi va bog'lanadi
+3. Tasdiqlangach sizga <b>ulanish kodi</b> beriladi
+4. Kodni shu yerga yuborasiz — kabinetingiz ochiladi`;
+
+const CODE_HELP = `Ulanish kodingiz bo'lsa shu yerga yuboring — masalan <code>A1B2C3D4</code>.
+
+Kod hali yo'q bo'lsa, avval ariza qoldiring.`;
 
 const HELP = `<b>Qanday ishlaydi</b>
 
@@ -122,11 +131,18 @@ function openButton(hasClinic = false) {
     [{ text: '🩺 Ilovani ochish', web_app: { url: base } }],
   ];
 
-  // Klinikasi bor odamga qayta ro'yxatdan o'tish taklif qilinmaydi
+  /*
+   * Klinika yo'li Telegramdan TASHQARIDA boshlanadi.
+   *
+   * Ariza oddiy veb-sahifada to'ldiriladi — klinika egasidan Telegram
+   * talab qilmaymiz. Shuning uchun bu `web_app` emas, oddiy `url`
+   * tugmasi: brauzerda ochiladi. Tasdiqlangach klinika bu yerga qaytib
+   * ulanish kodini kiritadi.
+   */
   rows.push(
     hasClinic
       ? [{ text: '🏥 Klinika paneli', web_app: { url: `${base}/clinic` } }]
-      : [{ text: '🏥 Klinikani ro‘yxatdan o‘tkazish', web_app: { url: `${base}/clinic/register` } }],
+      : [{ text: '🏥 Klinika sifatida ro‘yxatdan o‘tish', url: `${base}/klinika` }],
   );
 
   return { inline_keyboard: rows };
@@ -233,6 +249,36 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
     return;
   }
 
+  /*
+   * Ulanish kodi — sakkiz o'n oltilik belgi.
+   *
+   * Klinika veb-sahifada ariza qoldirgan, moderator tasdiqlagan va kod
+   * bergan. Kod shu yerda ishlatiladi va rol shu paytda beriladi.
+   * Kod bir martalik: ishlatilgach o'chadi.
+   */
+  const codeCandidate = text.replace(/^\/start\s+/i, '').trim().toUpperCase();
+  if (from && /^[0-9A-F]{8}$/.test(codeCandidate)) {
+    const user = upsertUser({
+      id: from.id,
+      first_name: from.first_name ?? 'Foydalanuvchi',
+      last_name: from.last_name,
+      username: from.username,
+      language_code: from.language_code,
+    });
+
+    try {
+      const { clinic } = useConnectCode(codeCandidate, user.id);
+      await sendMessage(
+        chatId,
+        `✅ <b>${clinic.name}</b> kabinetiga ulandingiz.\n\nEndi hujjatlarni yuklab, verifikatsiyani yakunlang.`,
+        openButton(true),
+      );
+    } catch (err: any) {
+      await sendMessage(chatId, `❌ ${err?.message ?? 'Kod ishlamadi'}`, openButton(false));
+    }
+    return;
+  }
+
   if (command === '/help') {
     await sendMessage(chatId, HELP, openButton(from ? hasClinic(from.id) : false));
     return;
@@ -241,6 +287,12 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   // Klinika egasi uchun to'g'ridan-to'g'ri yo'l
   if (command === '/clinic' || command === '/klinika') {
     await sendMessage(chatId, CLINIC_INTRO, openButton(from ? hasClinic(from.id) : false));
+    return;
+  }
+
+  // Kodga o'xshash, lekin noto'g'ri uzunlikda — odam kod yubormoqchi bo'lgan
+  if (/^[0-9A-Za-z]{4,16}$/.test(text) && !text.startsWith('/')) {
+    await sendMessage(chatId, CODE_HELP, openButton(from ? hasClinic(from.id) : false));
     return;
   }
 
