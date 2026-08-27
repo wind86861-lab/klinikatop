@@ -25,6 +25,7 @@ import {
   IconCheck,
   IconClock,
   IconInbox,
+  IconTrash,
   Notice,
   Screen,
   Sheet,
@@ -282,14 +283,21 @@ export function RequestDetail() {
       )}
 
       {/*
-        O'chirish — eng pastda va ohista.
-        Bu qaytarib bo'lmaydigan amal, uni tasodifan bosish oson
-        bo'lmasligi kerak. Bitim tuzilgan so'rovda umuman chiqmaydi.
+        O'chirish — ekran oxirida, lekin ko'rinadigan holda.
+        Ilgari bu ohista matnli havola edi va odam uni topa olmasdi:
+        yashirish bilan ehtiyotkorlikni chalkashtirib yubormaslik kerak.
+        Tasodifan bosishdan tasdiqlash varag'i himoya qiladi.
+        Bitim tuzilgan so'rovda tugma umuman chiqmaydi.
       */}
       {request.status !== 'CHOSEN' && request.status !== 'COMPLETED' && (
-        <button type="button" className="danger-link" onClick={() => setConfirmDelete(true)}>
+        <Button
+          variant="ghost"
+          icon={<IconTrash size={16} />}
+          className="request-delete"
+          onClick={() => setConfirmDelete(true)}
+        >
           {t('request.delete')}
-        </button>
+        </Button>
       )}
 
       <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title={t('request.delete')}>

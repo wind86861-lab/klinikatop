@@ -3435,23 +3435,46 @@
 .tg-gate__badge.is-ok { background: var(--primary-soft); color: var(--primary); }
 .tg-gate__badge.is-no { background: rgba(229, 83, 60, 0.12); color: var(--danger); }
 
-/*
- * Qaytarib bo'lmaydigan amal uchun havola ko'rinishidagi tugma.
- *
- * Ataylab tugmaga o'xshamaydi: o'chirish kundalik amal emas va uni
- * boshqa tugmalar bilan bir qatorda ko'rsatish tasodifan bosilishiga
- * yo'l ochardi. Tasdiqlash varag'i esa ikkinchi to'siq.
- */
-.danger-link {
+/* ══════════════════  So'rovni o'chirish  ══════════════════
+
+   Birinchi urinishda tugma ohista matnli havola edi va odam uni topa
+   olmadi. Yashirish bilan ehtiyotkorlikni chalkashtirib yubormaslik
+   kerak: tugma KO'RINSIN, tasodifan bosishdan esa tasdiqlash varag'i
+   himoya qiladi.
+                                                                        */
+
+/* So'rov ichidagi tugma — ekran oxirida, ammo ko'rinadigan */
+.request-delete {
   align-self: center;
   margin-top: var(--s-6);
-  padding: var(--s-2) var(--s-3);
+  color: var(--danger);
+}
+.request-delete:hover { background: rgba(229, 83, 60, 0.08); }
+
+/* Ro'yxatdagi qator: asosiy tugma + o'chirish */
+.list-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s-1);
+}
+.list-row .list-item { flex: 1; min-width: 0; }
+
+.list-row__del {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
   border: 0;
-  background: none;
-  font: inherit;
-  font-size: var(--t-sm);
+  border-radius: var(--r-md);
+  background: var(--card);
   color: var(--muted);
   cursor: pointer;
-  transition: color var(--d-micro) var(--ease);
+  transition: color var(--d-micro) var(--ease), background var(--d-micro) var(--ease);
+  box-shadow: var(--shadow-inset);
 }
-.danger-link:hover { color: var(--danger); }
+.list-row__del:hover {
+  color: var(--danger);
+  background: rgba(229, 83, 60, 0.08);
+}
+/* Barmoq uchun kamida 44px — tasodifan yonidagini bosmasin */
+.list-row__del:active { transform: scale(0.96); }
