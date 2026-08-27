@@ -14,10 +14,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 sign() { npx tsx "$ROOT/server/src/test/sign.ts" "$1"; }
 
 PATIENT=(-H "x-init-data: $(sign 900001)")
-CLINIC=(-H "x-init-data: $(sign 900002)")
-MOD=(-H "x-init-data: $(sign 900003)")
 STRANGER=(-H "x-init-data: $(sign 900777)")
 JSON=(-H "content-type: application/json")
+
+# Klinika va admin Telegram orqali KIRMAYDI — ular veb sessiya ishlatadi.
+# Hisoblar haqiqiy oqim orqali tayyorlanadi: hisob → parol → kirish.
+WEB_SETUP=$(npx tsx "$ROOT/server/src/test/webAccounts.ts")
+CLINIC_ID=$(echo "$WEB_SETUP" | awk '/^CLINIC_ID/{print $2}')
+CLINIC=(-H "authorization: Bearer $(echo "$WEB_SETUP" | awk '/^CLINIC_TOKEN/{print $2}')")
+MOD=(-H "authorization: Bearer $(echo "$WEB_SETUP" | awk '/^ADMIN_TOKEN/{print $2}')")
 
 pass=0; fail=0
 check() { # check <nom> <shart-natijasi>
@@ -34,13 +39,18 @@ code=$(status "${PATIENT[@]}" "$API/me")
 check "dev foydalanuvchi kiradi (200)" "$([ "$code" = 200 ] && echo 1)" "$code"
 
 echo
-echo "2. Klinika ro'yxatdan o'tishi va verifikatsiya"
-curl -s "${CLINIC[@]}" "$API/me" > /dev/null
-CLINIC_ID=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/clinic/register" \
-  -d '{"name":"HTTP Test Klinika","cityId":1,"address":"Toshkent","about":"Test","licenseFileId":"LIC-1","operationIds":[1]}' | jqv '.id')
-# Qayta ishga tushirishga chidamli: klinika allaqachon bo'lsa mavjudini olamiz.
-# Mavjud klinikaning yo'nalishlari boshqacha bo'lishi mumkin — testdagi so'rov
-# unga yetib borishi uchun 1-operatsiyani majburan qo'shamiz.
+echo "2. Rollarning ajratilishi va verifikatsiya"
+
+# Bemor klinika kabinetiga hech qanday yo'l bilan kira olmaydi
+code=$(status "${PATIENT[@]}" "$API/clinic")
+check "bemor klinika kabinetiga kirmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+code=$(status "${PATIENT[@]}" "$API/admin/verifications")
+check "bemor admin paneliga kirmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
+# Klinika hisobi esa Telegram bilan emas, faqat veb sessiya bilan ishlaydi
+code=$(status "${CLINIC[@]}" "$API/clinic")
+check "klinika veb sessiya bilan kiradi (200)" "$([ "$code" = 200 ] && echo 1)" "$code"
+
 if [ -z "$CLINIC_ID" ]; then
   CLINIC_ID=$(curl -s "${CLINIC[@]}" "$API/clinic" | jqv '.clinic.id')
   EXISTING=$(curl -s "${CLINIC[@]}" "$API/clinic" | jqv '.operationIds.join(",")')
@@ -280,13 +290,27 @@ check "analitika qaytdi" "$([ "$AN" = 30 ] && echo 1)" "$AN kun"
 COMM=$(curl -s "${CLINIC[@]}" "$API/clinic/revenue" | jqv '.commissionPercent')
 check "daromad hisoboti komissiyani ko'rsatdi" "$([ "$COMM" = 5 ] && echo 1)" "$COMM%"
 
-# Jamoa: taklifnoma
-INV=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/clinic/operators/invite" \
-  -d '{"role":"clinic_operator"}' | jqv '.code')
-check "taklifnoma kodi yaratildi" "$([ -n "$INV" ] && echo 1)" "$INV"
+# Jamoa: xodimga ish hisobi ochiladi
+OP_EMAIL="xodim-$(date +%s)@test.local"
+OP=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/clinic/operators" \
+  -d "{\"email\":\"$OP_EMAIL\",\"fullName\":\"Sinov Xodim\",\"role\":\"clinic_operator\"}" | jqv '.setupToken')
+check "xodimga hisob ochildi" "$([ -n "$OP" ] && echo 1)" ""
 
-code=$(status "${JSON[@]}" "${STRANGER[@]}" -X POST "$API/clinic/join" -d '{"code":"YOQKOD00"}')
-check "yaroqsiz taklifnoma rad etiladi (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
+# Bir email ikki marta ishlatilmaydi
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/clinic/operators" \
+  -d "{\"email\":\"$OP_EMAIL\",\"fullName\":\"Takror\",\"role\":\"clinic_operator\"}")
+check "takroriy email rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# Xodim parolini qo'yib kabinetga kiradi, lekin admin amallariga yo'l yo'q
+curl -s "${JSON[@]}" -X POST "$API/web/setup" -d "{\"token\":\"$OP\",\"password\":\"xodim-paroli-2026\"}" > /dev/null
+OP_TOKEN=$(curl -s "${JSON[@]}" -X POST "$API/web/login" \
+  -d "{\"email\":\"$OP_EMAIL\",\"password\":\"xodim-paroli-2026\"}" | jqv '.token')
+OPH=(-H "authorization: Bearer $OP_TOKEN")
+code=$(status "${OPH[@]}" "$API/clinic")
+check "xodim kabinetga kirdi (200)" "$([ "$code" = 200 ] && echo 1)" "$code"
+code=$(status "${OPH[@]}" "${JSON[@]}" -X POST "$API/clinic/operators" \
+  -d '{"email":"yana@test.local","fullName":"Yana","role":"clinic_operator"}')
+check "xodim boshqa xodim qo'sha olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
 
 # Begona klinikaning ma'lumotiga kirib bo'lmaydi
 code=$(status "${JSON[@]}" "${STRANGER[@]}" "$API/clinic/templates")
@@ -614,18 +638,24 @@ REF=$(status "$API/public/reference")
 check "ma'lumotnoma autentifikatsiyasiz ochiladi (200)" "$([ "$REF" = 200 ] && echo 1)" "$REF"
 
 LIC="LIC-$(date +%s)"
+EMAIL="klinika-$(date +%s)@test.local"
 APP=$(curl -s "${JSON[@]}" -X POST "$API/public/clinic-application" \
-  -d "{\"name\":\"Sinov Klinikasi\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"+998901112233\",\"operationIds\":[1]}" | jqv '.id')
+  -d "{\"name\":\"Sinov Klinikasi\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"+998901112233\",\"contactEmail\":\"$EMAIL\",\"operationIds\":[1]}" | jqv '.id')
 check "ariza autentifikatsiyasiz qabul qilindi" "$([ -n "$APP" ] && echo 1)" "#$APP"
+
+# Email endi majburiy — usiz kabinet hisobi ocholmaymiz
+code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
+  -d "{\"name\":\"Emailsiz\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"LIC-NOMAIL\",\"contactName\":\"A\",\"contactPhone\":\"+998901112233\",\"operationIds\":[1]}")
+check "emailsiz ariza rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
 # Bir xil litsenziya bilan takror ariza
 code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
-  -d "{\"name\":\"Takror\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"+998901112233\",\"operationIds\":[1]}")
+  -d "{\"name\":\"Takror\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"+998901112233\",\"contactEmail\":\"takror-$EMAIL\",\"operationIds\":[1]}")
 check "takroriy litsenziya rad etiladi (409)" "$([ "$code" = 409 ] && echo 1)" "$code"
 
 # Yo'nalishsiz ariza
 code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
-  -d '{"name":"Yonalishsiz","cityId":1,"address":"Toshkent","licenseNo":"LIC-X","contactName":"A","contactPhone":"+998901112233","operationIds":[]}')
+  -d '{"name":"Yonalishsiz","cityId":1,"address":"Toshkent","licenseNo":"LIC-X","contactName":"A","contactPhone":"+998901112233","contactEmail":"x@test.local","operationIds":[]}')
 check "yo'nalishsiz ariza rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
 # Ochiq marshrut faqat YOZUV uchun: GET ta'riflanmagan, shuning uchun
@@ -640,32 +670,56 @@ check "arizalar ro'yxati autentifikatsiyasiz yopiq (401)" "$([ "$code" = 401 ] &
 code=$(status "${PATIENT[@]}" "$API/admin/applications")
 check "bemor arizalarni ko'ra olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
 
-# Moderator tasdiqlaydi va kod oladi
-CODE=$(curl -s "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/applications/$APP/approve" | jqv '.connectCode')
-check "tasdiqlangach ulanish kodi berildi" "$([ -n "$CODE" ] && echo 1)" "$CODE"
+# ── Tasdiqlash: klinika, veb hisob va parol havolasi bir vaqtda ──
+SETUP=$(curl -s "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/applications/$APP/approve" | jqv '.connectCode')
+check "tasdiqlangach parol havolasi berildi" "$([ -n "$SETUP" ] && echo 1)" "$SETUP"
 
 code=$(status "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/applications/$APP/approve")
 check "ikkinchi marta tasdiqlab bo'lmaydi (409)" "$([ "$code" = 409 ] && echo 1)" "$code"
 
-# Ulanish uchun ALOHIDA foydalanuvchi: STRANGER boshqa testlarda
-# "klinikasiz odam" sifatida ishlatiladi, uni klinikaga bog'lasak
-# o'sha tekshiruvlar buzilardi.
-# Har yugurishda YANGI foydalanuvchi: klinikaga ulanish qaytarib
-# bo'lmaydigan amal, shuning uchun bir foydalanuvchini qayta ishlatsak
-# ikkinchi yugurish "allaqachon ulangan" deb yiqilardi.
-NEWCLINIC=(-H "x-init-data: $(sign 9$(date +%H%M%S))")
-CONNECTED=$(curl -s "${NEWCLINIC[@]}" "${JSON[@]}" -X POST "$API/clinic/connect" \
-  -d "{\"code\":\"$CODE\"}" | jqv '.clinic.name')
-check "kod bilan klinikaga ulandi" "$([ "$CONNECTED" = "Sinov Klinikasi" ] && echo 1)" "$CONNECTED"
+# Parol o'rnatilmaguncha kirish mumkin emas
+code=$(status "${JSON[@]}" -X POST "$API/web/login" -d "{\"email\":\"$EMAIL\",\"password\":\"hech-qanday-parol\"}")
+check "parolsiz hisobga kirib bo'lmaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
-# Kod bir martalik
-code=$(status "${JSON[@]}" -H "x-init-data: $(npx tsx "$ROOT/server/src/test/sign.ts" 900999)" \
-  -X POST "$API/clinic/connect" -d "{\"code\":\"$CODE\"}")
-check "kod ikkinchi marta ishlamaydi (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
+# Qisqa parol rad etiladi
+code=$(status "${JSON[@]}" -X POST "$API/web/setup" -d "{\"token\":\"$SETUP\",\"password\":\"qisqa\"}")
+check "qisqa parol rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
-# Ulangan odam endi klinika kabinetini ko'radi
-code=$(status "${NEWCLINIC[@]}" "$API/clinic")
-check "ulangach kabinet ochildi (200)" "$([ "$code" = 200 ] && echo 1)" "$code"
+PWD_NEW="klinika-sinov-2026"
+code=$(status "${JSON[@]}" -X POST "$API/web/setup" -d "{\"token\":\"$SETUP\",\"password\":\"$PWD_NEW\"}")
+check "parol o'rnatildi (200)" "$([ "$code" = 200 ] && echo 1)" "$code"
+
+# Havola bir martalik
+code=$(status "${JSON[@]}" -X POST "$API/web/setup" -d "{\"token\":\"$SETUP\",\"password\":\"$PWD_NEW\"}")
+check "havola ikkinchi marta ishlamaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+# ── Kirish ──
+NEW_TOKEN=$(curl -s "${JSON[@]}" -X POST "$API/web/login" -d "{\"email\":\"$EMAIL\",\"password\":\"$PWD_NEW\"}" | jqv '.token')
+check "yangi klinika kabinetga kirdi" "$([ -n "$NEW_TOKEN" ] && echo 1)" ""
+
+code=$(status "${JSON[@]}" -X POST "$API/web/login" -d "{\"email\":\"$EMAIL\",\"password\":\"boshqa-parol-butunlay\"}")
+check "noto'g'ri parol rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+code=$(status "${JSON[@]}" -X POST "$API/web/login" -d "{\"email\":\"yoq@test.local\",\"password\":\"$PWD_NEW\"}")
+check "mavjud bo'lmagan hisob ham 401 (mavjudligi oshkor bo'lmaydi)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+NEW=(-H "authorization: Bearer $NEW_TOKEN")
+CAB=$(curl -s "${NEW[@]}" "$API/clinic" | jqv '.clinic.name')
+check "kabinet ochildi" "$([ "$CAB" = "Sinov Klinikasi" ] && echo 1)" "$CAB"
+
+# Klinika hisobi admin paneliga kira olmaydi
+code=$(status "${NEW[@]}" "$API/admin/applications")
+check "klinika admin paneliga kira olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
+# Telegram imzosi kabinetga yaramaydi
+code=$(status "${PATIENT[@]}" "$API/clinic")
+check "Telegram imzosi kabinetga yaramaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
+# Chiqish sessiyani darhol bekor qiladi
+curl -s "${NEW[@]}" -X POST "$API/web/logout" > /dev/null
+# Token bekor bo'lgach so'rov autentifikatsiyasiz hisoblanadi
+code=$(status "${NEW[@]}" "$API/clinic")
+check "chiqqandan keyin sessiya ishlamaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
 # Tasdiqlangan arizani o'chirib bo'lmaydi — undan klinika yaratilgan
 code=$(status "${MOD[@]}" -X DELETE "$API/admin/applications/$APP")

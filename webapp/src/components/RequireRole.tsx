@@ -35,17 +35,22 @@ export function RequireRole({
   // Sessiya hali kelmagan — qaror qabul qilishga erta
   if (!ready) return <Splash />;
 
-  if (!user) return <Navigate to="/" replace />;
+  if (!user) return <Navigate to="/kabinet" replace />;
 
   const allowed = user.roles.some((role) => roles.includes(role));
   if (!allowed) {
     // Bosh sahifaga qaytaramiz. Qaysi manzilga urinilgani `state` da qoladi —
     // kerak bo'lsa keyin xabar ko'rsatish uchun.
-    return <Navigate to="/" replace state={{ denied: location.pathname }} />;
+    return <Navigate to="/kabinet" replace state={{ denied: location.pathname }} />;
   }
 
+  /*
+   * Klinikaga biriktirilmagan ish hisobi — bu ma'lumot xatosi, chunki
+   * hisob har doim klinika bilan birga yaratiladi. Kirish sahifasiga
+   * qaytaramiz: u yerdan boshqa hisob bilan kirish mumkin.
+   */
   if (needsClinic && !user.clinicId) {
-    return <Navigate to="/clinic/register" replace />;
+    return <Navigate to="/kabinet" replace />;
   }
 
   return <>{children}</>;

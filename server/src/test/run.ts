@@ -744,6 +744,109 @@ async function main() {
     'too_many_active_requests',
   );
 
+
+  /* ═════ 14. Veb hisoblar: klinika va admin ═════ */
+  console.log('\n14. Veb hisoblar va rollarning ajratilishi');
+
+  const webAuth = require('../services/webAuth');
+
+  const acc = webAuth.createAccount({
+    email: 'Sinov@Klinika.LOCAL',
+    fullName: 'Sinov Egasi',
+    level: 'clinic_admin',
+    clinicId: clinic.id,
+  });
+
+  check('email kichik harfga keltirildi', acc.user.email === 'sinov@klinika.local', acc.user.email);
+  check('sozlash tokeni berildi', typeof acc.setupToken === 'string' && acc.setupToken.length > 20);
+
+  // Hisob `users` jadvalida MANFIY telegram_id bilan juftlanadi.
+  // Aynan shu Telegram orqali kirishni imkonsiz qiladi.
+  const person = webAuth.personFor(acc.user.id);
+  check('shaxs qatori yaratildi', person !== null);
+  check('roli klinika administratori', person.roles.includes('clinic_admin'), person?.roles);
+  check('klinikaga biriktirildi', person.clinicId === clinic.id, person?.clinicId);
+
+  const rawPerson = db.prepare('SELECT telegram_id FROM users WHERE id = ?').get(person.id);
+  check('telegram_id manfiy — Telegram orqali topilmaydi', rawPerson.telegram_id < 0, rawPerson.telegram_id);
+
+  // Bemor roli bu qatorga tegmaydi
+  check('bemor roli berilmadi', !person.roles.includes('patient'), person?.roles);
+
+  throws('parol o‘rnatmasdan kirib bo‘lmaydi', () => webAuth.login('sinov@klinika.local', 'nimadir'));
+  throws('qisqa parol rad etiladi', () => webAuth.completeSetup(acc.setupToken, 'qisqa'), 'weak_password');
+  throws(
+    'faqat raqamdan iborat parol rad etiladi',
+    () => webAuth.completeSetup(acc.setupToken, '1234567890123'),
+    'weak_password',
+  );
+
+  webAuth.completeSetup(acc.setupToken, 'yaxshi-parol-2026');
+  throws('sozlash havolasi bir martalik', () => webAuth.completeSetup(acc.setupToken, 'boshqa-parol-2026'));
+
+  const session = webAuth.login('sinov@klinika.local', 'yaxshi-parol-2026', '1.2.3.4', 'test');
+  check('kirish muvaffaqiyatli', typeof session.token === 'string');
+  check('2FA yoqilmagan — sessiya darhol to‘liq', session.mfaRequired === false);
+
+  // Token bazada OCHIQ saqlanmaydi: baza sizib chiqsa ham u bilan kirib bo'lmaydi
+  const stored = db.prepare('SELECT token FROM admin_sessions WHERE admin_id = ?').get(acc.user.id);
+  check('sessiya tokeni bazada ochiq saqlanmaydi', stored.token !== session.token);
+
+  check('sessiya tanildi', webAuth.resolveSession(session.token)?.user.id === acc.user.id);
+  webAuth.logout(session.token);
+  check('chiqqandan keyin sessiya yo‘q', webAuth.resolveSession(session.token) === null);
+
+  // Ketma-ket xato urinishlar hisobni qulflaydi
+  for (let i = 0; i < 5; i++) {
+    try {
+      webAuth.login('sinov@klinika.local', 'notogri-parol');
+    } catch {
+      /* kutilgan */
+    }
+  }
+  throws('5 xatodan keyin hisob qulflandi', () => webAuth.login('sinov@klinika.local', 'yaxshi-parol-2026'));
+
+  throws(
+    'bir email ikki marta ishlatilmaydi',
+    () => webAuth.createAccount({ email: 'sinov@klinika.local', fullName: 'X', level: 'clinic_admin', clinicId: clinic.id }),
+    'email_taken',
+  );
+  throws(
+    'klinikasiz klinika roli bo‘lmaydi',
+    () => webAuth.createAccount({ email: 'x@y.local', fullName: 'X', level: 'clinic_operator', clinicId: null }),
+    'clinic_required',
+  );
+  throws(
+    'admin hisobi klinikaga bog‘lanmaydi',
+    () => webAuth.createAccount({ email: 'x@y.local', fullName: 'X', level: 'full', clinicId: clinic.id }),
+    'clinic_not_allowed',
+  );
+
+  // `full` daraja platformada `admin` roli bilan ish ko'radi
+  const adminAcc = webAuth.createAccount({ email: 'bosh@klinikatop.uz', fullName: 'Bosh Admin', level: 'full', clinicId: null });
+  check('full daraja admin roliga aylandi', webAuth.personFor(adminAcc.user.id).roles.includes('admin'));
+
+  /* ── 2FA ── */
+  const totp = webAuth.startTotpSetup(adminAcc.user.id);
+  check('otpauth havolasi yasaldi', totp.otpauth.startsWith('otpauth://totp/'));
+  check('sir base32 shaklida', /^[A-Z2-7]+$/.test(totp.secret), totp.secret);
+
+  const goodCode = webAuth.currentTotp(totp.secret);
+  check('joriy kod qabul qilinadi', webAuth.verifyTotp(totp.secret, goodCode) === true, goodCode);
+  check('shakli buzilgan kod rad etiladi', webAuth.verifyTotp(totp.secret, '12ab') === false);
+  throws('noto‘g‘ri kod bilan 2FA yoqilmaydi', () => webAuth.confirmTotp(adminAcc.user.id, '000001'));
+
+  webAuth.confirmTotp(adminAcc.user.id, webAuth.currentTotp(totp.secret));
+
+  // 2FA yoqilgach parol YETARLI EMAS: sessiya to'liq bo'lmaydi
+  webAuth.completeSetup(adminAcc.setupToken, 'admin-paroli-2026');
+  const adminSession = webAuth.login('bosh@klinikatop.uz', 'admin-paroli-2026');
+  check('2FA yoqilgach kod talab qilinadi', adminSession.mfaRequired === true);
+  check('sessiya hali to‘liq emas', webAuth.resolveSession(adminSession.token).mfaPassed === false);
+
+  webAuth.passMfa(adminSession.token, webAuth.currentTotp(totp.secret));
+  check('kod kiritilgach sessiya to‘liq', webAuth.resolveSession(adminSession.token).mfaPassed === true);
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

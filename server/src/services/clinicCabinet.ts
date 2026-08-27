@@ -20,7 +20,6 @@ import type {
   ClinicAnalytics,
   ClinicDocKind,
   ClinicDocument,
-  ClinicInvite,
   ClinicOperator,
   ClinicRevenue,
   Doctor,
@@ -410,63 +409,8 @@ export function listOperators(clinicId: number): ClinicOperator[] {
   });
 }
 
-export function createInvite(clinicId: number, role: OperatorRole): ClinicInvite {
-  // Qisqa, og'zaki aytsa bo'ladigan kod — Telegramda ulashish uchun
-  const code = crypto.randomBytes(4).toString('hex').toUpperCase();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
-  db.prepare(
-    `INSERT INTO clinic_invites (code, clinic_id, role, expires_at) VALUES (?, ?, ?, ?)`,
-  ).run(code, clinicId, role, expiresAt);
 
-  return { code, role, createdAt: new Date().toISOString(), expiresAt: iso(expiresAt)!, usedByUserId: null };
-}
-
-export function listInvites(clinicId: number): ClinicInvite[] {
-  const rows = db
-    .prepare(
-      `SELECT * FROM clinic_invites
-        WHERE clinic_id = ? AND used_by_user_id IS NULL AND expires_at > datetime('now')
-        ORDER BY created_at DESC`,
-    )
-    .all(clinicId) as any[];
-  return rows.map((r) => ({
-    code: r.code,
-    role: r.role,
-    createdAt: iso(r.created_at)!,
-    expiresAt: iso(r.expires_at)!,
-    usedByUserId: r.used_by_user_id ?? null,
-  }));
-}
-
-/** Taklifnomani qabul qilish — foydalanuvchi klinikaga qo'shiladi. */
-export function acceptInvite(userId: number, code: string): { clinicId: number; role: OperatorRole } {
-  const invite = db
-    .prepare(
-      `SELECT * FROM clinic_invites
-        WHERE code = ? AND used_by_user_id IS NULL AND expires_at > datetime('now')`,
-    )
-    .get(code.trim().toUpperCase()) as any;
-  if (!invite) throw notFound('Taklifnoma topilmadi yoki muddati o‘tgan');
-
-  const user = db.prepare(`SELECT clinic_id, roles FROM users WHERE id = ?`).get(userId) as any;
-  if (user?.clinic_id && user.clinic_id !== invite.clinic_id) {
-    throw conflict('already_in_clinic', 'Siz boshqa klinikaga biriktirilgansiz');
-  }
-
-  db.transaction(() => {
-    const roles = new Set(json<string[]>(user?.roles ?? null, ['patient']));
-    roles.add(invite.role);
-    db.prepare(`UPDATE users SET clinic_id = ?, roles = ? WHERE id = ?`).run(
-      invite.clinic_id,
-      JSON.stringify([...roles]),
-      userId,
-    );
-    db.prepare(`UPDATE clinic_invites SET used_by_user_id = ? WHERE code = ?`).run(userId, invite.code);
-  })();
-
-  return { clinicId: invite.clinic_id, role: invite.role };
-}
 
 export function removeOperator(clinicId: number, actorId: number, userId: number): void {
   if (actorId === userId) throw badRequest('self_remove', 'O‘zingizni chiqarib yubora olmaysiz');

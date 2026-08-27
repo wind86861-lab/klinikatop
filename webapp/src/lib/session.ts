@@ -1,0 +1,37 @@
+/**
+ * Veb kabinet sessiyasi — klinika va admin uchun.
+ *
+ * Token `localStorage` da saqlanadi va har so'rovda `Authorization`
+ * sarlavhasida yuboriladi. Cookie ishlatilmaydi: cookie'ni brauzer
+ * boshqa saytdan yuborilgan so'rovga ham o'zi qo'shib yuboradi va bu
+ * CSRF hujumiga yo'l ochadi. Sarlavhani esa faqat bizning kodimiz
+ * qo'yadi.
+ */
+const KEY = 'klinikatop.web';
+
+export function webToken(): string | null {
+  try {
+    return localStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setWebToken(token: string | null) {
+  try {
+    if (token) localStorage.setItem(KEY, token);
+    else localStorage.removeItem(KEY);
+  } catch {
+    /* shaxsiy rejimda saqlash yopiq bo'lishi mumkin */
+  }
+}
+
+/** Bu manzil veb kabinetga tegishlimi — Telegram ilovasiga emas. */
+export function isCabinetPath(pathname: string): boolean {
+  return (
+    pathname === '/klinika' ||
+    pathname.startsWith('/kabinet') ||
+    pathname.startsWith('/clinic') ||
+    pathname.startsWith('/admin')
+  );
+}

@@ -4,6 +4,7 @@ import { config } from '../lib/config';
 import { forbidden, unauthorized } from '../lib/errors';
 import { mapUser } from '../lib/mappers';
 import { verifyInitData, type TelegramUser } from '../lib/telegram';
+import { personFor, resolveSession } from '../services/webAuth';
 import type { Role, User } from '../../../shared/types';
 
 declare global {
@@ -11,6 +12,8 @@ declare global {
   namespace Express {
     interface Request {
       user?: User;
+      /** Veb sessiya orqali kirilganda — klinika va admin uchun */
+      web?: { id: number; email: string; level: string; mfaPassed: boolean };
     }
   }
 }
@@ -55,11 +58,70 @@ export function resolveUser(req: Request): User | null {
   return upsertUser(res.user);
 }
 
+/**
+ * Veb sessiya — klinika va admin uchun.
+ *
+ * Token `Authorization: Bearer <token>` sarlavhasida keladi, cookie'da
+ * emas: shunda CSRF hujumi mumkin bo'lmaydi (brauzer boshqa saytdan
+ * yuborilgan so'rovga sarlavhani o'zi qo'shmaydi).
+ */
+export function resolveWebUser(req: Request): { user: User; web: NonNullable<Request['web']> } | null {
+  const header = req.header('authorization') ?? '';
+  if (!header.toLowerCase().startsWith('bearer ')) return null;
+
+  const session = resolveSession(header.slice(7).trim());
+  if (!session) return null;
+
+  const person = personFor(session.user.id);
+  if (!person) return null;
+
+  return {
+    user: person,
+    web: {
+      id: session.user.id,
+      email: session.user.email,
+      level: session.user.level,
+      mfaPassed: session.mfaPassed,
+    },
+  };
+}
+
+/**
+ * Kirishning IKKI yo'li bor va ular kesishmaydi:
+ *
+ *   bemor          → Telegram imzosi (`x-init-data`)
+ *   klinika, admin → veb sessiyasi (`Authorization: Bearer`)
+ *
+ * Bemorning qatoriga klinika yoki admin roli HECH QACHON berilmaydi, veb
+ * hisobning qatori esa manfiy `telegram_id` tufayli Telegram orqali
+ * topilmaydi. Shuning uchun bir shaxs ikkinchi tomonga o'ta olmaydi —
+ * "bir bosishda rol almashish" muammosi shu yerda yopiladi.
+ */
 export function authenticate(req: Request, _res: Response, next: NextFunction) {
+  const web = resolveWebUser(req);
+  if (web) {
+    if (web.user.blockedAt) return next(forbidden('Hisobingiz bloklangan'));
+    req.user = web.user;
+    req.web = web.web;
+    return next();
+  }
+
   const user = resolveUser(req);
   if (!user) return next(unauthorized('initData yaroqsiz yoki yo‘q'));
   if (user.blockedAt) return next(forbidden('Hisobingiz bloklangan'));
   req.user = user;
+  next();
+}
+
+/**
+ * Veb sessiya majburiy — klinika kabineti va admin paneli uchun.
+ *
+ * 2FA yoqilgan hisob uni o'tmaguncha sessiya to'liq emas: parol o'g'irlangan
+ * bo'lsa ham panel ochilmaydi.
+ */
+export function requireWeb(req: Request, _res: Response, next: NextFunction) {
+  if (!req.web) return next(forbidden('Bu bo‘limga veb kabinet orqali kiriladi'));
+  if (!req.web.mfaPassed) return next(forbidden('Ikki bosqichli tasdiqni yakunlang'));
   next();
 }
 

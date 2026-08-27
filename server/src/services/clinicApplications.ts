@@ -11,12 +11,14 @@
  *   • bir IP dan ketma-ket ariza cheklanadi
  *   • bir xil litsenziya raqami bilan takroriy ariza rad etiladi
  *
- * Tasdiqlangach klinika yaratiladi va ULANISH KODI beriladi. Klinika o'sha
- * kodni bot orqali kiritadi va shunda uning Telegram hisobi biriktiriladi.
+ * Tasdiqlangach klinika yaratiladi va unga VEB HISOB ochiladi. Moderator
+ * klinikaga bir martalik havola yuboradi, klinika o'sha havolada o'z parolini
+ * qo'yadi va kabinetga brauzerdan kiradi. Telegram bu yerda umuman
+ * qatnashmaydi — u keyinroq, faqat xabarnoma olish uchun ulanadi.
  */
-import crypto from 'node:crypto';
 import { db } from '../db';
 import { badRequest, conflict, notFound } from '../lib/errors';
+import { createAccount } from './webAuth';
 import { mapClinic } from '../lib/mappers';
 import type { Clinic } from '../../../shared/types';
 
@@ -36,7 +38,11 @@ export interface ClinicApplication {
   status: ApplicationStatus;
   note: string | null;
   clinicId: number | null;
-  /** Faqat moderatorga ko'rinadi — klinikaga alohida yetkaziladi */
+  /**
+   * Parol o'rnatish uchun bir martalik token. Faqat moderatorga ko'rinadi
+   * va faqat tasdiqlash paytida bir marta — klinikaga havola shaklida
+   * yetkaziladi.
+   */
   connectCode: string | null;
   createdAt: string;
   reviewedAt: string | null;
@@ -176,12 +182,21 @@ export function getApplication(id: number): ClinicApplication {
  * Ya'ni tasdiqlash "ariza haqiqiy" degani, "klinika ishlashi mumkin"
  * degani emas. Ikkinchi bosqich — hujjat tekshiruvi — kabinetda bo'ladi.
  */
+/**
+ * Arizani tasdiqlash.
+ *
+ * Bu yerda uch narsa bir vaqtda tug'iladi: klinika, uning veb hisobi va
+ * parol o'rnatish havolasi. Uchalasi bitta tranzaksiyada — yarim
+ * yaratilgan klinika (hisobsiz) yoki egasiz hisob qolib ketmasligi kerak.
+ *
+ * Vaqtinchalik parol berilmaydi: moderator uni o'ylab topib telefonda
+ * aytishi kerak bo'lardi va u yozishmalarda ochiq qolardi. Buning o'rniga
+ * klinika o'z parolini o'zi qo'yadi.
+ */
 export function approveApplication(id: number, moderatorId: number): ClinicApplication {
   const app = getApplication(id);
   if (app.status !== 'pending') throw conflict('already_reviewed', 'Ariza allaqachon ko‘rib chiqilgan');
-
-  // Og'zaki aytsa bo'ladigan kod — telefonda ham o'qib beriladi
-  const code = crypto.randomBytes(4).toString('hex').toUpperCase();
+  if (!app.contactEmail) throw badRequest('no_email', 'Arizada email yo‘q — hisob ochib bo‘lmaydi');
 
   db.transaction(() => {
     const info = db
@@ -197,12 +212,19 @@ export function approveApplication(id: number, moderatorId: number): ClinicAppli
     );
     for (const opId of app.operationIds) insOp.run(clinicId, opId);
 
+    const { setupToken } = createAccount({
+      email: app.contactEmail!,
+      fullName: app.contactName,
+      level: 'clinic_admin',
+      clinicId,
+    });
+
     db.prepare(
       `UPDATE clinic_applications
           SET status = 'approved', clinic_id = ?, connect_code = ?,
               reviewed_by = ?, reviewed_at = datetime('now')
         WHERE id = ?`,
-    ).run(clinicId, code, moderatorId, id);
+    ).run(clinicId, setupToken, moderatorId, id);
   })();
 
   return getApplication(id);
@@ -222,40 +244,6 @@ export function rejectApplication(id: number, moderatorId: number, note: string)
   return getApplication(id);
 }
 
-/**
- * Ulanish kodini ishlatish — klinika o'z Telegram hisobini biriktiradi.
- *
- * Kod bir marta ishlaydi: ishlatilgach o'chiriladi, aks holda uni ko'rgan
- * har kim klinika administratori bo'lib olardi.
- */
-export function useConnectCode(code: string, userId: number): { clinic: Clinic } {
-  const row = db
-    .prepare(
-      `SELECT * FROM clinic_applications
-        WHERE connect_code = ? AND status = 'approved' AND clinic_id IS NOT NULL`,
-    )
-    .get(code.trim().toUpperCase()) as any;
-  if (!row) throw notFound('Kod topilmadi yoki allaqachon ishlatilgan');
-
-  const user = db.prepare(`SELECT clinic_id, roles FROM users WHERE id = ?`).get(userId) as any;
-  if (user?.clinic_id && user.clinic_id !== row.clinic_id) {
-    throw conflict('already_in_clinic', 'Siz boshqa klinikaga biriktirilgansiz');
-  }
-
-  db.transaction(() => {
-    const roles = new Set<string>(JSON.parse(user?.roles ?? '["patient"]'));
-    roles.add('clinic_admin');
-    db.prepare(`UPDATE users SET clinic_id = ?, roles = ? WHERE id = ?`).run(
-      row.clinic_id,
-      JSON.stringify([...roles]),
-      userId,
-    );
-    // Kod bir martalik
-    db.prepare(`UPDATE clinic_applications SET connect_code = NULL WHERE id = ?`).run(row.id);
-  })();
-
-  return { clinic: mapClinic(db.prepare(`SELECT * FROM clinics WHERE id = ?`).get(row.clinic_id)) };
-}
 
 
 /**

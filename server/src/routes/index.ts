@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireWeb } from '../middleware/auth';
 import { catalogRouter } from './catalog';
 import { meRouter } from './me';
 import { requestsRouter } from './requests';
@@ -11,6 +11,7 @@ import { aiRouter } from './ai';
 import { filesRouter } from './files';
 import { telegramRouter } from './telegram';
 import { publicRouter } from './publicRoutes';
+import { webAuthRouter } from './webAuthRoutes';
 import { limits } from '../middleware/rateLimit';
 
 export const apiRouter = Router();
@@ -25,6 +26,12 @@ apiRouter.use('/catalog', catalogRouter);
  * Klinika Telegramsiz ariza qoldira olishi uchun (publicRoutes.ts).
  */
 apiRouter.use('/public', publicRouter);
+
+/*
+ * Veb kabinet kirishi — klinika va admin uchun.
+ * Bu ham autentifikatsiyadan oldin: kirayotgan odamda hali sessiya yo'q.
+ */
+apiRouter.use('/web', webAuthRouter);
 
 /*
  * Telegram webhook autentifikatsiyadan OLDIN turadi: Telegram bizga
@@ -46,5 +53,12 @@ apiRouter.use('/files', limits.upload, filesRouter);
 apiRouter.use('/requests', limits.write, requestsRouter);
 apiRouter.use('/offers', limits.write, offersRouter);
 apiRouter.use('/deals', limits.write, dealsRouter);
-apiRouter.use('/clinic', clinicRouter);
-apiRouter.use('/admin', adminRouter);
+/*
+ * Klinika kabineti va admin paneli — FAQAT veb sessiya orqali.
+ *
+ * `requireWeb` Telegram orqali kirgan bemorni bu yerga qo'ymaydi, hatto
+ * uning qatoriga qandaydir yo'l bilan rol yozilgan bo'lsa ham. Bemor
+ * ilovasi va ish kabineti ikki alohida dunyo.
+ */
+apiRouter.use('/clinic', requireWeb, clinicRouter);
+apiRouter.use('/admin', requireWeb, adminRouter);

@@ -1,0 +1,311 @@
+/**
+ * Veb ildiz — klinika kabineti va admin paneli.
+ *
+ * Bemor ilovasidan (`App.tsx`) BUTUNLAY ajratilgan: alohida ildiz
+ * komponent, alohida kirish, alohida sessiya. Ikkalasi bir daraxtda
+ * turmaydi, shuning uchun bemor ekraniga klinika tugmasi tasodifan
+ * chiqib qolishi mumkin emas — u yerda bunday komponent umuman yo'q.
+ *
+ * Uchta ochiq sahifa bor, qolgani veb sessiya talab qiladi:
+ *   /klinika        — ariza formasi
+ *   /kabinet        — kirish
+ *   /kabinet/parol  — birinchi kirishda parol o'rnatish
+ */
+import { useEffect } from 'react';
+import { AnimatePresence } from 'framer-motion';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { useApp } from '@/store/app';
+import { ErrorState, Screen, Toaster } from '@/ui';
+import { webToken } from '@/lib/session';
+import { ClinicSignup } from '@/screens/ClinicSignup';
+import { CabinetLogin } from '@/screens/web/CabinetLogin';
+import { SetPassword } from '@/screens/web/SetPassword';
+import { Dashboard, MoreMenu, NotificationPrefs, ClinicSettings } from '@/screens/clinic/Cabinet';
+import { VerificationStatus, VerificationDocs, ClinicOperations } from '@/screens/clinic/Verification';
+import { RequestsFeed, OfferBuilder, Templates, MyOffers } from '@/screens/clinic/Work';
+import { DealsBoard, ClinicDeal, ClinicChat } from '@/screens/clinic/Deals';
+import { Calendar, Analytics, Subscription, Revenue } from '@/screens/clinic/Money';
+import { ClinicProfile, Doctors, ClinicReviews, Team } from '@/screens/clinic/Profile';
+import { ClinicRequest } from '@/screens/clinic/ClinicRequest';
+import { AdminHome } from '@/screens/admin/AdminHome';
+import { Blocked, NotFound, OfflineBanner, Splash } from '@/screens/SystemStates';
+import { RequireRole } from '@/components/RequireRole';
+import type { Role } from '@shared/types';
+
+const CLINIC_ROLES: Role[] = ['clinic_admin', 'clinic_operator', 'admin'];
+const ADMIN_ROLES: Role[] = ['moderator', 'admin'];
+
+export function WebApp() {
+  const { ready, error, user, toasts, dismissToast, bootstrap, t } = useApp();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const path = location.pathname;
+
+  /** Kirish talab qilmaydigan sahifalar */
+  const open = path === '/klinika' || path.startsWith('/kabinet');
+  const hasToken = webToken() !== null;
+
+  useEffect(() => {
+    if (!open && hasToken) void bootstrap();
+  }, [open, hasToken, bootstrap]);
+
+  // Sessiya tugagan yoki hech qachon bo'lmagan — kirish sahifasiga
+  useEffect(() => {
+    if (!open && !hasToken) navigate('/kabinet', { replace: true });
+  }, [open, hasToken, navigate]);
+
+  if (path === '/klinika') return <ClinicSignup />;
+  if (path === '/kabinet/parol') return <SetPassword />;
+  if (path.startsWith('/kabinet')) return <CabinetLogin />;
+
+  if (!hasToken) return <Splash />;
+  if (!ready) return <Splash />;
+
+  if (error || !user) {
+    return (
+      <Screen title="KlinikaTop">
+        <ErrorState
+          message={error ?? t('common.error')}
+          retryLabel={t('common.retry')}
+          onRetry={() => bootstrap()}
+        />
+      </Screen>
+    );
+  }
+
+  if (user.blockedAt) return <Blocked />;
+
+  return (
+    <>
+      <OfflineBanner />
+
+      <AnimatePresence mode="wait" initial={false}>
+        <Routes location={location} key={location.pathname}>
+            {/* ── Klinika kabineti — 23 ekran, 8 soha ── */}
+            {/* Klinika kabineti — 23 ekran, 8 soha bo'yicha */}
+
+            {/* Ro'yxatdan o'tish va verifikatsiya (1–4) */}
+                      <Route
+              path="/clinic/verification/documents"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <VerificationDocs />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/verification"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <VerificationStatus />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/operations"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <ClinicOperations />
+                </RequireRole>
+              }
+            />
+
+            {/* So'rovlar bilan ishlash (5–10) */}
+            <Route
+              path="/clinic"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <Dashboard />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/requests"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <RequestsFeed />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/requests/:id"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <ClinicRequest />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/requests/:id/offer"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <OfferBuilder />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/templates"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <Templates />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/offers"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <MyOffers />
+                </RequireRole>
+              }
+            />
+
+            {/* Bitim boshqaruvi (11–13) */}
+            <Route
+              path="/clinic/deals"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <DealsBoard />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/deals/:id"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <ClinicDeal />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/deals/:id/chat"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <ClinicChat />
+                </RequireRole>
+              }
+            />
+
+            {/* Quvvat (14) */}
+            <Route
+              path="/clinic/calendar"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <Calendar />
+                </RequireRole>
+              }
+            />
+
+            {/* Analitika va moliya (15–17) */}
+            <Route
+              path="/clinic/analytics"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <Analytics />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/subscription"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <Subscription />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/revenue"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <Revenue />
+                </RequireRole>
+              }
+            />
+
+            {/* Obro' va profil (18–20) */}
+            <Route
+              path="/clinic/profile"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <ClinicProfile />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/doctors"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <Doctors />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/reviews"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <ClinicReviews />
+                </RequireRole>
+              }
+            />
+
+            {/* Jamoa (21) */}
+            <Route
+              path="/clinic/team"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <Team />
+                </RequireRole>
+              }
+            />
+
+            {/* Sozlamalar va yordam (22–23) */}
+            <Route
+              path="/clinic/notifications"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <NotificationPrefs />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/settings"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <ClinicSettings />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/more"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <MoreMenu />
+                </RequireRole>
+              }
+            />
+
+            {/* Moderator */}
+            <Route
+              path="/admin"
+              element={
+                <RequireRole roles={ADMIN_ROLES}>
+                  <AdminHome />
+                </RequireRole>
+              }
+            />
+
+
+          {/* Kabinet ildizi — darajaga qarab */}
+          <Route
+            path="/"
+            element={<Navigate to={user.roles.includes('clinic_admin') || user.roles.includes('clinic_operator') ? '/clinic' : '/admin'} replace />}
+          />
+
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AnimatePresence>
+
+      <Toaster toasts={toasts} onDismiss={dismissToast} />
+    </>
+  );
+}

@@ -237,11 +237,17 @@ adminRouter.get('/applications', (req, res) => {
 
 /**
  * Tasdiqlash: klinika yaratiladi va ulanish kodi beriladi.
- * Kod javobda qaytadi — moderator uni klinikaga telefonda aytadi.
+ * Parol o'rnatish havolasi javobda BIR MARTA qaytadi — moderator uni
+ * klinikaning pochtasiga yuboradi.
  */
 adminRouter.post('/applications/:id/approve', (req, res) => {
   const app = approveApplication(Number(req.params.id), req.user!.id);
-  logModeration(req.user!.id, 'application', app.id, 'approve', app.connectCode);
+  /*
+   * Jurnalga TOKEN YOZILMAYDI, faqat qaysi klinika yaratilgani.
+   * Token — parolga teng sir: jurnalni ko'ra oladigan har kim uni
+   * ishlatib klinika kabinetini egallab olardi.
+   */
+  logModeration(req.user!.id, 'application', app.id, 'approve', `clinic:${app.clinicId}`);
   res.json(app);
 });
 

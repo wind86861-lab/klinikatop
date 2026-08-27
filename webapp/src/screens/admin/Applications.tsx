@@ -6,8 +6,10 @@
  * yaratiladi va ULANISH KODI beriladi — moderator uni telefonda aytadi
  * yoki yozib yuboradi.
  *
- * Kod bir martalik va bir marta ko'rsatiladi: qayta ochib ko'rish yo'li
- * yo'q, chunki uni ko'rgan har kim klinika administratori bo'lib olardi.
+ * Tasdiqlangach klinika, uning veb hisobi va PAROL O'RNATISH HAVOLASI
+ * yaratiladi. Havola bir martalik va bir marta ko'rsatiladi: qayta ochib
+ * ko'rish yo'li yo'q, chunki uni ko'rgan har kim klinika kabinetini
+ * egallab olardi. Moderator uni darhol klinikaning pochtasiga yuboradi.
  */
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -64,6 +66,11 @@ export function Applications() {
       setBusy(false);
     }
   };
+
+  /* Havola shu yerda yig'iladi: server faqat tokenni qaytaradi. */
+  const setupUrl = issued?.connectCode
+    ? `${window.location.origin}/kabinet/parol?token=${issued.connectCode}`
+    : '';
 
   const copy = async (code: string) => {
     try {
@@ -170,11 +177,11 @@ export function Applications() {
       <Sheet open={issued !== null} onClose={() => setIssued(null)} title={t('app.codeTitle')}>
         <div className="stack">
           <Notice tone="warning">{t('app.codeHint')}</Notice>
-          <Card style={{ textAlign: 'center' }}>
-            <strong className="invite-code num">{issued?.connectCode}</strong>
+          <Card>
+            <code className="setup-link">{setupUrl}</code>
           </Card>
           <p className="tiny">{t('app.codeSteps', { phone: issued?.contactPhone ?? '' })}</p>
-          <Button block onClick={() => issued?.connectCode && copy(issued.connectCode)}>
+          <Button block onClick={() => setupUrl && copy(setupUrl)}>
             {t('team.copy')}
           </Button>
         </div>

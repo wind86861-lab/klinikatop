@@ -34,7 +34,12 @@ const applicationSchema = z.object({
   licenseNo: z.string().trim().min(3).max(120),
   contactName: z.string().trim().min(2).max(120),
   contactPhone: z.string().trim().min(7).max(40),
-  contactEmail: z.string().trim().email().max(160).nullable().default(null),
+  /*
+   * Email MAJBURIY: tasdiqlangach shu manzil kabinetga kirish
+   * identifikatoriga aylanadi va parol o'rnatish havolasi shu yerga
+   * yuboriladi. Usiz hisob ocha olmaymiz.
+   */
+  contactEmail: z.string().trim().email().max(160),
   operationIds: z.array(z.number().int().positive()).min(1).max(60),
 });
 

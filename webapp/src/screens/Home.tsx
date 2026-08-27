@@ -24,8 +24,6 @@ import {
   IconBell,
   IconChat,
   IconCheck,
-  IconChevron,
-  IconClinic,
   IconInbox,
   IconPlus,
   IconStar,
@@ -122,7 +120,6 @@ export function Home() {
           Bitta odam ham bemor, ham xodim bo'lishi mumkin — panellar bemor
           ekranini almashtirmaydi, unga QO'SHILADI.
         */}
-        <PanelLinks />
 
         {error ? (
           <ErrorState message={error} retryLabel={t('common.retry')} onRetry={load} />
@@ -416,64 +413,4 @@ const IconPulse = () => (
 
 /* ─────────────────────────  Panelga kirish  ───────────────────────── */
 
-/**
- * Klinika va moderator panellariga yagona kirish nuqtasi.
- *
- * Ilgari bu havolalar yo'q edi va xodim manzilni qo'lda yozishi kerak edi.
- * Rol yo'q bo'lsa hech narsa ko'rsatilmaydi — panel borligi ham bilinmaydi.
- */
-function PanelLinks() {
-  const { t, user } = useApp();
-  const navigate = useNavigate();
 
-  /*
-   * Bosh sahifada FAQAT klinika paneli ko'rsatiladi.
-   *
-   * Moderator paneli ataylab bu yerda yo'q: u imtiyozli kirish nuqtasi va
-   * bosh ekranda turishi kerak emas. Yonidagi odam yelkangiz osha qarasa,
-   * platformada boshqaruv paneli borligini va sizda unga huquq borligini
-   * bilib oladi. Moderator uchun kirish Profil ichida — kundalik ish emas,
-   * ataylab qidiriladigan joy.
-   */
-  const isClinic = user?.roles.some((r) => r === 'clinic_admin' || r === 'clinic_operator');
-
-  if (!isClinic) return null;
-
-  return (
-    <div className="stack" style={{ marginTop: 'var(--s-4)' }}>
-      <h2 className="section-title">{t('home.panels')}</h2>
-
-      {isClinic && (
-        <motion.button
-          type="button"
-          className="panel-link"
-          whileTap={{ scale: 0.985 }}
-          transition={spring}
-          onClick={() => {
-            haptic.press();
-            navigate(user?.clinicId ? '/clinic' : '/clinic/register');
-          }}
-        >
-          <span className="panel-link__icon">
-            <IconClinic size={20} />
-          </span>
-          <span className="panel-link__text">
-            <strong>{t('home.clinicPanel')}</strong>
-            <span className="tiny">{t('home.clinicPanelHint')}</span>
-          </span>
-          <IconChevronRight />
-        </motion.button>
-      )}
-
-    </div>
-  );
-}
-
-/** O'ngga qaragan belgi — IconChevron pastga qaraydi. */
-function IconChevronRight() {
-  return (
-    <span style={{ display: 'grid', placeItems: 'center', transform: 'rotate(-90deg)', color: 'var(--muted)' }}>
-      <IconChevron size={17} />
-    </span>
-  );
-}

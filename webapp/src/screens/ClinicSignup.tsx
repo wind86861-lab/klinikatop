@@ -1,18 +1,21 @@
 /**
  * Klinika arizasi — OCHIQ veb-sahifa.
  *
- * Bu ekran Telegramdan tashqarida, oddiy brauzerda ochiladi va hech qanday
- * autentifikatsiya talab qilmaydi. Shuning uchun u ilovaning kirish
- * to'sig'idan OLDIN chiziladi (App.tsx).
+ * Bu klinika ko'radigan BIRINCHI sahifa, shuning uchun u ikki ish qiladi:
+ * avval nima uchun kerakligini tushuntiradi, keyin arizani oladi.
+ * Faqat forma bo'lsa — klinika nima uchun to'ldirayotganini bilmaydi.
  *
- * Nima uchun shunday: klinika egasidan ariza qoldirish uchun Telegram
- * talab qilish keraksiz to'siq. U arizani qoldiradi, moderator tekshiradi,
- * tasdiqlangach bot orqali hisobini biriktiradi.
+ * Telegramdan tashqarida, oddiy brauzerda ochiladi va autentifikatsiya
+ * talab qilmaydi (App.tsx da kirish to'sig'idan oldin chiziladi).
+ *
+ * Forma uch bosqichga bo'lingan: klinika → aloqa → yo'nalishlar. Bir
+ * ekranda 9 ta maydon ko'rsatish qo'rqitadi; bosqichma-bosqich esa har
+ * safar 3-4 ta savol bo'ladi va oxirigacha yetib borish oson.
  */
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { popVariants } from '@/lib/motion';
-import { Button, Card, Chip, Field, IconCheck, Input, Notice, Select, Textarea } from '@/ui';
+import { EASE, popVariants, spring } from '@/lib/motion';
+import { Button, Chip, Field, IconCheck, Input, Notice, Select, Textarea } from '@/ui';
 import type { City, Operation } from '@shared/types';
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
@@ -22,9 +25,20 @@ interface Reference {
   operations: Operation[];
 }
 
+const STEPS = ['clinic', 'contact', 'operations'] as const;
+type Step = (typeof STEPS)[number];
+
+const STEP_TITLES: Record<Step, { title: string; sub: string }> = {
+  clinic: { title: 'Klinika haqida', sub: 'Rasmiy nom va manzil' },
+  contact: { title: 'Kim bilan bog‘lanamiz', sub: 'Moderator shu odamga qo‘ng‘iroq qiladi' },
+  operations: { title: 'Qaysi operatsiyalarni qilasiz', sub: 'So‘rovlar shu yo‘nalishlar bo‘yicha keladi' },
+};
+
 export function ClinicSignup() {
   const [ref, setRef] = useState<Reference | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [step, setStep] = useState<Step>('clinic');
+  const [direction, setDirection] = useState(1);
 
   const [name, setName] = useState('');
   const [cityId, setCityId] = useState<number | null>(null);
@@ -35,6 +49,7 @@ export function ClinicSignup() {
   const [contactEmail, setContactEmail] = useState('');
   const [about, setAbout] = useState('');
   const [operationIds, setOperationIds] = useState<number[]>([]);
+  const [opQuery, setOpQuery] = useState('');
 
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState<number | null>(null);
@@ -47,17 +62,28 @@ export function ClinicSignup() {
       .catch(() => setLoadError(true));
   }, []);
 
-  const valid =
-    name.trim().length >= 2 &&
-    cityId !== null &&
-    address.trim().length >= 3 &&
-    licenseNo.trim().length >= 3 &&
-    contactName.trim().length >= 2 &&
-    contactPhone.trim().length >= 7 &&
-    operationIds.length > 0;
+  /** Har bosqichning o'z sharti — keyingisiga o'tishdan oldin tekshiriladi. */
+  const stepValid: Record<Step, boolean> = {
+    clinic: name.trim().length >= 2 && cityId !== null && address.trim().length >= 3 && licenseNo.trim().length >= 3,
+    contact:
+      contactName.trim().length >= 2 &&
+      contactPhone.trim().length >= 7 &&
+      /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contactEmail.trim()),
+    operations: operationIds.length > 0,
+  };
+
+  const index = STEPS.indexOf(step);
+  const isLast = index === STEPS.length - 1;
+
+  const go = (delta: number) => {
+    const next = index + delta;
+    if (next < 0 || next >= STEPS.length) return;
+    setDirection(delta);
+    setStep(STEPS[next]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const submit = async () => {
-    if (!valid) return;
     setSending(true);
     setError(null);
     try {
@@ -72,13 +98,14 @@ export function ClinicSignup() {
           licenseNo: licenseNo.trim(),
           contactName: contactName.trim(),
           contactPhone: contactPhone.trim(),
-          contactEmail: contactEmail.trim() || null,
+          contactEmail: contactEmail.trim(),
           operationIds,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? 'Xatolik yuz berdi');
       setDone(data.id);
+      window.scrollTo({ top: 0 });
     } catch (err: any) {
       setError(err?.message ?? 'Xatolik yuz berdi');
     } finally {
@@ -86,158 +113,313 @@ export function ClinicSignup() {
     }
   };
 
-  /* ── Yuborilgandan keyin ── */
+  /* ─────────────  Yuborilgandan keyin  ───────────── */
   if (done !== null) {
     return (
-      <div className="signup">
-        <motion.div className="signup__box" variants={popVariants} initial="initial" animate="animate">
-          <div className="signup__done">
-            <IconCheck size={34} />
-          </div>
-          <h1 className="signup__title">Arizangiz qabul qilindi</h1>
-          <p className="signup__text">
-            Ariza raqami: <strong className="num">#{done}</strong>
-          </p>
-          <p className="signup__text">
-            Moderator litsenziyangizni tekshiradi va ko‘rsatgan raqamingizga bog‘lanadi. Odatda 1–2 ish kuni.
-          </p>
-          <Notice tone="info">
-            Tasdiqlangach sizga <strong>ulanish kodi</strong> beriladi. O‘sha kodni Telegram botimizga
-            kiritasiz va kabinetingiz ochiladi.
-          </Notice>
-        </motion.div>
+      <div className="cs">
+        <div className="cs__shell cs__shell--narrow">
+          <motion.div className="cs__card cs__success" variants={popVariants} initial="initial" animate="animate">
+            <motion.div
+              className="cs__successMark"
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ ...spring, delay: 0.1 }}
+            >
+              <IconCheck size={30} />
+            </motion.div>
+
+            <h1 className="cs__h1">Arizangiz qabul qilindi</h1>
+            <p className="cs__lede">
+              Ariza raqami <strong className="num">#{done}</strong>
+            </p>
+
+            <ol className="cs__next">
+              <li>
+                <span className="cs__nextN">1</span>
+                <span>Moderator litsenziyangizni tekshiradi — odatda 1–2 ish kuni</span>
+              </li>
+              <li>
+                <span className="cs__nextN">2</span>
+                <span>
+                  Ko‘rsatgan pochtangizga <strong>kabinetga kirish havolasi</strong> yuboriladi
+                </span>
+              </li>
+              <li>
+                <span className="cs__nextN">3</span>
+                <span>Havolada parolingizni qo‘yasiz va brauzerdan ishlay boshlaysiz</span>
+              </li>
+            </ol>
+          </motion.div>
+        </div>
       </div>
     );
   }
 
+  /* ─────────────  Asosiy sahifa  ───────────── */
   return (
-    <div className="signup">
-      <motion.div className="signup__box" variants={popVariants} initial="initial" animate="animate">
-        <div className="signup__mark">KlinikaTop</div>
-        <h1 className="signup__title">Klinika sifatida ro‘yxatdan o‘tish</h1>
-        <p className="signup__text">
-          Bemorlar so‘rov qoldiradi — siz narx taklif qilasiz. Birinchi oylar bepul, komissiya faqat
-          bemor tasdiqlagan bitimdan olinadi.
-        </p>
+    <div className="cs">
+      <header className="cs__top">
+        <div className="cs__shell cs__topRow">
+          <span className="cs__mark">KlinikaTop</span>
+          <a className="cs__topLink" href="https://t.me/klinikatop_bot" target="_blank" rel="noreferrer">
+            Savol bormi?
+          </a>
+        </div>
+      </header>
 
-        {loadError && <Notice tone="danger">Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.</Notice>}
+      <div className="cs__shell cs__grid">
+        {/* ── Chap: nima uchun ── */}
+        <motion.aside
+          className="cs__pitch"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE }}
+        >
+          <h1 className="cs__h1">
+            Bemorlar sizni <span className="cs__accent">qidirib topadi</span>
+          </h1>
+          <p className="cs__lede">
+            Bemor bitta so‘rov qoldiradi — shahringizdagi mos klinikalar narx taklif qiladi. Siz
+            raqobatlashasiz, bemor tanlaydi.
+          </p>
 
-        {ref && (
-          <>
-            <Field label="Klinika nomi">
-              <Input value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
-            </Field>
+          <ul className="cs__points">
+            <li>
+              <strong>Birinchi oylar bepul</strong>
+              <span>Obuna to‘lovi yo‘q — platforma o‘zini isbotlagach to‘laysiz</span>
+            </li>
+            <li>
+              <strong>Komissiya faqat natijadan</strong>
+              <span>Bemor operatsiyani tasdiqlagandagina olinadi. Taklif yuborish bepul</span>
+            </li>
+            <li>
+              <strong>So‘rovlarni ko‘rish har doim bepul</strong>
+              <span>Nima o‘tayotganini ko‘rib turasiz, keyin qaror qilasiz</span>
+            </li>
+          </ul>
 
-            <Field label="Viloyat">
-              <Select
-                value={cityId ?? ''}
-                aria-label="Viloyat"
-                onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                  setCityId(e.target.value ? Number(e.target.value) : null)
-                }
-              >
-                <option value="">Tanlang</option>
-                {ref.cities.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nameUz}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+          <div className="cs__note">
+            Kabinet oddiy veb-sahifada ishlaydi — Telegram <strong>kerak emas</strong>.
+          </div>
+        </motion.aside>
 
-            <Field label="Manzil">
-              <Input value={address} maxLength={300} onChange={(e) => setAddress(e.target.value)} />
-            </Field>
-
-            <Field label="Litsenziya raqami" hint="Tibbiy faoliyat litsenziyasi — moderator tekshiradi">
-              <Input value={licenseNo} maxLength={120} onChange={(e) => setLicenseNo(e.target.value)} />
-            </Field>
-
-            {/* Moderator shu odamga qo'ng'iroq qiladi */}
-            <Field label="Mas’ul shaxs">
-              <Input value={contactName} maxLength={120} onChange={(e) => setContactName(e.target.value)} />
-            </Field>
-
-            <Field label="Telefon" hint="Moderator shu raqamga bog‘lanadi">
-              <Input
-                type="tel"
-                value={contactPhone}
-                maxLength={40}
-                placeholder="+998 __ ___ __ __"
-                onChange={(e) => setContactPhone(e.target.value)}
+        {/* ── O'ng: forma ── */}
+        <motion.section
+          className="cs__card"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE, delay: 0.08 }}
+        >
+          {/* Qadam ko'rsatkichi */}
+          <div className="cs__steps" aria-hidden>
+            {STEPS.map((s, i) => (
+              <motion.span
+                key={s}
+                className={`cs__stepBar ${i <= index ? 'is-done' : ''}`}
+                animate={{ flex: i === index ? 1.5 : 1 }}
+                transition={spring}
               />
-            </Field>
+            ))}
+          </div>
 
-            <Field label="Email · ixtiyoriy">
-              <Input
-                type="email"
-                value={contactEmail}
-                maxLength={160}
-                onChange={(e) => setContactEmail(e.target.value)}
-              />
-            </Field>
+          <div className="cs__stepHead">
+            <span className="cs__stepCount num">
+              {index + 1} / {STEPS.length}
+            </span>
+            <h2 className="cs__h2">{STEP_TITLES[step].title}</h2>
+            <p className="cs__sub">{STEP_TITLES[step].sub}</p>
+          </div>
 
-            <Field
-              label="Qaysi operatsiyalarni qilasiz"
-              hint={operationIds.length > 0 ? `${operationIds.length} ta tanlangan` : 'Kamida bittasini tanlang'}
-            >
-              <div className="signup__ops">
-                {ref.operations.map((op) => (
-                  <Chip
-                    key={op.id}
-                    size="sm"
-                    active={operationIds.includes(op.id)}
-                    onClick={() =>
-                      setOperationIds((prev) =>
-                        prev.includes(op.id) ? prev.filter((x) => x !== op.id) : [...prev, op.id],
-                      )
-                    }
-                  >
-                    {operationIds.includes(op.id) && <IconCheck size={11} />} {op.nameUz}
-                  </Chip>
-                ))}
-              </div>
-            </Field>
+          {loadError && <Notice tone="danger">Ma’lumotlarni yuklab bo‘lmadi. Sahifani yangilang.</Notice>}
 
-            <Field label="Klinika haqida · ixtiyoriy">
-              <Textarea rows={4} value={about} maxLength={1500} onChange={(e) => setAbout(e.target.value)} />
-            </Field>
+          {!ref && !loadError && (
+            <div className="cs__skeleton">
+              {[0, 1, 2].map((i) => (
+                <motion.span
+                  key={i}
+                  animate={{ opacity: [0.35, 0.8, 0.35] }}
+                  transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.15 }}
+                />
+              ))}
+            </div>
+          )}
 
-            <AnimatePresence>
-              {error && (
-                <motion.div variants={popVariants} initial="initial" animate="animate" exit="exit">
-                  <Notice tone="danger">{error}</Notice>
+          {ref && (
+            <>
+              <AnimatePresence mode="wait" custom={direction}>
+                <motion.div
+                  key={step}
+                  className="cs__fields"
+                  initial={{ opacity: 0, x: direction * 24 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: direction * -24 }}
+                  transition={{ duration: 0.24, ease: EASE }}
+                >
+                  {step === 'clinic' && (
+                    <>
+                      <Field label="Klinika nomi" hint="Litsenziyadagi rasmiy nom">
+                        <Input value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
+                      </Field>
+
+                      <Field label="Viloyat">
+                        <Select
+                          value={cityId ?? ''}
+                          aria-label="Viloyat"
+                          onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                            setCityId(e.target.value ? Number(e.target.value) : null)
+                          }
+                        >
+                          <option value="">Tanlang</option>
+                          {ref.cities.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.nameUz}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+
+                      <Field label="Manzil">
+                        <Input
+                          value={address}
+                          maxLength={300}
+                          placeholder="Ko‘cha, uy raqami"
+                          onChange={(e) => setAddress(e.target.value)}
+                        />
+                      </Field>
+
+                      <Field label="Litsenziya raqami" hint="Tibbiy faoliyat litsenziyasi — moderator tekshiradi">
+                        <Input
+                          value={licenseNo}
+                          maxLength={120}
+                          onChange={(e) => setLicenseNo(e.target.value)}
+                        />
+                      </Field>
+                    </>
+                  )}
+
+                  {step === 'contact' && (
+                    <>
+                      <Field label="Mas’ul shaxs" hint="Ism va lavozim">
+                        <Input
+                          value={contactName}
+                          maxLength={120}
+                          placeholder="Aziz Karimov, bosh shifokor"
+                          onChange={(e) => setContactName(e.target.value)}
+                        />
+                      </Field>
+
+                      <Field label="Telefon" hint="Moderator shu raqamga bog‘lanadi">
+                        <Input
+                          type="tel"
+                          value={contactPhone}
+                          maxLength={40}
+                          placeholder="+998 __ ___ __ __"
+                          onChange={(e) => setContactPhone(e.target.value)}
+                        />
+                      </Field>
+
+                      <Field
+                        label="Email"
+                        hint="Kabinetga shu manzil bilan kirasiz — kirish havolasi shu yerga keladi"
+                      >
+                        <Input
+                          type="email"
+                          value={contactEmail}
+                          maxLength={160}
+                          onChange={(e) => setContactEmail(e.target.value)}
+                        />
+                      </Field>
+
+                      <Field label="Klinika haqida · ixtiyoriy" hint="Bemor taklifingizni ko‘rganda shuni o‘qiydi">
+                        <Textarea
+                          rows={4}
+                          value={about}
+                          maxLength={1500}
+                          onChange={(e) => setAbout(e.target.value)}
+                        />
+                      </Field>
+                    </>
+                  )}
+
+                  {step === 'operations' && (
+                    <>
+                      <Input
+                        value={opQuery}
+                        placeholder="Qidirish…"
+                        aria-label="Operatsiya qidirish"
+                        onChange={(e) => setOpQuery(e.target.value)}
+                      />
+
+                      {operationIds.length > 0 && (
+                        <div className="cs__picked">
+                          <span className="cs__pickedN num">{operationIds.length}</span>
+                          <span className="tiny">ta yo‘nalish tanlandi</span>
+                          <button className="cs__clear" onClick={() => setOperationIds([])}>
+                            Tozalash
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="cs__ops">
+                        {ref.operations
+                          .filter((op) =>
+                            opQuery.trim()
+                              ? op.nameUz.toLowerCase().includes(opQuery.trim().toLowerCase())
+                              : true,
+                          )
+                          .map((op) => (
+                            <Chip
+                              key={op.id}
+                              size="sm"
+                              active={operationIds.includes(op.id)}
+                              onClick={() =>
+                                setOperationIds((prev) =>
+                                  prev.includes(op.id) ? prev.filter((x) => x !== op.id) : [...prev, op.id],
+                                )
+                              }
+                            >
+                              {operationIds.includes(op.id) && <IconCheck size={11} />} {op.nameUz}
+                            </Chip>
+                          ))}
+                      </div>
+                    </>
+                  )}
                 </motion.div>
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {error && (
+                  <motion.div variants={popVariants} initial="initial" animate="animate" exit="exit">
+                    <Notice tone="danger">{error}</Notice>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="cs__actions">
+                {index > 0 && (
+                  <Button variant="secondary" onClick={() => go(-1)}>
+                    Orqaga
+                  </Button>
+                )}
+                <Button
+                  block
+                  loading={sending}
+                  disabled={!stepValid[step]}
+                  onClick={() => (isLast ? submit() : go(1))}
+                >
+                  {isLast ? 'Ariza yuborish' : 'Davom etish'}
+                </Button>
+              </div>
+
+              {isLast && (
+                <p className="cs__fine">
+                  Ariza yuborish orqali ma’lumotlaringiz tekshirilishiga rozilik bildirasiz.
+                </p>
               )}
-            </AnimatePresence>
-
-            <Button block loading={sending} disabled={!valid} onClick={submit}>
-              Ariza yuborish
-            </Button>
-
-            <p className="signup__fine">
-              Ariza yuborish orqali ma’lumotlaringiz tekshirilishiga rozilik bildirasiz. Tasdiqlangach
-              Telegram bot orqali kabinetingizga kirasiz.
-            </p>
-          </>
-        )}
-
-        {!ref && !loadError && (
-          <motion.div
-            className="signup__loading"
-            animate={{ opacity: [0.4, 1, 0.4] }}
-            transition={{ duration: 1.4, repeat: Infinity }}
-          >
-            Yuklanmoqda…
-          </motion.div>
-        )}
-      </motion.div>
-
-      <Card className="signup__note">
-        <p className="tiny">
-          Savol bo‘lsa: <strong>@klinikatop_bot</strong>
-        </p>
-      </Card>
+            </>
+          )}
+        </motion.section>
+      </div>
     </div>
   );
 }

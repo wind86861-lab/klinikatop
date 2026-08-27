@@ -550,6 +550,70 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    /**
+     * Veb hisoblar — klinika va admin uchun.
+     *
+     * Bemor Telegram orqali kiradi, klinika va admin esa VEB orqali:
+     * ular ish joyida kompyuterda ishlaydi va butun kabinetni telefon
+     * ekranida yuritish noqulay. Shuning uchun bu ikki rol uchun
+     * email + parol.
+     *
+     * `admin_users` jadvali kengaytiriladi: `level` endi klinika
+     * rollarini ham qamraydi va `clinic_id` qo'shiladi. SQLite CHECK
+     * cheklovini o'zgartirmaydi, shuning uchun jadval qayta quriladi.
+     */
+    id: '012_web_accounts',
+    up: (db) => {
+      const current = db
+        .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'admin_users'`)
+        .get() as { sql: string } | undefined;
+
+      if (current?.sql.includes("level IN ('full','moderator')")) {
+        db.pragma('foreign_keys = OFF');
+        db.exec(`
+          CREATE TABLE admin_users_new (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            email          TEXT NOT NULL UNIQUE,
+            full_name      TEXT NOT NULL,
+            password_salt  TEXT NOT NULL,
+            password_hash  TEXT NOT NULL,
+            level          TEXT NOT NULL DEFAULT 'moderator'
+                           CHECK (level IN ('full','moderator','clinic_admin','clinic_operator')),
+            -- Klinika rollari uchun majburiy, admin rollari uchun null
+            clinic_id      INTEGER REFERENCES clinics(id) ON DELETE CASCADE,
+            totp_secret    TEXT,
+            totp_enabled   INTEGER NOT NULL DEFAULT 0,
+            disabled_at    TEXT,
+            last_login_at  TEXT,
+            failed_count   INTEGER NOT NULL DEFAULT 0,
+            locked_until   TEXT,
+            -- Birinchi kirishda parol o'rnatish uchun bir martalik kod
+            setup_token    TEXT,
+            setup_expires  TEXT,
+            created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+
+          INSERT INTO admin_users_new
+            (id, email, full_name, password_salt, password_hash, level,
+             totp_secret, totp_enabled, disabled_at, last_login_at,
+             failed_count, locked_until, created_at)
+          SELECT id, email, full_name, password_salt, password_hash, level,
+                 totp_secret, totp_enabled, disabled_at, last_login_at,
+                 failed_count, locked_until, created_at
+            FROM admin_users;
+
+          DROP TABLE admin_users;
+          ALTER TABLE admin_users_new RENAME TO admin_users;
+
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_users_setup
+            ON admin_users(setup_token) WHERE setup_token IS NOT NULL;
+          CREATE INDEX IF NOT EXISTS idx_admin_users_clinic ON admin_users(clinic_id);
+        `);
+        db.pragma('foreign_keys = ON');
+      }
+    },
+  },
 ];
 
 /**

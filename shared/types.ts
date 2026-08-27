@@ -607,14 +607,6 @@ export interface ClinicOperator {
   createdAt: string;
 }
 
-/** Taklifnoma — yangi operator shu kod bilan klinikaga qo'shiladi. */
-export interface ClinicInvite {
-  code: string;
-  role: OperatorRole;
-  createdAt: string;
-  expiresAt: string;
-  usedByUserId: number | null;
-}
 
 /** Bildirishnoma sozlamalari — foydalanuvchi bo'yicha. */
 export interface NotificationPrefs {

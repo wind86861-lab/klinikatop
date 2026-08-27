@@ -11,7 +11,6 @@
 import { db } from '../db';
 import { config } from '../lib/config';
 import { upsertUser } from '../middleware/auth';
-import { useConnectCode } from './clinicApplications';
 
 const API = () => `https://api.telegram.org/bot${config.telegram.botToken}`;
 
@@ -98,12 +97,16 @@ So'rovlar shahringizdagi mos klinikalarga boradi. Siz narx taklif qilasiz, bemor
 <b>Qanday boshlanadi</b>
 1. Quyidagi havolada ariza to'ldirasiz (Telegram kerak emas)
 2. Moderator litsenziyangizni tekshiradi va bog'lanadi
-3. Tasdiqlangach sizga <b>ulanish kodi</b> beriladi
-4. Kodni shu yerga yuborasiz — kabinetingiz ochiladi`;
+3. Tasdiqlangach elektron pochtangizga kabinet havolasi keladi
+4. Parolingizni qo'yasiz va brauzerdan ishlaysiz
 
-const CODE_HELP = `Ulanish kodingiz bo'lsa shu yerga yuboring — masalan <code>A1B2C3D4</code>.
+Kabinet Telegramda emas, alohida veb-sahifada: kunlik ish uchun
+kompyuter ekrani qulayroq.`;
 
-Kod hali yo'q bo'lsa, avval ariza qoldiring.`;
+const CLINIC_HINT = `Klinika kabineti brauzerda ochiladi — bu yerda emas.
+
+Arizangiz tasdiqlangan bo'lsa, kirish havolasi ko'rsatgan pochtangizga
+yuborilgan. Havola topilmasa moderator bilan bog'laning.`;
 
 const HELP = `<b>Qanday ishlaydi</b>
 
@@ -124,7 +127,7 @@ Savol bo'lsa shu yerga yozing.`;
  * `web_app` tugmasi Mini App'ni ANIQ ekrandan ochadi, shuning uchun
  * klinika to'g'ridan-to'g'ri ariza formasiga tushadi.
  */
-function openButton(hasClinic = false) {
+function openButton() {
   const base = config.telegram.webappUrl.replace(/\/$/, '');
 
   const rows: InlineButton[][] = [
@@ -132,18 +135,16 @@ function openButton(hasClinic = false) {
   ];
 
   /*
-   * Klinika yo'li Telegramdan TASHQARIDA boshlanadi.
+   * Klinika yo'li butunlay Telegramdan TASHQARIDA.
    *
-   * Ariza oddiy veb-sahifada to'ldiriladi — klinika egasidan Telegram
-   * talab qilmaymiz. Shuning uchun bu `web_app` emas, oddiy `url`
-   * tugmasi: brauzerda ochiladi. Tasdiqlangach klinika bu yerga qaytib
-   * ulanish kodini kiritadi.
+   * Ariza ham, kabinet ham oddiy veb-sahifa. Shuning uchun bular
+   * `web_app` emas, oddiy `url` tugmalari — brauzerda ochiladi.
+   *
+   * Bot bemor uchun. Klinika xodimi shu botga kirsa ham bemor
+   * ilovasidan boshqa hech narsa ko'rmaydi: rollar aralashmaydi.
    */
-  rows.push(
-    hasClinic
-      ? [{ text: '🏥 Klinika paneli', web_app: { url: `${base}/clinic` } }]
-      : [{ text: '🏥 Klinika sifatida ro‘yxatdan o‘tish', url: `${base}/klinika` }],
-  );
+  rows.push([{ text: '🏥 Klinika sifatida ro‘yxatdan o‘tish', url: `${base}/klinika` }]);
+  rows.push([{ text: '🔐 Klinika kabineti', url: `${base}/kabinet` }]);
 
   return { inline_keyboard: rows };
 }
@@ -155,14 +156,6 @@ function contactKeyboard() {
     resize_keyboard: true as const,
     one_time_keyboard: true as const,
   };
-}
-
-/** Foydalanuvchi allaqachon klinikaga biriktirilganmi. */
-function hasClinic(telegramId: number): boolean {
-  const row = db
-    .prepare(`SELECT clinic_id FROM users WHERE telegram_id = ? AND clinic_id IS NOT NULL`)
-    .get(telegramId);
-  return Boolean(row);
 }
 
 /** Foydalanuvchining raqami allaqachon saqlanganmi. */
@@ -227,7 +220,7 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
 
     // Klaviaturani olib tashlaymiz — kerak emas, joyni egallaydi
     await sendMessage(chatId, READY, { remove_keyboard: true });
-    await sendMessage(chatId, CHOOSE, openButton(from ? hasClinic(from.id) : false));
+    await sendMessage(chatId, CHOOSE, openButton());
     return;
   }
 
@@ -242,57 +235,27 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
 
     // Raqam allaqachon bo'lsa qayta so'ramaymiz — bir marta yetarli
     if (from && hasPhone(from.id)) {
-      await sendMessage(chatId, CHOOSE, openButton(hasClinic(from.id)));
+      await sendMessage(chatId, CHOOSE, openButton());
     } else {
       await sendMessage(chatId, ASK_CONTACT, contactKeyboard());
     }
     return;
   }
 
-  /*
-   * Ulanish kodi — sakkiz o'n oltilik belgi.
-   *
-   * Klinika veb-sahifada ariza qoldirgan, moderator tasdiqlagan va kod
-   * bergan. Kod shu yerda ishlatiladi va rol shu paytda beriladi.
-   * Kod bir martalik: ishlatilgach o'chadi.
-   */
-  const codeCandidate = text.replace(/^\/start\s+/i, '').trim().toUpperCase();
-  if (from && /^[0-9A-F]{8}$/.test(codeCandidate)) {
-    const user = upsertUser({
-      id: from.id,
-      first_name: from.first_name ?? 'Foydalanuvchi',
-      last_name: from.last_name,
-      username: from.username,
-      language_code: from.language_code,
-    });
-
-    try {
-      const { clinic } = useConnectCode(codeCandidate, user.id);
-      await sendMessage(
-        chatId,
-        `✅ <b>${clinic.name}</b> kabinetiga ulandingiz.\n\nEndi hujjatlarni yuklab, verifikatsiyani yakunlang.`,
-        openButton(true),
-      );
-    } catch (err: any) {
-      await sendMessage(chatId, `❌ ${err?.message ?? 'Kod ishlamadi'}`, openButton(false));
-    }
-    return;
-  }
-
   if (command === '/help') {
-    await sendMessage(chatId, HELP, openButton(from ? hasClinic(from.id) : false));
+    await sendMessage(chatId, HELP, openButton());
     return;
   }
 
   // Klinika egasi uchun to'g'ridan-to'g'ri yo'l
   if (command === '/clinic' || command === '/klinika') {
-    await sendMessage(chatId, CLINIC_INTRO, openButton(from ? hasClinic(from.id) : false));
+    await sendMessage(chatId, CLINIC_INTRO, openButton());
     return;
   }
 
-  // Kodga o'xshash, lekin noto'g'ri uzunlikda — odam kod yubormoqchi bo'lgan
+  // Kodga o'xshash matn — odam eski ulanish kodini yubormoqchi bo'lgan
   if (/^[0-9A-Za-z]{4,16}$/.test(text) && !text.startsWith('/')) {
-    await sendMessage(chatId, CODE_HELP, openButton(from ? hasClinic(from.id) : false));
+    await sendMessage(chatId, CLINIC_HINT, openButton());
     return;
   }
 
@@ -300,7 +263,7 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   await sendMessage(
     chatId,
     'Savolingizni ilova ichidagi chatda yozsangiz, klinika ko‘radi va javob beradi.',
-    openButton(from ? hasClinic(from.id) : false),
+    openButton(),
   );
 }
 

@@ -6,7 +6,6 @@ import {
   getClinic,
   getClinicOperations,
   getDashboard,
-  registerClinic,
   updateClinicOperations,
   updateClinicProfile,
 } from '../services/clinics';
@@ -15,10 +14,8 @@ import { listClinicDeals } from '../services/deals';
 import { listClinicReviews } from '../services/reviews';
 import { getPriceStats } from '../services/priceStats';
 import {
-  acceptInvite,
   addDocument,
   createDoctor,
-  createInvite,
   createTemplate,
   deleteDoctor,
   deleteSlot,
@@ -26,7 +23,6 @@ import {
   getAnalytics,
   getRevenue,
   listDoctors,
-  listInvites,
   listOperators,
   listSlots,
   listTemplates,
@@ -41,9 +37,9 @@ import {
   recordCommissionPayment,
   verificationChecklist,
 } from '../services/clinicCabinet';
-import { useConnectCode } from '../services/clinicApplications';
 import { CLINIC_DOC_KINDS } from '../../../shared/types';
 import { forbidden } from '../lib/errors';
+import { createAccount } from '../services/webAuth';
 
 /** Faqat klinika administratori: pul, jamoa va profil qarorlari. */
 function requireClinicAdmin(req: any): number {
@@ -56,31 +52,15 @@ function requireClinicAdmin(req: any): number {
 
 export const clinicRouter = Router();
 
-/** Ariza: litsenziya yuklanadi → moderator tekshiradi. */
-clinicRouter.post('/register', (req, res) => {
-  const body = z
-    .object({
-      name: z.string().min(2).max(200),
-      cityId: z.number().int().positive(),
-      address: z.string().max(300).default(''),
-      about: z.string().max(1500).default(''),
-      licenseFileId: z.string().max(300).nullable().optional(),
-      operationIds: z.array(z.number().int().positive()).min(1),
-    })
-    .parse(req.body);
+/*
+ * `POST /clinic/register` OLIB TASHLANDI.
+ *
+ * U kirgan foydalanuvchiga o'sha zahoti klinika roli berardi — ya'ni
+ * istalgan odam bir so'rov bilan klinika egasiga aylana olardi. Endi
+ * klinika faqat bitta yo'l bilan paydo bo'ladi: ochiq ariza → moderator
+ * tekshiruvi → veb hisob (clinicApplications.ts).
+ */
 
-  res.status(201).json(
-    registerClinic({
-      userId: req.user!.id,
-      name: body.name,
-      cityId: body.cityId,
-      address: body.address,
-      about: body.about,
-      licenseFileId: body.licenseFileId ?? null,
-      operationIds: body.operationIds,
-    }),
-  );
-});
 
 clinicRouter.get('/', (req, res) => {
   const clinicId = requireClinic(req);
@@ -279,13 +259,38 @@ clinicRouter.delete('/slots/:date', (req, res) => {
 
 clinicRouter.get('/operators', (req, res) => {
   const clinicId = requireClinic(req);
-  res.json({ operators: listOperators(clinicId), invites: listInvites(clinicId) });
+  res.json({ operators: listOperators(clinicId) });
 });
 
-clinicRouter.post('/operators/invite', (req, res) => {
+/**
+ * Xodim qo'shish — unga VEB HISOB ochiladi.
+ *
+ * Ilgari bu taklifnoma kodi berardi va kodni kiritgan Telegram
+ * foydalanuvchisi klinika xodimiga aylanardi. Bu bemor hisobiga klinika
+ * roli yopishtirardi — aynan shu yo'l bilan bir odam bir bosishda ikki
+ * tomonda tura olardi. Endi xodim alohida ish hisobiga ega bo'ladi.
+ *
+ * Javobda parol o'rnatish tokeni bir marta qaytadi: klinika
+ * administratori uni xodimga yetkazadi.
+ */
+clinicRouter.post('/operators', (req, res) => {
   const clinicId = requireClinicAdmin(req);
-  const body = z.object({ role: z.enum(['clinic_admin', 'clinic_operator']).default('clinic_operator') }).parse(req.body);
-  res.status(201).json(createInvite(clinicId, body.role));
+  const body = z
+    .object({
+      email: z.string().trim().email().max(160),
+      fullName: z.string().trim().min(2).max(160),
+      role: z.enum(['clinic_admin', 'clinic_operator']).default('clinic_operator'),
+    })
+    .parse(req.body);
+
+  const { user, setupToken } = createAccount({
+    email: body.email,
+    fullName: body.fullName,
+    level: body.role,
+    clinicId,
+  });
+
+  res.status(201).json({ account: user, setupToken });
 });
 
 clinicRouter.patch('/operators/:userId', (req, res) => {
@@ -301,11 +306,6 @@ clinicRouter.delete('/operators/:userId', (req, res) => {
   res.status(204).end();
 });
 
-/** Taklifnomani qabul qilish — klinikaga biriktirilmagan foydalanuvchi ham chaqiradi. */
-clinicRouter.post('/join', (req, res) => {
-  const body = z.object({ code: z.string().trim().min(4).max(32) }).parse(req.body);
-  res.json(acceptInvite(req.user!.id, body.code));
-});
 
 /* ═════════════════  Analitika va moliya  ═════════════════ */
 
@@ -356,14 +356,3 @@ clinicRouter.post('/commission/pay', (req, res) => {
 });
 
 
-/**
- * Ulanish kodi bilan klinikaga biriktirilish.
- *
- * Klinika veb-sahifada ariza qoldirgan, moderator tasdiqlagan va kod
- * bergan. Endi egasi Telegram orqali kirib, shu kodni kiritadi.
- * Rol shu paytda beriladi — oldin emas.
- */
-clinicRouter.post('/connect', (req, res) => {
-  const body = z.object({ code: z.string().trim().min(4).max(32) }).parse(req.body);
-  res.json(useConnectCode(body.code, req.user!.id));
-});

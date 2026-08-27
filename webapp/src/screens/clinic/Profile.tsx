@@ -27,6 +27,7 @@ import {
   Notice,
   Screen,
   Section,
+  Segment,
   Sheet,
   Skeleton,
   Stars,
@@ -629,19 +630,36 @@ export function Team() {
   const { t, lang, user, toast } = useApp();
   const navigate = useNavigate();
   const res = useResource(() => clinicApi.operators());
-  const [inviting, setInviting] = useState(false);
 
-  const invite = async (role: OperatorRole) => {
-    setInviting(true);
+  /*
+   * Xodim qo'shish — unga ish hisobi ochiladi.
+   *
+   * Ilgari bu taklifnoma kodi berardi va xodim uni Telegramda kiritardi.
+   * Endi xodimning kabineti ham, kirishi ham veb: unga email va parol
+   * o'rnatish havolasi beriladi. Havola bir marta ko'rsatiladi.
+   */
+  const [adding, setAdding] = useState(false);
+  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [role, setRole] = useState<OperatorRole>('clinic_operator');
+  const [busy, setBusy] = useState(false);
+  const [issued, setIssued] = useState<string | null>(null);
+
+  const addOperator = async () => {
+    setBusy(true);
     try {
-      await clinicApi.invite(role);
+      const created = await clinicApi.addOperator({ email: email.trim(), fullName: fullName.trim(), role });
       haptic.success();
+      setAdding(false);
+      setEmail('');
+      setFullName('');
+      setIssued(`${window.location.origin}/kabinet/parol?token=${created.setupToken}`);
       res.reload();
     } catch (err: any) {
       haptic.error();
       toast(err?.message ?? t('common.error'), 'error');
     } finally {
-      setInviting(false);
+      setBusy(false);
     }
   };
 
@@ -673,7 +691,7 @@ export function Team() {
       title={t('team.title')}
       subtitle={t('team.sub')}
       footer={
-        <Button block loading={inviting} icon={<IconPlus size={16} />} onClick={() => invite('clinic_operator')}>
+        <Button block icon={<IconPlus size={16} />} onClick={() => setAdding(true)}>
           {t('team.invite')}
         </Button>
       }
@@ -728,27 +746,49 @@ export function Team() {
               ))}
             </Section>
 
-            {data.invites.length > 0 && (
-              <Section title={t('team.inviteCode')}>
-                <Notice tone="info">{t('team.inviteHint')}</Notice>
-                {data.invites.map((inv) => (
-                  <Card key={inv.code} className="stack" style={{ gap: 6 }}>
-                    <div className="between">
-                      <strong className="invite-code num">{inv.code}</strong>
-                      <Button size="sm" variant="secondary" onClick={() => copy(inv.code)}>
-                        {t('team.copy')}
-                      </Button>
-                    </div>
-                    <span className="tiny">
-                      {t(`team.role.${inv.role}` as any)} · {t('team.expires', { v: formatDate(inv.expiresAt, lang) })}
-                    </span>
-                  </Card>
-                ))}
-              </Section>
-            )}
           </>
         )}
       </Async>
+
+      <Sheet open={adding} onClose={() => setAdding(false)} title={t('team.invite')}>
+        <div className="stack">
+          <Field label={t('team.fullName')}>
+            <Input value={fullName} maxLength={160} onChange={(e) => setFullName(e.target.value)} />
+          </Field>
+          <Field label="Email" hint={t('team.emailHint')}>
+            <Input type="email" value={email} maxLength={160} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+          <Segment
+            value={role}
+            onChange={(v) => setRole(v as OperatorRole)}
+            options={[
+              { value: 'clinic_operator', label: t('team.role.clinic_operator') },
+              { value: 'clinic_admin', label: t('team.role.clinic_admin') },
+            ]}
+          />
+          <Button
+            block
+            loading={busy}
+            disabled={fullName.trim().length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())}
+            onClick={addOperator}
+          >
+            {t('team.invite')}
+          </Button>
+        </div>
+      </Sheet>
+
+      {/* Havola bir marta ko'rsatiladi — qayta ochib bo'lmaydi */}
+      <Sheet open={issued !== null} onClose={() => setIssued(null)} title={t('team.inviteCode')}>
+        <div className="stack">
+          <Notice tone="warning">{t('team.inviteHint')}</Notice>
+          <Card>
+            <code className="setup-link">{issued}</code>
+          </Card>
+          <Button block onClick={() => issued && copy(issued)}>
+            {t('team.copy')}
+          </Button>
+        </div>
+      </Sheet>
     </Screen>
   );
 }

@@ -1,5 +1,6 @@
 /** REST klienti — autentifikatsiya sarlavhalari bir joyda. */
 import { tg } from './telegram';
+import { webToken } from './session';
 import type {
   AdminClinicFilter,
   AdminClinicRow,
@@ -14,7 +15,6 @@ import type {
   ClinicDashboard,
   ClinicDocKind,
   ClinicDocument,
-  ClinicInvite,
   ClinicOperator,
   ClinicRevenue,
   Doctor,
@@ -61,10 +61,21 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Kirish belgisi. Ikki yo'l bor va ular BIR VAQTDA yuborilmaydi:
+ *
+ *   veb kabinet (klinika, admin) → `Authorization: Bearer`
+ *   Telegram ilovasi (bemor)     → `x-init-data`
+ *
+ * Veb token bo'lsa Telegram imzosi umuman qo'shilmaydi. Aks holda bitta
+ * so'rovda ikki shaxs kelib, server qaysi birini tanlashi noaniq
+ * bo'lardi — bu esa rollar chalkashishining eng oson yo'li.
+ */
 export function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
-  if (tg?.initData) headers['x-init-data'] = tg.initData;
-  return headers;
+  const token = webToken();
+  if (token) return { authorization: `Bearer ${token}` };
+  if (tg?.initData) return { 'x-init-data': tg.initData };
+  return {};
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -249,14 +260,6 @@ export const api = {
 
   /* ── Klinika ── */
   clinic: () => get<{ clinic: Clinic; operationIds: number[] }>('/clinic'),
-  registerClinic: (body: {
-    name: string;
-    cityId: number;
-    address: string;
-    about: string;
-    licenseFileId: string | null;
-    operationIds: number[];
-  }) => post<Clinic>('/clinic/register', body),
   updateClinic: (body: Partial<ClinicProfileBody>) => patch<Clinic>('/clinic', body),
   dashboard: () => get<ClinicDashboard>('/clinic/dashboard'),
   clinicReviews: () => get<Review[]>('/clinic/reviews'),
@@ -414,12 +417,13 @@ export const clinicApi = {
   deleteSlot: (date: string) => del<void>(`/clinic/slots/${date}`),
 
   /* Jamoa */
-  operators: () => get<{ operators: ClinicOperator[]; invites: ClinicInvite[] }>('/clinic/operators'),
-  invite: (role: OperatorRole) => post<ClinicInvite>('/clinic/operators/invite', { role }),
+  operators: () => get<{ operators: ClinicOperator[] }>('/clinic/operators'),
+  /** Xodimga ish hisobi ochish — javobda parol o'rnatish tokeni bir marta keladi. */
+  addOperator: (body: { email: string; fullName: string; role: OperatorRole }) =>
+    post<{ setupToken: string }>('/clinic/operators', body),
   setOperatorRole: (userId: number, role: OperatorRole) =>
     patch<{ operators: ClinicOperator[] }>(`/clinic/operators/${userId}`, { role }),
   removeOperator: (userId: number) => del<void>(`/clinic/operators/${userId}`),
-  join: (code: string) => post<{ clinicId: number; role: OperatorRole }>('/clinic/join', { code }),
 
   /* Analitika va moliya */
   analytics: (days = 30) => get<ClinicAnalytics>(`/clinic/analytics?days=${days}`),

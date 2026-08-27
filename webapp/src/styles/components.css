@@ -2586,80 +2586,390 @@
 }
 .who-card.is-active strong { color: var(--primary); }
 
-/* ══════════════════  Klinika arizasi (ochiq sahifa)  ══════════════════ */
-.signup {
+/* ══════════════════  Veb sahifalar (brauzer)  ══════════════════
+
+   Bu bo'lim Telegram ilovasidan tashqarida ochiladigan sahifalar uchun:
+   klinika arizasi va kabinetga kirish.
+
+   Farqi muhim. Mini App doim tor va bitta ustun; brauzer esa 360px dan
+   2560px gacha. Shuning uchun bu yerda `max-width` va kenglikka qarab
+   ikki ustunga bo'linish bor — qolgan ekranlarda bunga hojat yo'q.
+                                                                        */
+
+.cs {
   min-height: 100dvh;
+  background: var(--bg);
+  color: var(--body);
+  line-height: 1.55;
+}
+
+.cs__shell {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 var(--s-4);
+}
+.cs__shell--narrow { max-width: 560px; }
+
+/* ── Yuqori chiziq ── */
+.cs__top {
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+.cs__topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+}
+.cs__mark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--t-lg);
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+.cs__topLink {
+  font-size: var(--t-sm);
+  color: var(--body);
+  text-decoration: none;
+}
+.cs__topLink:hover { color: var(--primary); }
+
+/* ── Ikki ustun: chapda sabab, o'ngda forma ── */
+.cs__grid {
+  display: grid;
+  gap: var(--s-8);
+  padding-top: var(--s-8);
+  padding-bottom: var(--s-12);
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .cs__grid {
+    grid-template-columns: 1fr 460px;
+    gap: var(--s-12);
+    padding-top: var(--s-12);
+  }
+  /* Forma uzun ro'yxatda ham ko'rinib tursin */
+  .cs__card { position: sticky; top: var(--s-6); }
+}
+
+.cs__pitch {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 28px 18px 60px;
-  background: var(--bg);
+  gap: var(--s-4);
 }
-.signup__box,
-.signup__note {
-  width: 100%;
-  max-width: 560px;
+
+.cs__h1 {
+  font-family: var(--font-display);
+  font-size: var(--t-3xl);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-wrap: balance;
+  margin: 0;
 }
-.signup__box {
+.cs__accent { color: var(--primary); }
+
+.cs__lede {
+  font-size: var(--t-md);
+  max-width: 46ch;
+  margin: 0;
+}
+
+/* Uch va'da — raqamlanmagan, chunki bu ketma-ketlik emas */
+.cs__points {
+  list-style: none;
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
-  padding: var(--s-5) var(--s-4);
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  margin: var(--s-2) 0 0;
+  padding: 0;
 }
-.signup__mark {
-  font-family: var(--font-display);
-  font-size: var(--t-lg);
-  font-weight: 700;
-  color: var(--primary);
-  letter-spacing: -0.02em;
+.cs__points li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: var(--s-4);
+  border-left: 2px solid var(--primary-soft);
 }
-.signup__title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--t-2xl);
-  line-height: 1.15;
+.cs__points strong {
+  font-size: var(--t-md);
   color: var(--ink);
-  text-wrap: balance;
+  font-weight: 600;
 }
-.signup__text {
-  margin: 0;
+.cs__points span {
   font-size: var(--t-sm);
   color: var(--body);
 }
-/* Operatsiyalar ro'yxati uzun — o'z ichida aylanadi */
-.signup__ops {
+
+.cs__note {
+  font-size: var(--t-sm);
+  color: var(--accent-ink);
+  background: var(--accent-pale);
+  border-radius: var(--r-sm);
+  padding: var(--s-3) var(--s-4);
+}
+
+/* ── Forma kartasi ── */
+.cs__card {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-height: 240px;
-  overflow-y: auto;
-  padding: 2px;
+  flex-direction: column;
+  gap: var(--s-4);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--s-6);
 }
-.signup__done {
-  display: grid;
-  place-items: center;
-  width: 66px;
-  height: 66px;
-  border-radius: 50%;
-  background: rgba(31, 169, 113, 0.14);
-  color: var(--success);
+
+.cs__steps {
+  display: flex;
+  gap: var(--s-1);
 }
-.signup__loading {
-  padding: var(--s-5) 0;
-  text-align: center;
-  color: var(--muted);
+.cs__stepBar {
+  height: 3px;
+  border-radius: var(--r-pill);
+  background: var(--line);
 }
-.signup__fine {
-  margin: 0;
+.cs__stepBar.is-done { background: var(--primary); }
+
+.cs__stepHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cs__stepCount {
   font-size: var(--t-xs);
   color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+.cs__h2 {
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0;
+}
+.cs__sub {
+  font-size: var(--t-sm);
+  color: var(--muted);
+  margin: 0;
+}
+
+.cs__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* Operatsiyalar ro'yxati uzun — o'z ichida siljiydi, sahifa emas */
+.cs__ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  max-height: 280px;
+  overflow-y: auto;
+  padding: var(--s-1);
+  margin: calc(var(--s-1) * -1);
+}
+
+.cs__picked {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-sm);
+  color: var(--body);
+}
+.cs__pickedN {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--primary);
+  color: #fff;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cs__clear {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: var(--t-sm);
+  cursor: pointer;
+  padding: 0;
+}
+.cs__clear:hover { text-decoration: underline; }
+
+.cs__actions {
+  display: flex;
+  gap: var(--s-2);
+}
+
+.cs__fine {
+  font-size: var(--t-xs);
+  color: var(--muted);
+  margin: 0;
+  text-align: center;
+}
+
+.cs__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.cs__skeleton span {
+  height: 54px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+
+/* ── Yuborilgandan keyin ── */
+.cs__success {
+  text-align: center;
+  align-items: center;
+  margin-top: var(--s-12);
+  gap: var(--s-4);
+}
+.cs__successMark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.cs__success .cs__lede { max-width: none; }
+
+.cs__next {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+.cs__next li {
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-start;
+  font-size: var(--t-sm);
+}
+/* Bu YERDA raqam o'rinli: bosqichlar ketma-ket keladi */
+.cs__nextN {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs__botLink {
+  font-size: var(--t-sm);
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+.cs__botLink:hover { text-decoration: underline; }
+
+/* ══════════════════  Kabinetga kirish  ══════════════════ */
+
+.wa {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--s-6) var(--s-4);
+  background: var(--bg);
+  color: var(--body);
+  line-height: 1.55;
+}
+
+.wa__box {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--s-8) var(--s-6);
+}
+
+.wa__mark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--t-md);
+  color: var(--primary);
+  letter-spacing: -0.02em;
+}
+
+.wa__title {
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--ink);
+  margin: 0;
+}
+.wa__sub {
+  font-size: var(--t-sm);
+  color: var(--muted);
+  margin: calc(var(--s-3) * -1) 0 0;
+}
+
+.wa__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  margin-top: var(--s-2);
+}
+
+/* Tasdiqlash kodi — raqamlar keng va teng oraliqda */
+.wa__code {
+  text-align: center;
+  font-size: var(--t-2xl);
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
+  font-variant-numeric: tabular-nums;
+}
+
+.wa__fine {
+  font-size: var(--t-xs);
+  color: var(--muted);
+  text-align: center;
+  margin: 0;
+}
+.wa__fine a { color: var(--primary); }
+
+/* Parol havolasi — uzun, o'z ichida siljiydi */
+.setup-link {
+  display: block;
+  font-size: var(--t-xs);
+  word-break: break-all;
+  color: var(--ink);
   line-height: 1.5;
 }
-.signup__note { padding: var(--s-3) var(--s-4); }
 
 /* ── Ariza kartasi ── */
 .app-rows {

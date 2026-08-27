@@ -13,7 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx src/test/run.ts",
     "test:http": "bash src/test/http.sh",
-    "seed:demo": "tsx src/db/seedDemo.ts"
+    "seed:demo": "tsx src/db/seedDemo.ts",
+    "admin:create": "tsx src/scripts/createAdmin.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
