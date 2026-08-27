@@ -2987,3 +2987,130 @@
 }
 .app-row + .app-row { border-top: 1px solid var(--line); }
 .app-row a { color: var(--primary); }
+
+/* ══════════════════  Yo'nalishlar bo'yicha guruh  ══════════════════
+
+   Katalog banisa.uz dan kelgach 27 emas, 100+ operatsiya bo'ldi. Tekis
+   ro'yxat bilan ishlab bo'lmaydi: klinika o'z sohasini topa olmaydi.
+   Shuning uchun kategoriyalar yig'iladigan bo'limlarga bo'lindi.
+                                                                        */
+.opgroup {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.opgroup__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  padding: var(--s-3) var(--s-4);
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.opgroup__head:hover { background: var(--bg-elevated); }
+
+.opgroup__caret {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--t-lg);
+  line-height: 1;
+  transition: transform var(--d-base) var(--ease);
+}
+.opgroup__caret.is-open { transform: rotate(90deg); }
+
+.opgroup__count {
+  margin-left: auto;
+  flex: none;
+  font-size: var(--t-xs);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  padding: 2px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--bg);
+}
+/* Tanlangan kategoriya darhol ko'zga tashlansin */
+.opgroup__count.is-on {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.opgroup__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: 0 var(--s-4) var(--s-4);
+}
+
+.opgroup__all {
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--t-xs);
+  color: var(--primary);
+  cursor: pointer;
+}
+.opgroup__all:hover { text-decoration: underline; }
+
+/* ══════════════════  Katalog sinxronizatsiyasi (admin)  ══════════════════ */
+
+.sync-sum {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-2);
+}
+.sync-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+}
+.sync-cell strong {
+  font-size: var(--t-xl);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.sync-cell.is-add strong { color: var(--success); }
+.sync-cell.is-update strong { color: var(--accent-ink); }
+.sync-cell.is-off strong { color: var(--muted); }
+
+.sync-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.sync-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) 0;
+  font-size: var(--t-sm);
+  border-bottom: 1px solid var(--line);
+}
+.sync-row:last-child { border-bottom: 0; }
+
+.sync-tag {
+  flex: none;
+  font-size: var(--t-xs);
+  padding: 1px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--bg);
+  color: var(--muted);
+}
+.sync-tag.is-add { background: var(--primary-soft); color: var(--primary); }
+.sync-tag.is-update { background: var(--accent-pale); color: var(--accent-ink); }

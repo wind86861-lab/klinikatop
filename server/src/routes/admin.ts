@@ -1,5 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { listSyncLog, planSync, runSync, sourceConfigured } from '../services/catalogSync';
+import { rateLimit } from '../middleware/rateLimit';
+import { forbidden } from '../lib/errors';
+import { asyncHandler } from '../lib/asyncHandler';
 import { db } from '../db';
 import { listDocumentsForModeration, setDocumentStatus } from '../services/clinicCabinet';
 import {
@@ -265,3 +269,46 @@ adminRouter.delete('/applications/:id', (req, res) => {
   logModeration(req.user!.id, 'application', Number(req.params.id), 'delete', null);
   res.status(204).end();
 });
+
+/* ═════════════════  Katalog manbasi (banisa.uz)  ═════════════════ */
+
+/**
+ * Katalogga tegish — platformadagi eng ta'sirchan amal: u barcha
+ * klinikalarning ko'radigan so'rovlarini o'zgartiradi. Shuning uchun
+ * faqat to'liq huquqli admin va daqiqada bir necha marta.
+ */
+function requireFullAdmin(req: any): void {
+  if (req.web?.level !== 'full') {
+    throw forbidden('Bu amal faqat to‘liq huquqli administrator uchun');
+  }
+}
+
+adminRouter.get('/catalog/status', (_req, res) => {
+  res.json({ configured: sourceConfigured(), log: listSyncLog(20) });
+});
+
+/**
+ * Reja — hech narsa yozmaydi.
+ *
+ * Admin avval nima o'zgarishini ko'radi. 105 ta yozuvni ko'rmasdan
+ * almashtirish katalogni bir zumda buzishi mumkin.
+ */
+adminRouter.post(
+  '/catalog/preview',
+  rateLimit({ name: 'catalog-preview', windowSec: 60, max: 6 }),
+  asyncHandler(async (req, res) => {
+    requireFullAdmin(req);
+    res.json(await planSync());
+  }),
+);
+
+adminRouter.post(
+  '/catalog/sync',
+  rateLimit({ name: 'catalog-sync', windowSec: 300, max: 3 }),
+  asyncHandler(async (req, res) => {
+    requireFullAdmin(req);
+    const result = await runSync(req.user!.id);
+    logModeration(req.user!.id, 'platform', 0, 'catalog:sync', JSON.stringify(result));
+    res.json(result);
+  }),
+);

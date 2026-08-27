@@ -847,6 +847,138 @@ async function main() {
   webAuth.passMfa(adminSession.token, webAuth.currentTotp(totp.secret));
   check('kod kiritilgach sessiya to‘liq', webAuth.resolveSession(adminSession.token).mfaPassed === true);
 
+
+  /* ═════ 15. Katalog sinxronizatsiyasi ═════ */
+  console.log('\n15. Katalog sinxronizatsiyasi');
+
+  const { slugify } = require('../lib/format');
+
+  check('slug lotinga o‘girildi', slugify('Qalqonsimon bez') === 'qalqonsimon-bez', slugify('Qalqonsimon bez'));
+  check('kirill lotinga o‘girildi', slugify('Холецистэктомия') === 'holetsistektomiya', slugify('Холецистэктомия'));
+  check('tutuq belgisi tashlandi', slugify("Ko‘z operatsiyasi") === 'koz-operatsiyasi', slugify("Ko‘z operatsiyasi"));
+  check('bo‘sh matndan ham slug chiqadi', slugify('!!!') === '', slugify('!!!'));
+
+  /*
+   * Sinxronizatsiyaning eng xavfli xossasi — u HECH QACHON o'chirmasligi.
+   * Klinika tanlagan operatsiya o'chirilsa, uning sozlamasi va o'tgan
+   * bitimlari uziladi. Shuni to'g'ridan-to'g'ri tekshiramiz.
+   */
+  const catalogSync = require('../services/catalogSync');
+
+  // Manba jadvallarini taqlid qilamiz: haqiqiy Postgres testda yo'q,
+  // shuning uchun import natijasini qo'lda yasab, xulq-atvorni sinaymiz.
+  const catId = db
+    .prepare("INSERT INTO operation_categories (slug, name_uz, name_ru, icon, source, external_id) VALUES ('sinov-kat','Sinov','Тест','', 'banisa','cat-1')")
+    .run().lastInsertRowid;
+
+  const importedOp = db
+    .prepare(
+      "INSERT INTO operations (category_id, slug, name_uz, name_ru, active, source, external_id) VALUES (?, 'sinov-op', 'Sinov operatsiyasi', 'Тестовая', 1, 'banisa', 'op-1')",
+    )
+    .run(catId).lastInsertRowid;
+
+  // Klinika uni tanlaydi
+  db.prepare('INSERT OR IGNORE INTO clinic_operations (clinic_id, operation_id) VALUES (?, ?)').run(
+    clinic.id,
+    importedOp,
+  );
+
+  // Manbadan yo'qolgandek qilib deaktivatsiya qilamiz
+  db.prepare('UPDATE operations SET active = 0 WHERE id = ?').run(importedOp);
+
+  const stillLinked = db
+    .prepare('SELECT COUNT(*) c FROM clinic_operations WHERE operation_id = ?')
+    .get(importedOp).c;
+  check('deaktivatsiya klinika tanlovini buzmadi', stillLinked === 1, stillLinked);
+
+  const stillExists = db.prepare('SELECT active FROM operations WHERE id = ?').get(importedOp);
+  check('operatsiya o‘chirilmadi, yashirildi', stillExists && stillExists.active === 0);
+
+  // Yashirilgan operatsiya bemorga ko'rinmaydi
+  const visible = catalog.listOperations().some((o: any) => o.id === importedOp);
+  check('yashirilgan operatsiya katalogda yo‘q', visible === false);
+
+  // Qo'lda kiritilganlarga teginilmaydi
+  const manualCount = db.prepare("SELECT COUNT(*) c FROM operations WHERE source = 'manual'").get().c;
+  check('qo‘lda kiritilganlar saqlanib qoldi', manualCount > 0, manualCount);
+
+  // Jurnal
+  const before = db.prepare('SELECT COUNT(*) c FROM catalog_sync_log').get().c;
+  try {
+    await catalogSync.runSync(null);
+  } catch {
+    /* manba sozlanmagan — kutilgan */
+  }
+  const after = db.prepare('SELECT COUNT(*) c FROM catalog_sync_log').get().c;
+  check('muvaffaqiyatsiz urinish ham jurnalga tushdi', after === before + 1, { before, after });
+
+  const lastLog = catalogSync.listSyncLog(1)[0];
+  check('jurnalda xato sababi bor', lastLog.status === 'failed' && Boolean(lastLog.error), lastLog);
+
+  check('manba sozlanmagani aniqlandi', catalogSync.sourceConfigured() === false);
+
+  /*
+   * Takrorlanish — import qiladigan tizimning eng jimgina buziladigan
+   * joyi. Bir xil nomli ikki operatsiya paydo bo'lsa, bemor birini
+   * tanlab klinika ikkinchisini yoqadi va so'rov hech qachon yetib
+   * bormaydi. Xato ko'rinmaydi: shunchaki hech kim taklif yubormaydi.
+   */
+  const normalizeFn = require('../lib/format').normalize;
+  const dupes = db
+    .prepare('SELECT name_uz, COUNT(*) c FROM operations WHERE active = 1 GROUP BY LOWER(name_uz) HAVING c > 1')
+    .all();
+  check('katalogda takroriy nom yo‘q', dupes.length === 0, dupes);
+
+  check('nomlar solishtirish uchun bir shaklga keltiriladi',
+    normalizeFn('Ko‘z  Xirurgiyasi') === normalizeFn("Ko'z Xirurgiyasi"));
+
+  /*
+   * Butun ishning maqsadi: klinika import qilingan yo'nalishni
+   * faollashtirsa, o'sha yo'nalish bo'yicha so'rov unga KO'RINSIN.
+   *
+   * Mos kelish `operation_id` bo'yicha ishlaydi, ya'ni operatsiya
+   * qaysi manbadan kelgani ahamiyatsiz bo'lishi kerak. Buni faraz
+   * qilib qo'ymay, to'g'ridan-to'g'ri tekshiramiz.
+   */
+  const matchSvc = require('../services/matching');
+
+  const importedOp2 = db
+    .prepare(
+      "INSERT INTO operations (category_id, slug, name_uz, name_ru, active, source, external_id) VALUES (?, 'import-mos', 'Import qilingan operatsiya', 'Импортированная', 1, 'banisa', 'op-match')",
+    )
+    .run(catId).lastInsertRowid;
+
+  let matched = matchSvc.findMatchingClinics(importedOp2, clinic.cityId);
+  check('yo‘nalish yoqilmagan — klinika chiqmadi', matched.length === 0, matched.length);
+
+  db.prepare('INSERT OR IGNORE INTO clinic_operations (clinic_id, operation_id) VALUES (?, ?)').run(
+    clinic.id,
+    importedOp2,
+  );
+
+  matched = matchSvc.findMatchingClinics(importedOp2, clinic.cityId);
+  check(
+    'yo‘nalish yoqilgach klinika so‘rovni oladi',
+    matched.some((c: any) => c.id === clinic.id),
+    matched.map((c: any) => c.id),
+  );
+
+  // Boshqa shahardagi so'rov kelmasligi kerak
+  const otherCity = db.prepare('SELECT id FROM cities WHERE id <> ?').get(clinic.cityId) as any;
+  const wrongCity = matchSvc.findMatchingClinics(importedOp2, otherCity.id);
+  check(
+    'boshqa viloyat so‘rovi kelmadi',
+    !wrongCity.some((c: any) => c.id === clinic.id),
+    wrongCity.length,
+  );
+
+  // Yo'nalish o'chirilsa ham eski bog'lanish saqlanadi, lekin katalogda ko'rinmaydi
+  db.prepare('UPDATE operations SET active = 0 WHERE id = ?').run(importedOp2);
+  check(
+    'yashirilgach ham klinika bog‘lanishi buzilmadi',
+    db.prepare('SELECT COUNT(*) c FROM clinic_operations WHERE operation_id = ?').get(importedOp2).c === 1,
+  );
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

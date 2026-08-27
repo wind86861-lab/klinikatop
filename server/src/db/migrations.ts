@@ -614,6 +614,73 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    /**
+     * Tashqi katalog manbasi.
+     *
+     * Operatsiyalar ro'yxati endi banisa.uz katalogidan olinadi. Ikki
+     * yangi ustun kerak: qaysi manbadan kelgani va o'sha manbadagi
+     * identifikatori. Shu ikkisi bo'lsa takroriy import qilinganda qator
+     * qayta yaratilmaydi — mavjudi yangilanadi.
+     *
+     * Qo'lda kiritilgan operatsiyalarda bu ustunlar bo'sh qoladi va ular
+     * sinxronizatsiyada teginilmaydi.
+     */
+    id: '013_catalog_source',
+    up: (db) => {
+      const cols = (table: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+
+      const opCols = cols('operations');
+      if (!opCols.includes('source')) {
+        db.exec(`
+          ALTER TABLE operations ADD COLUMN source TEXT NOT NULL DEFAULT 'manual';
+          ALTER TABLE operations ADD COLUMN external_id TEXT;
+          ALTER TABLE operations ADD COLUMN synced_at TEXT;
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_operations_external
+            ON operations(source, external_id) WHERE external_id IS NOT NULL;
+        `);
+      }
+
+      const catCols = cols('operation_categories');
+      if (!catCols.includes('source')) {
+        db.exec(`
+          ALTER TABLE operation_categories ADD COLUMN source TEXT NOT NULL DEFAULT 'manual';
+          ALTER TABLE operation_categories ADD COLUMN external_id TEXT;
+          ALTER TABLE operation_categories ADD COLUMN synced_at TEXT;
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_external
+            ON operation_categories(source, external_id) WHERE external_id IS NOT NULL;
+        `);
+      }
+
+      /*
+       * Sinxronizatsiya jurnali.
+       *
+       * Katalog — platformaning o'zagi: unga tegish barcha klinikaning
+       * ko'rinadigan so'rovlarini o'zgartiradi. Shuning uchun har bir
+       * yugurish yozib boriladi: kim boshladi, nima o'zgardi, xato
+       * bo'ldimi. Nimadir noto'g'ri ketsa nima bo'lganini aytib beradi.
+       */
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS catalog_sync_log (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          source        TEXT NOT NULL,
+          started_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          status        TEXT NOT NULL CHECK (status IN ('ok','failed')),
+          -- Nima qilingani: qo'shildi / yangilandi / o'chirildi (deaktivatsiya)
+          added         INTEGER NOT NULL DEFAULT 0,
+          updated       INTEGER NOT NULL DEFAULT 0,
+          deactivated   INTEGER NOT NULL DEFAULT 0,
+          categories    INTEGER NOT NULL DEFAULT 0,
+          error         TEXT,
+          duration_ms   INTEGER NOT NULL DEFAULT 0,
+          created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sync_log_created ON catalog_sync_log(created_at DESC);
+      `);
+    },
+  },
 ];
 
 /**

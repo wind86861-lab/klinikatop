@@ -30,10 +30,11 @@ import {
 } from '@/ui';
 import { FileThumb } from '@/components/wizard/FileThumb';
 import { Applications } from './Applications';
+import { CatalogSync } from './CatalogSync';
 import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
 import type { AdminMetrics, ChatMessage, Clinic, ClinicDocument, Deal, DealDetail } from '@shared/types';
 
-type Tab = 'applications' | 'verifications' | 'clinics' | 'disputes' | 'metrics' | 'settings';
+type Tab = 'applications' | 'verifications' | 'clinics' | 'disputes' | 'metrics' | 'catalog' | 'settings';
 
 export function AdminHome() {
   const { t, lang, toast } = useApp();
@@ -116,6 +117,7 @@ export function AdminHome() {
           { value: 'disputes', label: `${t('admin.disputes')}${disputes?.length ? ` (${disputes.length})` : ''}` },
           { value: 'clinics', label: t('admin.tabClinics') },
           { value: 'metrics', label: t('admin.metrics') },
+          { value: 'catalog', label: 'Katalog' },
           { value: 'settings', label: t('admin.tabSettings') },
         ]}
       />
@@ -183,6 +185,9 @@ export function AdminHome() {
       {tab === 'clinics' && <AdminClinics />}
 
       {/* Platforma bo'yicha umumiy shartlar */}
+      {/* Katalog banisa.uz dan sinxronlanadi */}
+      {tab === 'catalog' && <CatalogSync />}
+
       {tab === 'settings' && <PlatformSettingsScreen />}
 
       {tab === 'metrics' &&

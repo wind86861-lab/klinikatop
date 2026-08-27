@@ -49,6 +49,33 @@ import type {
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
 
+export interface SyncChange {
+  kind: 'add' | 'update' | 'deactivate' | 'reactivate';
+  externalId: string;
+  nameUz: string;
+  fields?: string[];
+}
+
+export interface SyncPlan {
+  categories: { add: number; update: number };
+  operations: SyncChange[];
+  sourceTotal: number;
+  manualKept: number;
+  skippedDuplicates: number;
+}
+
+export interface SyncLogRow {
+  id: number;
+  status: 'ok' | 'failed';
+  added: number;
+  updated: number;
+  deactivated: number;
+  categories: number;
+  error: string | null;
+  durationMs: number;
+  createdAt: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -257,6 +284,19 @@ export const api = {
     id: number,
     body: { quality: number; attitude: number; cleanliness: number; result: number; body: string | null },
   ) => post<Review>(`/deals/${id}/review`, body),
+
+  /* ── Katalog manbasi (banisa.uz) ── */
+  catalogStatus: () => get<{ configured: boolean; log: SyncLogRow[] }>('/admin/catalog/status'),
+  /** Reja — hech narsa o'zgartirmaydi, faqat nima bo'lishini aytadi */
+  catalogPreview: () => post<SyncPlan>('/admin/catalog/preview', {}),
+  catalogSync: () =>
+    post<{
+      added: number;
+      updated: number;
+      deactivated: number;
+      categories: number;
+      skippedDuplicates: number;
+    }>('/admin/catalog/sync', {}),
 
   /* ── Klinika ── */
   clinic: () => get<{ clinic: Clinic; operationIds: number[] }>('/clinic'),

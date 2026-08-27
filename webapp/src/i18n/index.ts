@@ -1,6 +1,6 @@
 import { uz, type TranslationKey } from './uz';
 import { ru } from './ru';
-import type { Lang, Operation, City } from '@shared/types';
+import type { Lang, Operation, City, OperationCategory } from '@shared/types';
 
 const dictionaries = { uz, ru } as const;
 
@@ -24,3 +24,4 @@ export const opName = (op: Operation, lang: Lang) => (lang === 'ru' ? op.nameRu 
 export const opAlias = (op: Operation, lang: Lang) => (lang === 'ru' ? op.aliasRu : op.aliasUz);
 export const opDesc = (op: Operation, lang: Lang) => (lang === 'ru' ? op.descRu : op.descUz);
 export const cityName = (city: City, lang: Lang) => (lang === 'ru' ? city.nameRu : city.nameUz);
+export const categoryName = (c: OperationCategory, lang: Lang) => (lang === 'ru' ? c.nameRu : c.nameUz);
