@@ -57,7 +57,7 @@ export function Profile() {
     0,
   );
 
-  const isModerator = user.roles.some((r) => r === 'moderator' || r === 'admin');
+  const isModerator = user.roles.some((r) => r === 'admin');
 
   // Anketa to'ldirilganmi — profil ekranida holatini ko'rsatish uchun
   const [medicalFilled, setMedicalFilled] = useState(false);

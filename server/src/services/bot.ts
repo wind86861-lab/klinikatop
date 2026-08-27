@@ -9,6 +9,7 @@
  * mustaqil ko'rib chiqiladi.
  */
 import { db } from '../db';
+import { clinicStandingByPhone, type ClinicStanding } from './clinicIdentity';
 import { config } from '../lib/config';
 import { upsertUser } from '../middleware/auth';
 
@@ -127,6 +128,81 @@ Savol bo'lsa shu yerga yozing.`;
  * `web_app` tugmasi Mini App'ni ANIQ ekrandan ochadi, shuning uchun
  * klinika to'g'ridan-to'g'ri ariza formasiga tushadi.
  */
+/**
+ * Klinika holatiga qarab xabar va tugmalar.
+ *
+ * Klinika egasi botga kirganda birinchi navbatda O'Z ARIZASI qayerda
+ * qolganini bilishi kerak. Ilgari u buni bilishning yo'li yo'q edi:
+ * moderatordan qo'ng'iroq kutib o'tirardi. Endi bot raqamini tanib
+ * oladi va holatini aytadi.
+ */
+function clinicMessage(standing: ClinicStanding): { text: string; rows: InlineButton[][] } | null {
+  const base = config.telegram.webappUrl.replace(/\/$/, '');
+
+  switch (standing.kind) {
+    case 'none':
+      return null;
+
+    case 'pending':
+      return {
+        text:
+          `🏥 <b>${standing.clinicName}</b>\n\n` +
+          `Arizangiz ko‘rib chiqilmoqda (№${standing.applicationId}).\n` +
+          `Moderator litsenziyangizni tekshiradi va shu raqamga qo‘ng‘iroq qiladi — ` +
+          `odatda 1–2 ish kuni.`,
+        rows: [],
+      };
+
+    case 'rejected':
+      return {
+        text:
+          `🏥 <b>${standing.clinicName}</b>\n\n` +
+          `Arizangiz rad etildi.\n` +
+          (standing.note ? `<b>Sabab:</b> ${standing.note}\n\n` : '\n') +
+          `Kamchilikni to‘g‘rilab qayta ariza qoldirishingiz mumkin.`,
+        rows: [[{ text: '📝 Qayta ariza qoldirish', url: `${base}/klinika` }]],
+      };
+
+    case 'needs_password':
+      /*
+       * Havola BOTGA yuboriladi — pochtaga emas.
+       *
+       * Raqamni Telegram tasdiqlagan, ya'ni bu xabar aynan hisob
+       * egasiga boradi. Pochta orqali yuborish esa qo'shimcha halqa
+       * bo'lardi: klinika egasi pochtasini kamdan-kam ochadi.
+       */
+      return {
+        text:
+          `🏥 <b>${standing.clinicName}</b>\n\n` +
+          `Arizangiz tasdiqlandi! Kabinetga kirish uchun parol qo‘ying.\n\n` +
+          `Bundan keyin brauzerdan ham kira olasiz: raqamingiz va shu parol bilan.`,
+        rows: [
+          [
+            {
+              text: '🔑 Parol qo‘yish',
+              url: `${base}/kabinet/parol?token=${standing.setupToken}`,
+            },
+          ],
+        ],
+      };
+
+    case 'ready': {
+      const verified = standing.verification === 'approved';
+      return {
+        text:
+          `🏥 <b>${standing.clinicName}</b>\n\n` +
+          (verified
+            ? 'Kabinetingiz tayyor. So‘rovlar shu yerda ko‘rinadi.'
+            : 'Kabinetingiz ochiq. Verifikatsiyani yakunlang — shundan keyin so‘rovlar kela boshlaydi.'),
+        rows: [
+          [{ text: '🏥 Klinika kabineti', web_app: { url: `${base}/clinic` } }],
+          [{ text: '🌐 Brauzerda ochish', url: `${base}/kabinet` }],
+        ],
+      };
+    }
+  }
+}
+
 function openButton() {
   const base = config.telegram.webappUrl.replace(/\/$/, '');
 
@@ -158,12 +234,31 @@ function contactKeyboard() {
   };
 }
 
-/** Foydalanuvchining raqami allaqachon saqlanganmi. */
-function hasPhone(telegramId: number): boolean {
+/** Foydalanuvchining saqlangan raqami. */
+function phoneOf(telegramId: number): string | null {
   const row = db
     .prepare(`SELECT phone FROM users WHERE telegram_id = ? AND phone IS NOT NULL AND phone <> ''`)
-    .get(telegramId);
-  return Boolean(row);
+    .get(telegramId) as { phone: string } | undefined;
+  return row?.phone ?? null;
+}
+
+/**
+ * Raqam ma'lum bo'lgach ko'rsatiladigan xabar.
+ *
+ * Agar bu raqam klinikaga tegishli bo'lsa — uning holati ko'rsatiladi
+ * va bemor menyusi umuman chiqmaydi. Klinika egasiga "so'rov qoldirish"
+ * tugmasini taklif qilish mantiqsiz: u boshqa ish bilan kelgan.
+ */
+async function greet(chatId: number, phone: string) {
+  const standing = clinicStandingByPhone(phone);
+  const clinic = clinicMessage(standing);
+
+  if (clinic) {
+    await sendMessage(chatId, clinic.text, { inline_keyboard: clinic.rows });
+    return;
+  }
+
+  await sendMessage(chatId, CHOOSE, openButton());
 }
 
 /* ─────────────────────────  Yangilanishlar  ───────────────────────── */
@@ -216,9 +311,13 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
         message.contact.phone_number.slice(0, 32),
         user.id,
       );
+
+      // Klaviaturani olib tashlaymiz — kerak emas, joyni egallaydi
+      await sendMessage(chatId, READY, { remove_keyboard: true });
+      await greet(chatId, message.contact.phone_number);
+      return;
     }
 
-    // Klaviaturani olib tashlaymiz — kerak emas, joyni egallaydi
     await sendMessage(chatId, READY, { remove_keyboard: true });
     await sendMessage(chatId, CHOOSE, openButton());
     return;
@@ -234,8 +333,9 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
     await sendMessage(chatId, INTRO);
 
     // Raqam allaqachon bo'lsa qayta so'ramaymiz — bir marta yetarli
-    if (from && hasPhone(from.id)) {
-      await sendMessage(chatId, CHOOSE, openButton());
+    const phone = from ? phoneOf(from.id) : null;
+    if (phone) {
+      await greet(chatId, phone);
     } else {
       await sendMessage(chatId, ASK_CONTACT, contactKeyboard());
     }

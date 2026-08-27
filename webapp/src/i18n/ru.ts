@@ -666,6 +666,8 @@ export const ru: Record<TranslationKey, string> = {
   'rv.alreadyReplied': 'На этот отзыв уже отвечено',
   'team.fullName': 'Полное имя',
   'team.emailHint': 'С этим email сотрудник войдёт в кабинет',
+  'team.phone': 'Номер телефона',
+  'team.phoneHint': 'С этим номером сотрудник войдёт в кабинет',
   'team.title': 'Команда',
   'team.sub': 'Кто может работать от имени клиники',
   'team.role.clinic_admin': 'Администратор',

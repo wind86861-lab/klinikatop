@@ -42,7 +42,7 @@ filesRouter.post('/', (req, res) => {
  * yoki moderator. Boshqa hech kim.
  */
 filesRouter.get('/:id', (req, res) => {
-  const isModerator = req.user!.roles.some((r) => r === 'moderator' || r === 'admin');
+  const isModerator = req.user!.roles.some((r) => r === 'admin');
   const file = assertFileAccess(req.params.id, req.user!.id, req.user!.clinicId, isModerator);
   const buffer = readFile(file.storagePath);
 

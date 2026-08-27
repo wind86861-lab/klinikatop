@@ -639,6 +639,7 @@ export function Team() {
    * o'rnatish havolasi beriladi. Havola bir marta ko'rsatiladi.
    */
   const [adding, setAdding] = useState(false);
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<OperatorRole>('clinic_operator');
@@ -648,9 +649,15 @@ export function Team() {
   const addOperator = async () => {
     setBusy(true);
     try {
-      const created = await clinicApi.addOperator({ email: email.trim(), fullName: fullName.trim(), role });
+      const created = await clinicApi.addOperator({
+        phone: phone.trim(),
+        email: email.trim() || null,
+        fullName: fullName.trim(),
+        role,
+      });
       haptic.success();
       setAdding(false);
+      setPhone('');
       setEmail('');
       setFullName('');
       setIssued(`${window.location.origin}/kabinet/parol?token=${created.setupToken}`);
@@ -755,7 +762,17 @@ export function Team() {
           <Field label={t('team.fullName')}>
             <Input value={fullName} maxLength={160} onChange={(e) => setFullName(e.target.value)} />
           </Field>
-          <Field label="Email" hint={t('team.emailHint')}>
+          <Field label={t('team.phone')} hint={t('team.phoneHint')}>
+            <Input
+              type="tel"
+              inputMode="tel"
+              placeholder="+998 __ ___ __ __"
+              value={phone}
+              maxLength={32}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </Field>
+          <Field label="Email · ixtiyoriy">
             <Input type="email" value={email} maxLength={160} onChange={(e) => setEmail(e.target.value)} />
           </Field>
           <Segment
@@ -769,7 +786,7 @@ export function Team() {
           <Button
             block
             loading={busy}
-            disabled={fullName.trim().length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())}
+            disabled={fullName.trim().length < 2 || phone.replace(/\D/g, '').length < 9}
             onClick={addOperator}
           >
             {t('team.invite')}

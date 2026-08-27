@@ -11,10 +11,13 @@
  *   • bir IP dan ketma-ket ariza cheklanadi
  *   • bir xil litsenziya raqami bilan takroriy ariza rad etiladi
  *
- * Tasdiqlangach klinika yaratiladi va unga VEB HISOB ochiladi. Moderator
- * klinikaga bir martalik havola yuboradi, klinika o'sha havolada o'z parolini
- * qo'yadi va kabinetga brauzerdan kiradi. Telegram bu yerda umuman
- * qatnashmaydi — u keyinroq, faqat xabarnoma olish uchun ulanadi.
+ * Tasdiqlangach klinika yaratiladi va unga VEB HISOB ochiladi. Hisobning
+ * identifikatori — arizadagi TELEFON RAQAMI: uni moderator qo'ng'iroq
+ * qilib tekshirgan.
+ *
+ * Klinika ikki yo'l bilan kiradi va ikkalasi ham shu raqamga tayanadi:
+ *   • botga /start bosadi, raqamini yuboradi — bot uni tanib oladi
+ *   • yoki brauzerda raqam va parol bilan kiradi
  */
 import { db } from '../db';
 import { badRequest, conflict, notFound } from '../lib/errors';
@@ -196,7 +199,7 @@ export function getApplication(id: number): ClinicApplication {
 export function approveApplication(id: number, moderatorId: number): ClinicApplication {
   const app = getApplication(id);
   if (app.status !== 'pending') throw conflict('already_reviewed', 'Ariza allaqachon ko‘rib chiqilgan');
-  if (!app.contactEmail) throw badRequest('no_email', 'Arizada email yo‘q — hisob ochib bo‘lmaydi');
+  if (!app.contactPhone) throw badRequest('no_phone', 'Arizada telefon yo‘q — hisob ochib bo‘lmaydi');
 
   db.transaction(() => {
     const info = db
@@ -212,8 +215,14 @@ export function approveApplication(id: number, moderatorId: number): ClinicAppli
     );
     for (const opId of app.operationIds) insOp.run(clinicId, opId);
 
+    /*
+     * Hisob ARIZADAGI RAQAM bilan ochiladi — o'sha raqamga moderator
+     * qo'ng'iroq qilib tekshirgan. Klinika shu raqam bilan kiradi va
+     * shu raqam Telegram bilan bog'lanish nuqtasi bo'ladi.
+     */
     const { setupToken } = createAccount({
-      email: app.contactEmail!,
+      phone: app.contactPhone,
+      email: app.contactEmail,
       fullName: app.contactName,
       level: 'clinic_admin',
       clinicId,

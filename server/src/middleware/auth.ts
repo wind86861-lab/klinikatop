@@ -13,7 +13,7 @@ declare global {
     interface Request {
       user?: User;
       /** Veb sessiya orqali kirilganda — klinika va admin uchun */
-      web?: { id: number; email: string; level: string; mfaPassed: boolean };
+      web?: { id: number; phone: string; level: string; mfaPassed: boolean };
     }
   }
 }
@@ -79,7 +79,7 @@ export function resolveWebUser(req: Request): { user: User; web: NonNullable<Req
     user: person,
     web: {
       id: session.user.id,
-      email: session.user.email,
+      phone: session.user.phone,
       level: session.user.level,
       mfaPassed: session.mfaPassed,
     },

@@ -459,7 +459,7 @@ export const clinicApi = {
   /* Jamoa */
   operators: () => get<{ operators: ClinicOperator[] }>('/clinic/operators'),
   /** Xodimga ish hisobi ochish — javobda parol o'rnatish tokeni bir marta keladi. */
-  addOperator: (body: { email: string; fullName: string; role: OperatorRole }) =>
+  addOperator: (body: { phone: string; email: string | null; fullName: string; role: OperatorRole }) =>
     post<{ setupToken: string }>('/clinic/operators', body),
   setOperatorRole: (userId: number, role: OperatorRole) =>
     patch<{ operators: ClinicOperator[] }>(`/clinic/operators/${userId}`, { role }),

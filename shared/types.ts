@@ -5,7 +5,7 @@
 
 /* ─────────────────────────  Rollar  ───────────────────────── */
 
-export const ROLES = ['patient', 'clinic_admin', 'clinic_operator', 'moderator', 'admin'] as const;
+export const ROLES = ['patient', 'clinic_admin', 'clinic_operator', 'admin'] as const;
 export type Role = (typeof ROLES)[number];
 
 export type Lang = 'uz' | 'ru';

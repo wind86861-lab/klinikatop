@@ -11,12 +11,14 @@
  *   /kabinet        — kirish
  *   /kabinet/parol  — birinchi kirishda parol o'rnatish
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { ErrorState, Screen, Toaster } from '@/ui';
 import { webToken } from '@/lib/session';
+import { tg } from '@/lib/telegram';
+import { TelegramGate } from '@/screens/web/TelegramGate';
 import { ClinicSignup } from '@/screens/ClinicSignup';
 import { CabinetLogin } from '@/screens/web/CabinetLogin';
 import { SetPassword } from '@/screens/web/SetPassword';
@@ -33,7 +35,7 @@ import { RequireRole } from '@/components/RequireRole';
 import type { Role } from '@shared/types';
 
 const CLINIC_ROLES: Role[] = ['clinic_admin', 'clinic_operator', 'admin'];
-const ADMIN_ROLES: Role[] = ['moderator', 'admin'];
+const ADMIN_ROLES: Role[] = ['admin'];
 
 export function WebApp() {
   const { ready, error, user, toasts, dismissToast, bootstrap, t } = useApp();
@@ -43,23 +45,39 @@ export function WebApp() {
 
   /** Kirish talab qilmaydigan sahifalar */
   const open = path === '/klinika' || path.startsWith('/kabinet');
-  const hasToken = webToken() !== null;
+
+  /*
+   * Token localStorage'da, lekin uni holatda ham ushlaymiz: Telegram
+   * ko'prigi uni ish paytida yozadi va React qayta chizishi kerak.
+   */
+  const [token, setToken] = useState<string | null>(() => webToken());
+
+  /*
+   * Telegram ichida ochilganda parol so'ralmaydi: bot tugmasi orqali
+   * kelgan klinika egasining raqamini Telegram allaqachon tasdiqlagan.
+   * Brauzerda esa `tg.initData` bo'lmaydi va oddiy kirish ishlaydi.
+   */
+  const insideTelegram = Boolean(tg?.initData);
 
   useEffect(() => {
-    if (!open && hasToken) void bootstrap();
-  }, [open, hasToken, bootstrap]);
+    if (!open && token) void bootstrap();
+  }, [open, token, bootstrap]);
 
-  // Sessiya tugagan yoki hech qachon bo'lmagan — kirish sahifasiga
+  // Brauzerda sessiya yo'q bo'lsa kirish sahifasiga
   useEffect(() => {
-    if (!open && !hasToken) navigate('/kabinet', { replace: true });
-  }, [open, hasToken, navigate]);
+    if (!open && !token && !insideTelegram) navigate('/kabinet', { replace: true });
+  }, [open, token, insideTelegram, navigate]);
 
   if (path === '/klinika') return <ClinicSignup />;
   if (path === '/kabinet/parol') return <SetPassword />;
   if (path.startsWith('/kabinet')) return <CabinetLogin />;
 
-  if (!hasToken) return <Splash />;
-  if (!ready) return <Splash />;
+  // Telegram ichidamiz va sessiya hali yo'q — raqam bo'yicha kiramiz
+  if (!token && insideTelegram) {
+    return <TelegramGate onReady={() => setToken(webToken())} />;
+  }
+
+  if (!token || !ready) return <Splash />;
 
   if (error || !user) {
     return (

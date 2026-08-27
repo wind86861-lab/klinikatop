@@ -31,7 +31,7 @@ async function post(path: string, body: unknown, token?: string) {
 
 export function CabinetLogin() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   /** Parol to'g'ri kelgan, lekin 2FA kutilyapti */
@@ -41,14 +41,14 @@ export function CabinetLogin() {
 
   const enter = (token: string, level: string) => {
     setWebToken(token);
-    navigate(level === 'full' || level === 'moderator' ? '/admin' : '/clinic', { replace: true });
+    navigate(level === 'full' ? '/admin' : '/clinic', { replace: true });
   };
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
-      const res = await post('/login', { email: email.trim(), password });
+      const res = await post('/login', { login: login.trim(), password });
       if (res.mfaRequired) setPending(res.token);
       else enter(res.token, res.user.level);
     } catch (err: any) {
@@ -88,21 +88,23 @@ export function CabinetLogin() {
         {pending === null ? (
           <>
             <h1 className="wa__title">Kabinetga kirish</h1>
-            <p className="wa__sub">Klinika va moderator hisoblari uchun</p>
+            <p className="wa__sub">Klinika va administrator hisoblari uchun</p>
 
             <form
               className="wa__form"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (email.trim() && password) void submit();
+                if (login.trim() && password) void submit();
               }}
             >
-              <Field label="Email">
+              <Field label="Telefon raqami" hint="Ariza qoldirgan raqamingiz">
                 <Input
-                  type="email"
+                  type="tel"
+                  inputMode="tel"
                   autoComplete="username"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="+998 __ ___ __ __"
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
                 />
               </Field>
 
@@ -117,7 +119,7 @@ export function CabinetLogin() {
 
               {error && <Notice tone="danger">{error}</Notice>}
 
-              <Button block type="submit" loading={busy} disabled={!email.trim() || !password}>
+              <Button block type="submit" loading={busy} disabled={!login.trim() || !password}>
                 Kirish
               </Button>
             </form>

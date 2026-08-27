@@ -681,6 +681,111 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    /**
+     * Kirish identifikatori: email emas, TELEFON RAQAMI.
+     *
+     * Sabab amaliy. O'zbekistonda klinika egasi elektron pochtadan
+     * kamdan-kam foydalanadi, telefon esa hammada bor va u allaqachon
+     * ariza jarayonida moderator tomonidan tekshirilgan — moderator
+     * o'sha raqamga qo'ng'iroq qilib gaplashadi.
+     *
+     * Bundan tashqari telefon Telegram bilan bog'lanish nuqtasi
+     * bo'ladi: bot kontakt so'raganda Telegram raqamning egasini o'zi
+     * tasdiqlaydi, ya'ni bizga alohida SMS tekshiruvi kerak emas.
+     *
+     * Email qoladi, lekin ixtiyoriy: xabar yuborish uchun asqotadi.
+     *
+     * Shu bilan birga `moderator` darajasi olib tashlanadi. Amalda
+     * ikki darajali admin kerak emas edi: super admin yetarli, ikkinchi
+     * daraja esa faqat chalkashlik va qo'shimcha tekshiruv joyi
+     * bo'lardi.
+     */
+    id: '014_phone_login',
+    up: (db) => {
+      const cols = (db.prepare(`PRAGMA table_info(admin_users)`).all() as { name: string }[]).map(
+        (c) => c.name,
+      );
+
+      if (!cols.includes('phone')) {
+        db.exec(`ALTER TABLE admin_users ADD COLUMN phone TEXT`);
+      }
+
+      const current = db
+        .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'admin_users'`)
+        .get() as { sql: string } | undefined;
+
+      // `email` NOT NULL bo'lsa yoki `moderator` darajasi qolgan bo'lsa qayta quramiz
+      const needsRebuild =
+        Boolean(current?.sql.includes("'moderator'")) || Boolean(current?.sql.match(/email\s+TEXT NOT NULL/));
+
+      if (needsRebuild) {
+        db.exec(`
+          CREATE TABLE admin_users_new (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            -- Kirish identifikatori
+            phone          TEXT NOT NULL UNIQUE,
+            -- Ixtiyoriy: xabar yuborish uchun
+            email          TEXT UNIQUE,
+            full_name      TEXT NOT NULL,
+            password_salt  TEXT NOT NULL,
+            password_hash  TEXT NOT NULL,
+            level          TEXT NOT NULL DEFAULT 'clinic_admin'
+                           CHECK (level IN ('full','clinic_admin','clinic_operator')),
+            clinic_id      INTEGER REFERENCES clinics(id) ON DELETE CASCADE,
+            totp_secret    TEXT,
+            totp_enabled   INTEGER NOT NULL DEFAULT 0,
+            disabled_at    TEXT,
+            last_login_at  TEXT,
+            failed_count   INTEGER NOT NULL DEFAULT 0,
+            locked_until   TEXT,
+            setup_token    TEXT,
+            setup_expires  TEXT,
+            created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+
+          /*
+           * Raqami yo'q eski hisoblar uchun vaqtinchalik qiymat
+           * qo'yiladi: ustun NOT NULL va UNIQUE. Bunday hisob bilan
+           * kirib bo'lmaydi — egasi raqamini biriktirgach tuzatiladi.
+           */
+          INSERT INTO admin_users_new
+            (id, phone, email, full_name, password_salt, password_hash, level, clinic_id,
+             totp_secret, totp_enabled, disabled_at, last_login_at, failed_count,
+             locked_until, setup_token, setup_expires, created_at)
+          SELECT id,
+                 COALESCE(NULLIF(phone, ''), 'migratsiya:' || id),
+                 email,
+                 full_name, password_salt, password_hash,
+                 CASE level WHEN 'moderator' THEN 'full' ELSE level END,
+                 clinic_id,
+                 totp_secret, totp_enabled, disabled_at, last_login_at, failed_count,
+                 locked_until, setup_token, setup_expires, created_at
+            FROM admin_users;
+
+          DROP TABLE admin_users;
+          ALTER TABLE admin_users_new RENAME TO admin_users;
+
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_users_setup
+            ON admin_users(setup_token) WHERE setup_token IS NOT NULL;
+          CREATE INDEX IF NOT EXISTS idx_admin_users_clinic ON admin_users(clinic_id);
+        `);
+      }
+
+      /*
+       * Platforma rollarida ham `moderator` qolmaydi: u bo'lgan
+       * hisoblar `admin` bo'ladi. Ikki xil admin darajasi amalda
+       * kerak emas edi.
+       */
+      db.exec(`
+        UPDATE users
+           SET roles = REPLACE(roles, '"moderator"', '"admin"')
+         WHERE roles LIKE '%moderator%';
+      `);
+      // REPLACE ikki xil rol qolgan bo'lsa takror yasashi mumkin
+      db.exec(`UPDATE users SET roles = '["admin"]' WHERE roles = '["admin","admin"]'`);
+    },
+  },
 ];
 
 /**

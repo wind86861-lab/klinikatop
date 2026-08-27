@@ -3114,3 +3114,323 @@
 }
 .sync-tag.is-add { background: var(--primary-soft); color: var(--primary); }
 .sync-tag.is-update { background: var(--accent-pale); color: var(--accent-ink); }
+
+/* ══════════════════  Super-admin ish joyi  ══════════════════
+
+   Panel FAQAT YORUG' rejimda ishlaydi. Bu qaror, kamchilik emas:
+   admin uzoq vaqt jadval va raqamlarga qaraydi, qorong'i fonda esa
+   ular bir-biriga qo'shilib ketadi va xato o'qish oson bo'lib qoladi.
+   Rejim tanlovi bemor ilovasida qoladi.
+
+   Shuning uchun bu yerda tokenlar QAYTA e'lon qilinadi: `.admin` ichida
+   ular tashqi rejimga qaramaydi. Neytral ranglar biroz ko'k tomonga
+   og'gan — ish joyi bemor ilovasining iliq yashilidan ajralib tursin.
+                                                                        */
+.admin {
+  /* Yorug' palitra — tashqi rejimdan qat'i nazar */
+  --bg: #eef1f5;
+  --bg-elevated: #f7f9fb;
+  --card: #ffffff;
+  --ink: #10161d;
+  --body: #4a5560;
+  --muted: #808d9a;
+  --line: rgba(16, 22, 29, 0.09);
+  --primary: #0e766b;
+  --primary-soft: #dcedea;
+  --accent-pale: #fbebd4;
+  --accent-ink: #7a4a12;
+  --glass: rgba(255, 255, 255, 0.8);
+  --shadow: 0 1px 2px rgba(16, 22, 29, 0.06), 0 8px 24px rgba(16, 22, 29, 0.05);
+
+  display: flex;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--body);
+  line-height: 1.5;
+  color-scheme: light;
+}
+
+.admin--bare {
+  display: grid;
+  place-items: center;
+  padding: var(--s-6);
+}
+
+/* ── Yon panel ── */
+.admin__side {
+  flex: none;
+  width: 232px;
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border-right: 1px solid var(--line);
+  padding: var(--s-6) var(--s-3) var(--s-4);
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+}
+
+.admin__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 var(--s-3) var(--s-6);
+}
+.admin__mark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--t-lg);
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+.admin__role {
+  font-size: var(--t-xs);
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.admin__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.admin__navItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  font-size: var(--t-sm);
+  color: var(--body);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--d-micro) var(--ease);
+}
+.admin__navItem:hover { color: var(--ink); }
+.admin__navItem.is-active { color: var(--primary); font-weight: 600; }
+
+/* Tanlangan bo'lim fonini `layoutId` siljitadi — sakrash o'rniga oqim */
+.admin__navMark {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-sm);
+  background: var(--primary-soft);
+  z-index: 0;
+}
+.admin__navLabel { position: relative; z-index: 1; flex: 1; }
+
+.admin__navBadge {
+  position: relative;
+  z-index: 1;
+  min-width: 20px;
+  padding: 1px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--accent-pale);
+  color: var(--accent-ink);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin__foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-4) var(--s-3) 0;
+  border-top: 1px solid var(--line);
+  margin-top: var(--s-4);
+}
+.admin__who { font-size: var(--t-sm); color: var(--ink); }
+.admin__logout {
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--t-xs);
+  color: var(--muted);
+  cursor: pointer;
+}
+.admin__logout:hover { color: var(--danger); }
+
+/* ── Asosiy maydon ── */
+.admin__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin__top {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  height: 64px;
+  padding: 0 var(--s-6);
+  border-bottom: 1px solid var(--line);
+  background: var(--glass);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.admin__title {
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0;
+}
+
+.admin__burger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  cursor: pointer;
+}
+.admin__burger span {
+  display: block;
+  height: 1.5px;
+  background: var(--ink);
+  border-radius: 2px;
+}
+
+.admin__body {
+  flex: 1;
+  padding: var(--s-6);
+  overflow-x: hidden;
+}
+.admin__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  max-width: 860px;
+}
+
+.admin__scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  border: 0;
+  background: rgba(16, 22, 29, 0.35);
+}
+
+/* ── Ko'rsatkich ── */
+.admin__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-4);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.admin__statLabel {
+  font-size: var(--t-xs);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.admin__statValue {
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.admin__statHint { font-size: var(--t-xs); color: var(--muted); }
+.admin__stat.is-good .admin__statValue { color: var(--success); }
+.admin__stat.is-warn .admin__statValue { color: var(--accent-ink); }
+.admin__stat.is-bad .admin__statValue { color: var(--danger); }
+
+/* Tor ekran: yon panel ustiga chiqadi */
+@media (max-width: 860px) {
+  .admin__side {
+    position: fixed;
+    z-index: 9;
+    transform: translateX(-100%);
+    transition: transform var(--d-base) var(--ease);
+    box-shadow: var(--shadow-lg);
+  }
+  .admin__side.is-open { transform: none; }
+  .admin__burger { display: flex; }
+  .admin__scrim { display: block; }
+  .admin__body { padding: var(--s-4); }
+  .admin__top { padding: 0 var(--s-4); }
+}
+
+/* ══════════════════  Telegram ichidan kirish  ══════════════════ */
+
+.tg-gate {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--s-6) var(--s-4);
+  background: var(--bg);
+  color: var(--body);
+  line-height: 1.55;
+}
+.tg-gate__box {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: var(--s-6);
+}
+.tg-gate__mark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--t-sm);
+  color: var(--primary);
+  letter-spacing: -0.02em;
+}
+.tg-gate__title {
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--ink);
+  margin: 0;
+  text-wrap: balance;
+}
+.tg-gate__text { font-size: var(--t-sm); margin: 0; }
+.tg-gate__dots { font-size: var(--t-sm); color: var(--muted); }
+
+/* Holat belgisi — ranglar ma'noni bildiradi, bezak emas */
+.tg-gate__badge {
+  align-self: flex-start;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  padding: 3px var(--s-3);
+  border-radius: var(--r-pill);
+}
+.tg-gate__badge.is-wait { background: var(--accent-pale); color: var(--accent-ink); }
+.tg-gate__badge.is-ok { background: var(--primary-soft); color: var(--primary); }
+.tg-gate__badge.is-no { background: rgba(229, 83, 60, 0.12); color: var(--danger); }

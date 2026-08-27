@@ -19,9 +19,15 @@ import './styles/components.css';
  */
 const cabinet = isCabinetPath(window.location.pathname);
 
-// Telegram SDK faqat bemor ilovasiga kerak. Brauzerda uni yuklash
-// keraksiz va `window.Telegram` yo'qligi haqida ogohlantirish beradi.
-if (!cabinet) initTelegram();
+/*
+ * Telegram SDK har ikkala ildizga ham kerak.
+ *
+ * Bemor ilovasi u orqali ishlaydi, kabinet esa undan bitta narsa
+ * oladi: klinika egasi botdagi tugmani bosib kirganda `initData`
+ * bo'ladi va parol so'ralmaydi. Brauzerda `window.Telegram` yo'q —
+ * SDK jim qoladi va oddiy kirish ishlaydi.
+ */
+initTelegram();
 
 restoreTheme();
 

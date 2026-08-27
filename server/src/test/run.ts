@@ -99,7 +99,7 @@ async function main() {
   const patient = upsertUser({ id: 900001, first_name: 'Aziz', language_code: 'uz' });
   const clinicUser = upsertUser({ id: 900002, first_name: 'Klinika', language_code: 'uz' });
   const moderator = upsertUser({ id: 900003, first_name: 'Moderator' });
-  db.prepare(`UPDATE users SET roles = ? WHERE id = ?`).run(toJson(['moderator']), moderator.id);
+  db.prepare(`UPDATE users SET roles = ? WHERE id = ?`).run(toJson(['admin']), moderator.id);
 
   section('3b. Bemor profili va ommaviy oferta');
   throws(
@@ -750,13 +750,25 @@ async function main() {
 
   const webAuth = require('../services/webAuth');
 
+  /*
+   * Kirish identifikatori — TELEFON. Raqam turli shaklda kelishi
+   * mumkin va hammasi bitta hisobga olib borishi kerak, aks holda bir
+   * odam ikki hisob yasab, nima uchun kira olmayotganini tushunmasdi.
+   */
+  check('xalqaro shakl', webAuth.normalizePhone('+998 90 123 45 67') === '998901234567');
+  check('mahalliy 9 xonali', webAuth.normalizePhone('901234567') === '998901234567');
+  check('eski 8 bilan', webAuth.normalizePhone('8901234567') === '998901234567');
+  check('qavs va chiziqcha', webAuth.normalizePhone('(90) 123-45-67') === '998901234567');
+
   const acc = webAuth.createAccount({
+    phone: '+998 90 111 22 33',
     email: 'Sinov@Klinika.LOCAL',
     fullName: 'Sinov Egasi',
     level: 'clinic_admin',
     clinicId: clinic.id,
   });
 
+  check('raqam bir shaklga keltirildi', acc.user.phone === '998901112233', acc.user.phone);
   check('email kichik harfga keltirildi', acc.user.email === 'sinov@klinika.local', acc.user.email);
   check('sozlash tokeni berildi', typeof acc.setupToken === 'string' && acc.setupToken.length > 20);
 
@@ -773,7 +785,7 @@ async function main() {
   // Bemor roli bu qatorga tegmaydi
   check('bemor roli berilmadi', !person.roles.includes('patient'), person?.roles);
 
-  throws('parol o‘rnatmasdan kirib bo‘lmaydi', () => webAuth.login('sinov@klinika.local', 'nimadir'));
+  throws('parol o‘rnatmasdan kirib bo‘lmaydi', () => webAuth.login('998901112233', 'nimadir'));
   throws('qisqa parol rad etiladi', () => webAuth.completeSetup(acc.setupToken, 'qisqa'), 'weak_password');
   throws(
     'faqat raqamdan iborat parol rad etiladi',
@@ -784,7 +796,8 @@ async function main() {
   webAuth.completeSetup(acc.setupToken, 'yaxshi-parol-2026');
   throws('sozlash havolasi bir martalik', () => webAuth.completeSetup(acc.setupToken, 'boshqa-parol-2026'));
 
-  const session = webAuth.login('sinov@klinika.local', 'yaxshi-parol-2026', '1.2.3.4', 'test');
+  // Raqam qanday yozilishidan qat'i nazar bir xil hisobga tushadi
+  const session = webAuth.login('+998 90 111 22 33', 'yaxshi-parol-2026', '1.2.3.4', 'test');
   check('kirish muvaffaqiyatli', typeof session.token === 'string');
   check('2FA yoqilmagan — sessiya darhol to‘liq', session.mfaRequired === false);
 
@@ -799,31 +812,42 @@ async function main() {
   // Ketma-ket xato urinishlar hisobni qulflaydi
   for (let i = 0; i < 5; i++) {
     try {
-      webAuth.login('sinov@klinika.local', 'notogri-parol');
+      webAuth.login('998901112233', 'notogri-parol');
     } catch {
       /* kutilgan */
     }
   }
-  throws('5 xatodan keyin hisob qulflandi', () => webAuth.login('sinov@klinika.local', 'yaxshi-parol-2026'));
+  throws('5 xatodan keyin hisob qulflandi', () => webAuth.login('998901112233', 'yaxshi-parol-2026'));
 
   throws(
-    'bir email ikki marta ishlatilmaydi',
-    () => webAuth.createAccount({ email: 'sinov@klinika.local', fullName: 'X', level: 'clinic_admin', clinicId: clinic.id }),
-    'email_taken',
+    'bir raqam ikki marta ishlatilmaydi',
+    () =>
+      webAuth.createAccount({
+        phone: '998901112233',
+        fullName: 'X',
+        level: 'clinic_admin',
+        clinicId: clinic.id,
+      }),
+    'phone_taken',
   );
   throws(
     'klinikasiz klinika roli bo‘lmaydi',
-    () => webAuth.createAccount({ email: 'x@y.local', fullName: 'X', level: 'clinic_operator', clinicId: null }),
+    () => webAuth.createAccount({ phone: '998900000009', fullName: 'X', level: 'clinic_operator', clinicId: null }),
     'clinic_required',
   );
   throws(
     'admin hisobi klinikaga bog‘lanmaydi',
-    () => webAuth.createAccount({ email: 'x@y.local', fullName: 'X', level: 'full', clinicId: clinic.id }),
+    () => webAuth.createAccount({ phone: '998900000008', fullName: 'X', level: 'full', clinicId: clinic.id }),
     'clinic_not_allowed',
   );
 
   // `full` daraja platformada `admin` roli bilan ish ko'radi
-  const adminAcc = webAuth.createAccount({ email: 'bosh@klinikatop.uz', fullName: 'Bosh Admin', level: 'full', clinicId: null });
+  const adminAcc = webAuth.createAccount({
+    phone: '998900000001',
+    fullName: 'Bosh Admin',
+    level: 'full',
+    clinicId: null,
+  });
   check('full daraja admin roliga aylandi', webAuth.personFor(adminAcc.user.id).roles.includes('admin'));
 
   /* ── 2FA ── */
@@ -840,7 +864,7 @@ async function main() {
 
   // 2FA yoqilgach parol YETARLI EMAS: sessiya to'liq bo'lmaydi
   webAuth.completeSetup(adminAcc.setupToken, 'admin-paroli-2026');
-  const adminSession = webAuth.login('bosh@klinikatop.uz', 'admin-paroli-2026');
+  const adminSession = webAuth.login('998900000001', 'admin-paroli-2026');
   check('2FA yoqilgach kod talab qilinadi', adminSession.mfaRequired === true);
   check('sessiya hali to‘liq emas', webAuth.resolveSession(adminSession.token).mfaPassed === false);
 
@@ -1049,6 +1073,84 @@ async function main() {
     listed.some((c: any) => c.id === catId),
     listed.map((c: any) => c.id),
   );
+
+
+  /* ═════ 16. Telefon bo'yicha tanish (bot va Mini App) ═════ */
+  console.log('\n16. Telefon bo‘yicha tanish');
+
+  const identity = require('../services/clinicIdentity');
+
+  check('notanish raqam — hech narsa yo‘q', identity.clinicStandingByPhone('998900099009').kind === 'none');
+  check('buzuq raqam ham xato bermaydi', identity.clinicStandingByPhone('abc').kind === 'none');
+
+  /*
+   * Ariza bosqichi: hisob hali yo'q, lekin odam holatini bilishi kerak.
+   * Ilgari u moderatordan qo'ng'iroq kutib o'tirardi.
+   */
+  const appId = db
+    .prepare(
+      `INSERT INTO clinic_applications
+         (name, city_id, address, about, license_no, contact_name, contact_phone, contact_email, operation_ids, status)
+       VALUES ('Ariza Klinikasi', ?, 'Toshkent', '', 'LIC-ID-1', 'Aziz', '+998 90 555 44 33', NULL, '[1]', 'pending')`,
+    )
+    .run(clinic.cityId).lastInsertRowid;
+
+  let standing = identity.clinicStandingByPhone('998905554433');
+  check('ariza holati topildi', standing.kind === 'pending', standing.kind);
+  check('ariza raqami qaytdi', standing.applicationId === appId, standing);
+
+  // Raqam boshqa shaklda yozilgan bo'lsa ham topilishi kerak
+  check('mahalliy shaklda ham topildi', identity.clinicStandingByPhone('905554433').kind === 'pending');
+
+  db.prepare("UPDATE clinic_applications SET status = 'rejected', note = 'Litsenziya eskirgan' WHERE id = ?").run(appId);
+  standing = identity.clinicStandingByPhone('998905554433');
+  check('rad etilgani ko‘rinadi', standing.kind === 'rejected', standing.kind);
+  check('rad sababi ham qaytadi', standing.note === 'Litsenziya eskirgan', standing.note);
+
+  /* ── Hisob ochilgach ── */
+  const idAcc = webAuth.createAccount({
+    phone: '998905554433',
+    fullName: 'Aziz',
+    level: 'clinic_admin',
+    clinicId: clinic.id,
+  });
+
+  standing = identity.clinicStandingByPhone('998905554433');
+  check('hisob arizadan ustun turadi', standing.kind === 'needs_password', standing.kind);
+  check('sozlash tokeni berildi', typeof standing.setupToken === 'string' && standing.setupToken.length > 20);
+
+  /*
+   * Parol qo'yilmagan hisobga Telegram orqali ham kirib bo'lmaydi.
+   * Aks holda raqami bo'lgan har kim parolsiz kabinetga tushardi.
+   */
+  check(
+    'parolsiz hisobga Telegram orqali kirib bo‘lmaydi',
+    webAuth.loginByVerifiedPhone('998905554433', null, null) === null,
+  );
+
+  webAuth.completeSetup(idAcc.setupToken, 'klinika-paroli-2026');
+  standing = identity.clinicStandingByPhone('998905554433');
+  check('parol qo‘yilgach tayyor', standing.kind === 'ready', standing.kind);
+
+  /* ── Telegram orqali kirish ── */
+  const tgSession = webAuth.loginByVerifiedPhone('+998 90 555 44 33', '1.2.3.4', 'telegram');
+  check('tasdiqlangan raqam bilan sessiya ochildi', Boolean(tgSession?.token));
+  const resolved = webAuth.resolveSession(tgSession.token);
+  check('sessiya to‘g‘ri hisobga tegishli', resolved?.user.id === idAcc.user.id, resolved?.user.id);
+  check('2FA yo‘q — sessiya to‘liq', resolved?.mfaPassed === true);
+
+  check(
+    'notanish raqam bilan sessiya ochilmaydi',
+    webAuth.loginByVerifiedPhone('998900099009', null, null) === null,
+  );
+
+  // O'chirilgan hisob Telegram orqali ham kira olmaydi
+  db.prepare("UPDATE admin_users SET disabled_at = datetime('now') WHERE id = ?").run(idAcc.user.id);
+  check(
+    'o‘chirilgan hisob kira olmaydi',
+    webAuth.loginByVerifiedPhone('998905554433', null, null) === null,
+  );
+  db.prepare('UPDATE admin_users SET disabled_at = NULL WHERE id = ?').run(idAcc.user.id);
 
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);

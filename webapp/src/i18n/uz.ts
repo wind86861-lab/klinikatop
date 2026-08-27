@@ -689,6 +689,8 @@ export const uz = {
   'rv.alreadyReplied': 'Bu sharhga javob berilgan',
   'team.fullName': 'To‘liq ism',
   'team.emailHint': 'Xodim shu email bilan kabinetga kiradi',
+  'team.phone': 'Telefon raqami',
+  'team.phoneHint': 'Xodim shu raqam bilan kabinetga kiradi',
   'team.title': 'Jamoa',
   'team.sub': 'Kim klinika nomidan ishlay oladi',
   'team.role.clinic_admin': 'Administrator',

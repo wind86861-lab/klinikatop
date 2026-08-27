@@ -13,17 +13,17 @@ import { completeSetup, createAccount, login } from '../services/webAuth';
 
 const PASSWORD = 'sinov-paroli-2026';
 
-function provision(email: string, fullName: string, level: 'full' | 'clinic_admin', clinicId: number | null) {
+function provision(phone: string, fullName: string, level: 'full' | 'clinic_admin', clinicId: number | null) {
   // Qayta ishga tushirishga chidamli bo'lishi uchun eskisini olib tashlaymiz
-  const old = db.prepare(`SELECT id FROM admin_users WHERE email = ?`).get(email) as { id: number } | undefined;
+  const old = db.prepare(`SELECT id FROM admin_users WHERE phone = ?`).get(phone) as { id: number } | undefined;
   if (old) {
     db.prepare(`DELETE FROM users WHERE telegram_id = ?`).run(-old.id);
     db.prepare(`DELETE FROM admin_users WHERE id = ?`).run(old.id);
   }
 
-  const { setupToken } = createAccount({ email, fullName, level, clinicId });
+  const { setupToken } = createAccount({ phone, fullName, level, clinicId });
   completeSetup(setupToken, PASSWORD);
-  return login(email, PASSWORD, '127.0.0.1', 'test').token;
+  return login(phone, PASSWORD, '127.0.0.1', 'test').token;
 }
 
 /** Test klinikasi — bo'lmasa yaratiladi. */
@@ -47,5 +47,5 @@ function testClinic(): number {
 const clinicId = testClinic();
 
 console.log(`CLINIC_ID ${clinicId}`);
-console.log(`CLINIC_TOKEN ${provision('klinika@test.local', 'Test Klinika', 'clinic_admin', clinicId)}`);
-console.log(`ADMIN_TOKEN ${provision('admin@test.local', 'Test Admin', 'full', null)}`);
+console.log(`CLINIC_TOKEN ${provision('998900000002', 'Test Klinika', 'clinic_admin', clinicId)}`);
+console.log(`ADMIN_TOKEN ${provision('998900000003', 'Test Admin', 'full', null)}`);

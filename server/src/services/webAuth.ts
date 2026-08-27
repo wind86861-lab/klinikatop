@@ -24,7 +24,7 @@ import { badRequest, forbidden, unauthorized } from '../lib/errors';
 import { mapUser } from '../lib/mappers';
 import type { Role, User } from '../../../shared/types';
 
-export type WebLevel = 'full' | 'moderator' | 'clinic_admin' | 'clinic_operator';
+export type WebLevel = 'full' | 'clinic_admin' | 'clinic_operator';
 
 /**
  * Hisob darajasi → platforma roli.
@@ -35,14 +35,35 @@ export type WebLevel = 'full' | 'moderator' | 'clinic_admin' | 'clinic_operator'
  */
 const ROLE_FOR: Record<WebLevel, Role> = {
   full: 'admin',
-  moderator: 'moderator',
   clinic_admin: 'clinic_admin',
   clinic_operator: 'clinic_operator',
 };
 
+/**
+ * Telefon raqamini solishtirish uchun bir shaklga keltiradi.
+ *
+ * Bir odam raqamini turlicha yozadi: `+998 90 123 45 67`,
+ * `998901234567`, `901234567`. Telegram esa o'z shaklida yuboradi.
+ * Solishtirishda faqat raqamlar qoladi va O'zbekiston kodi
+ * to'ldiriladi — aks holda bir xil raqam ikki xil hisob bo'lib
+ * qolardi va odam nima uchun kira olmayotganini tushunmasdi.
+ */
+export function normalizePhone(raw: string): string {
+  let digits = (raw ?? '').replace(/\D/g, '');
+
+  // 9 xonali mahalliy raqam — O'zbekiston kodi qo'shiladi
+  if (digits.length === 9) digits = '998' + digits;
+  // 8 bilan boshlanuvchi eski shakl: 8 90 ... → 998 90 ...
+  else if (digits.length === 10 && digits.startsWith('8')) digits = '998' + digits.slice(1);
+
+  return digits;
+}
+
 export interface WebUser {
   id: number;
-  email: string;
+  /** Kirish identifikatori */
+  phone: string;
+  email: string | null;
   fullName: string;
   level: WebLevel;
   clinicId: number | null;
@@ -55,7 +76,8 @@ const iso = (v: string | null) => (v ? new Date(v.replace(' ', 'T') + 'Z').toISO
 function mapWebUser(row: any): WebUser {
   return {
     id: row.id,
-    email: row.email,
+    phone: row.phone,
+    email: row.email ?? null,
     fullName: row.full_name,
     level: row.level,
     clinicId: row.clinic_id ?? null,
@@ -92,7 +114,10 @@ export function assertPasswordStrong(password: string): void {
 /* ─────────────────────────  Hisob yaratish  ───────────────────────── */
 
 export interface CreateAccountInput {
-  email: string;
+  /** Kirish identifikatori — ariza jarayonida tekshirilgan raqam */
+  phone: string;
+  /** Ixtiyoriy: xabar yuborish uchun */
+  email?: string | null;
   fullName: string;
   level: WebLevel;
   clinicId: number | null;
@@ -106,13 +131,20 @@ export interface CreateAccountInput {
  * yozilmaydi. Buning o'rniga bir martalik sozlash tokeni beriladi.
  */
 export function createAccount(input: CreateAccountInput): { user: WebUser; setupToken: string } {
-  const email = input.email.trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  const phone = normalizePhone(input.phone);
+  if (phone.length < 9) throw badRequest('bad_phone', 'Telefon raqami noto‘g‘ri');
+
+  const email = input.email?.trim().toLowerCase() || null;
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     throw badRequest('bad_email', 'Email noto‘g‘ri');
   }
 
-  const exists = db.prepare(`SELECT id FROM admin_users WHERE email = ?`).get(email);
-  if (exists) throw badRequest('email_taken', 'Bu email allaqachon ro‘yxatdan o‘tgan');
+  const exists = db.prepare(`SELECT id FROM admin_users WHERE phone = ?`).get(phone);
+  if (exists) throw badRequest('phone_taken', 'Bu raqam allaqachon ro‘yxatdan o‘tgan');
+
+  if (email && db.prepare(`SELECT id FROM admin_users WHERE email = ?`).get(email)) {
+    throw badRequest('email_taken', 'Bu email allaqachon ro‘yxatdan o‘tgan');
+  }
 
   // Klinika roli klinikasiz bo'lmaydi va aksincha
   const isClinicRole = input.level === 'clinic_admin' || input.level === 'clinic_operator';
@@ -125,10 +157,10 @@ export function createAccount(input: CreateAccountInput): { user: WebUser; setup
   const info = db
     .prepare(
       `INSERT INTO admin_users
-         (email, full_name, password_salt, password_hash, level, clinic_id, setup_token, setup_expires)
-       VALUES (?, ?, '', '', ?, ?, ?, ?)`,
+         (phone, email, full_name, password_salt, password_hash, level, clinic_id, setup_token, setup_expires)
+       VALUES (?, ?, ?, '', '', ?, ?, ?, ?)`,
     )
-    .run(email, input.fullName.trim().slice(0, 160), input.level, input.clinicId, setupToken, expires);
+    .run(phone, email, input.fullName.trim().slice(0, 160), input.level, input.clinicId, setupToken, expires);
 
   const id = Number(info.lastInsertRowid);
 
@@ -192,10 +224,21 @@ export interface LoginResult {
   mfaRequired: boolean;
 }
 
-export function login(email: string, password: string, ip: string | null, userAgent: string | null): LoginResult {
-  const row = db
-    .prepare(`SELECT * FROM admin_users WHERE email = ?`)
-    .get(email.trim().toLowerCase()) as any;
+export function login(
+  phoneOrEmail: string,
+  password: string,
+  ip: string | null,
+  userAgent: string | null,
+): LoginResult {
+  /*
+   * Kirish raqam bo'yicha. Email ham qabul qilinadi: eski hisoblar
+   * unga o'rgangan va uni birdan uzib qo'yish odamni tashqarida
+   * qoldirardi.
+   */
+  const input = (phoneOrEmail ?? '').trim();
+  const row = input.includes('@')
+    ? (db.prepare(`SELECT * FROM admin_users WHERE email = ?`).get(input.toLowerCase()) as any)
+    : (db.prepare(`SELECT * FROM admin_users WHERE phone = ?`).get(normalizePhone(input)) as any);
 
   /*
    * Hisob topilmasa ham parol hisoblanadi.
@@ -204,7 +247,7 @@ export function login(email: string, password: string, ip: string | null, userAg
    */
   if (!row) {
     hashPassword(password, 'dummy-salt-for-constant-time');
-    throw unauthorized('Email yoki parol noto‘g‘ri');
+    throw unauthorized('Raqam yoki parol noto‘g‘ri');
   }
 
   if (row.disabled_at) throw forbidden('Hisob o‘chirilgan');
@@ -227,7 +270,7 @@ export function login(email: string, password: string, ip: string | null, userAg
       lockUntil,
       row.id,
     );
-    throw unauthorized('Email yoki parol noto‘g‘ri');
+    throw unauthorized('Raqam yoki parol noto‘g‘ri');
   }
 
   db.prepare(`UPDATE admin_users SET failed_count = 0, locked_until = NULL, last_login_at = datetime('now') WHERE id = ?`).run(
@@ -246,6 +289,64 @@ export function login(email: string, password: string, ip: string | null, userAg
     `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed)
      VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(tokenHash(token), row.id, ip, userAgent?.slice(0, 300) ?? null, expires, mfaRequired ? 0 : 1);
+
+  return { token, user: mapWebUser(row), mfaRequired };
+}
+
+/**
+ * Telegram orqali kabinetga kirish.
+ *
+ * Parol so'ralmaydi va bu ataylab shunday. Isbot zanjiri:
+ *
+ *   1. Telegram `initData` ni imzolaydi — foydalanuvchi haqiqiy
+ *   2. Uning raqami botga KONTAKT ULASHISH orqali kelgan, ya'ni uni
+ *      Telegram tasdiqlagan (biz `contact.user_id` ni ham tekshiramiz)
+ *   3. O'sha raqam ariza jarayonida moderator tomonidan qo'ng'iroq
+ *      bilan tekshirilgan
+ *
+ * Ya'ni bu SMS bilan kirishga teng, faqat ishonchliroq: raqam
+ * egaligini Telegram kafolatlaydi va kod hech qayerda uzatilmaydi.
+ *
+ * Sessiya qisqaroq: telefon qo'lda qolib ketishi mumkin, brauzerdagi
+ * ish sessiyasi esa odatda o'z kompyuterida.
+ */
+const TELEGRAM_SESSION_HOURS = 12;
+
+export function loginByVerifiedPhone(
+  phone: string,
+  ip: string | null,
+  userAgent: string | null,
+): LoginResult | null {
+  const normalized = normalizePhone(phone);
+  if (normalized.length < 9) return null;
+
+  const row = db
+    .prepare(`SELECT * FROM admin_users WHERE phone = ? AND disabled_at IS NULL`)
+    .get(normalized) as any;
+
+  // Parol qo'yilmagan hisob hali tayyor emas — avval uni sozlash kerak
+  if (!row || !row.password_hash) return null;
+
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expires = new Date(Date.now() + TELEGRAM_SESSION_HOURS * 3600_000)
+    .toISOString()
+    .slice(0, 19)
+    .replace('T', ' ');
+
+  /*
+   * 2FA yoqilgan bo'lsa u BU YERDA HAM talab qilinadi. Telegram
+   * raqamni tasdiqlaydi, lekin ikkinchi bosqichning maqsadi aynan
+   * "bitta narsa o'g'irlansa ham yetarli bo'lmasin" — telefonni
+   * qo'lga kiritgan odam uchun ham shu qoida amal qiladi.
+   */
+  const mfaRequired = row.totp_enabled === 1;
+
+  db.prepare(
+    `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(tokenHash(token), row.id, ip, userAgent?.slice(0, 300) ?? null, expires, mfaRequired ? 0 : 1);
+
+  db.prepare(`UPDATE admin_users SET last_login_at = datetime('now') WHERE id = ?`).run(row.id);
 
   return { token, user: mapWebUser(row), mfaRequired };
 }
@@ -363,8 +464,11 @@ export function startTotpSetup(userId: number, issuer = 'KlinikaTop'): { secret:
   const secret = base32Encode(crypto.randomBytes(20));
   db.prepare(`UPDATE admin_users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?`).run(secret, userId);
 
-  const row = db.prepare(`SELECT email FROM admin_users WHERE id = ?`).get(userId) as { email: string };
-  const label = encodeURIComponent(`${issuer}:${row.email}`);
+  const row = db.prepare(`SELECT phone, email FROM admin_users WHERE id = ?`).get(userId) as {
+    phone: string;
+    email: string | null;
+  };
+  const label = encodeURIComponent(`${issuer}:${row.email ?? row.phone}`);
   return {
     secret,
     otpauth: `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&digits=6&period=30`,

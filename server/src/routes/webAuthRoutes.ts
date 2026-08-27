@@ -18,11 +18,14 @@ import {
   completeSetup,
   confirmTotp,
   login,
+  loginByVerifiedPhone,
   logout,
   passMfa,
   resolveSession,
   startTotpSetup,
 } from '../services/webAuth';
+import { resolveUser } from '../middleware/auth';
+import { clinicStandingByPhone } from '../services/clinicIdentity';
 
 export const webAuthRouter = Router();
 
@@ -33,7 +36,8 @@ const bearer = (req: { header(name: string): string | undefined }) => {
 };
 
 const loginSchema = z.object({
-  email: z.string().trim().email().max(160),
+  /** Telefon raqami. Eski hisoblar uchun email ham qabul qilinadi. */
+  login: z.string().trim().min(4).max(160),
   password: z.string().min(1).max(200),
 });
 
@@ -42,7 +46,7 @@ webAuthRouter.post(
   rateLimit({ name: 'web-login', windowSec: 300, max: 20 }),
   (req, res) => {
     const body = loginSchema.parse(req.body);
-    const result = login(body.email, body.password, req.ip ?? null, req.header('user-agent') ?? null);
+    const result = login(body.login, body.password, req.ip ?? null, req.header('user-agent') ?? null);
     res.json(result);
   },
 );
@@ -64,6 +68,49 @@ webAuthRouter.get('/me', (req, res) => {
     person: person?.user ?? null,
   });
 });
+
+/**
+ * Telegram ichidan kabinetga kirish.
+ *
+ * Mini App `initData` yuboradi; biz undan foydalanuvchini aniqlaymiz,
+ * uning TASDIQLANGAN raqamini olamiz va shu raqamli klinika hisobiga
+ * sessiya beramiz. Parol so'ralmaydi — sabab `loginByVerifiedPhone`
+ * izohida.
+ *
+ * Raqam bo'lmasa yoki unga hisob biriktirilmagan bo'lsa, javobda
+ * ARIZA HOLATI qaytadi: ilova nima ko'rsatishni bilishi kerak —
+ * "arizangiz ko'rilmoqda" yoki "parol qo'ying".
+ */
+webAuthRouter.post(
+  '/telegram',
+  rateLimit({ name: 'web-telegram', windowSec: 60, max: 20 }),
+  (req, res) => {
+    const user = resolveUser(req);
+    if (!user) throw unauthorized('Telegram imzosi yaroqsiz');
+
+    if (!user.phone) {
+      res.json({ standing: { kind: 'no_phone' } });
+      return;
+    }
+
+    const standing = clinicStandingByPhone(user.phone);
+
+    if (standing.kind === 'ready') {
+      const session = loginByVerifiedPhone(
+        user.phone,
+        req.ip ?? null,
+        req.header('user-agent') ?? null,
+      );
+      if (session) {
+        res.json({ standing, ...session });
+        return;
+      }
+    }
+
+    // Kirish hali mumkin emas — ilova holatni ko'rsatadi
+    res.json({ standing });
+  },
+);
 
 /* ── Birinchi kirish: parol o'rnatish ── */
 

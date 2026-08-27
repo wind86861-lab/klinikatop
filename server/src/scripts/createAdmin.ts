@@ -7,20 +7,20 @@
  * yuqori huquqqa ega odam uchun. Internetdan ochiq "birinchi admin"
  * sahifasi qilinmadi — uni birinchi topgan odam egallab olardi.
  *
- *   npm run admin:create -- ali@klinikatop.uz "Ali Valiyev"
+ *   npm run admin:create -- +998901234567 "Ali Valiyev"
  */
 import { createAccount } from '../services/webAuth';
 import { config } from '../lib/config';
 
-const [email, fullName] = process.argv.slice(2);
+const [phone, fullName] = process.argv.slice(2);
 
-if (!email || !fullName) {
-  console.error('Foydalanish: npm run admin:create -- <email> "<To‘liq ism>"');
+if (!phone || !fullName) {
+  console.error('Foydalanish: npm run admin:create -- <telefon> "<To‘liq ism>"');
   process.exit(1);
 }
 
 const { user, setupToken } = createAccount({
-  email,
+  phone,
   fullName,
   level: 'full',
   clinicId: null,
@@ -28,7 +28,7 @@ const { user, setupToken } = createAccount({
 
 const base = config.telegram.webappUrl.replace(/\/$/, '');
 
-console.log(`\n  Hisob ochildi: ${user.email} (#${user.id})\n`);
+console.log(`\n  Hisob ochildi: +${user.phone} (#${user.id})\n`);
 console.log('  Parol o‘rnatish havolasi — 7 kun amal qiladi, bir martalik:\n');
 console.log(`  ${base}/kabinet/parol?token=${setupToken}\n`);
 console.log('  Parolni qo‘ygach 2FA ni yoqing: Panel → Xavfsizlik.\n');

@@ -49,7 +49,7 @@ import { listMessages } from '../services/chat';
 export const adminRouter = Router();
 
 // Moderator — verifikatsiya va nizolar; admin — hammasi
-adminRouter.use(requireRole('moderator', 'admin'));
+adminRouter.use(requireRole('admin'));
 
 adminRouter.get('/metrics', (_req, res) => res.json(getMetrics()));
 
@@ -109,7 +109,7 @@ adminRouter.get('/users', requireRole('admin'), (_req, res) => res.json(listUser
 
 adminRouter.post('/users/:id/roles', requireRole('admin'), (req, res) => {
   const body = z
-    .object({ roles: z.array(z.enum(['patient', 'clinic_admin', 'clinic_operator', 'moderator', 'admin'])).min(1) })
+    .object({ roles: z.array(z.enum(['patient', 'clinic_admin', 'clinic_operator', 'admin'])).min(1) })
     .parse(req.body);
   res.json(setUserRoles(Number(req.params.id), body.roles, req.user!.id));
 });

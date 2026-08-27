@@ -1,7 +1,12 @@
-/** Moderator paneli: ko'rsatkichlar, klinika verifikatsiyasi, nizolarni hal qilish. */
+/**
+ * Super-admin paneli.
+ *
+ * Ilgari ikki daraja bor edi — moderator va admin. Amalda bu faqat
+ * chalkashlik keltirardi: ikkovi bir xil ekranlarni ko'rardi va farqni
+ * eslab qolish uchun sabab yo'q edi. Endi bitta daraja.
+ */
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
 import { formatDate, groupDigits, money } from '@/lib/format';
@@ -21,14 +26,13 @@ import {
   IconShield,
   Input,
   Notice,
-  Screen,
-  Segment,
   Sheet,
   Skeleton,
   SkeletonList,
   Textarea,
 } from '@/ui';
 import { FileThumb } from '@/components/wizard/FileThumb';
+import { AdminShell, type AdminSection } from './AdminShell';
 import { Applications } from './Applications';
 import { CatalogSync } from './CatalogSync';
 import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
@@ -37,8 +41,8 @@ import type { AdminMetrics, ChatMessage, Clinic, ClinicDocument, Deal, DealDetai
 type Tab = 'applications' | 'verifications' | 'clinics' | 'disputes' | 'metrics' | 'catalog' | 'settings';
 
 export function AdminHome() {
-  const { t, lang, toast } = useApp();
-  const navigate = useNavigate();
+  const { t, toast, user } = useApp();
+  const who = user?.firstName ?? 'Administrator';
 
   const [tab, setTab] = useState<Tab>('applications');
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
@@ -100,113 +104,40 @@ export function AdminHome() {
 
   if (error) {
     return (
-      <Screen title={t('admin.title')} onBack={() => navigate('/')}>
+      <div className="admin admin--bare">
         <ErrorState message={error} retryLabel={t('common.retry')} onRetry={load} />
-      </Screen>
+      </div>
     );
   }
 
+  /*
+   * Bo'limlar yon panelda. Tartib ish oqimiga qarab: kunlik ish
+   * yuqorida (arizalar, verifikatsiya, nizolar), sozlash pastda.
+   * Yonidagi raqam — e'tibor talab qiladigan ishlar soni.
+   */
+  const sections: AdminSection[] = [
+    { id: 'applications', label: t('admin.tabApplications'), render: () => <Applications /> },
+    {
+      id: 'verifications',
+      label: t('admin.verifications'),
+      badge: pending?.length,
+      render: () => <VerificationList pending={pending} onDecide={decide} onReject={setRejecting} />,
+    },
+    {
+      id: 'disputes',
+      label: t('admin.disputes'),
+      badge: disputes?.length,
+      render: () => <DisputeList disputes={disputes} onOpen={openDispute} />,
+    },
+    { id: 'clinics', label: t('admin.tabClinics'), render: () => <AdminClinics /> },
+    { id: 'metrics', label: t('admin.metrics'), render: () => <MetricsPanel metrics={metrics} /> },
+    { id: 'catalog', label: 'Katalog', render: () => <CatalogSync /> },
+    { id: 'settings', label: t('admin.tabSettings'), render: () => <PlatformSettingsScreen /> },
+  ];
+
   return (
-    <Screen title={t('admin.title')} onBack={() => navigate('/')}>
-      <Segment
-        value={tab}
-        onChange={setTab}
-        options={[
-          { value: 'applications', label: t('admin.tabApplications') },
-          { value: 'verifications', label: `${t('admin.verifications')}${pending?.length ? ` (${pending.length})` : ''}` },
-          { value: 'disputes', label: `${t('admin.disputes')}${disputes?.length ? ` (${disputes.length})` : ''}` },
-          { value: 'clinics', label: t('admin.tabClinics') },
-          { value: 'metrics', label: t('admin.metrics') },
-          { value: 'catalog', label: 'Katalog' },
-          { value: 'settings', label: t('admin.tabSettings') },
-        ]}
-      />
-
-      {/* Arizalar — ochiq veb-formadan keladi, moderatorning birinchi filtri */}
-      {tab === 'applications' && <Applications />}
-
-      {tab === 'verifications' &&
-        (pending === null ? (
-          <SkeletonList count={2} />
-        ) : pending.length === 0 ? (
-          <EmptyState icon={<IconShield size={32} />} title={t('admin.noPending')} />
-        ) : (
-          <AnimatedList>
-            {pending.map((clinic) => (
-              <AnimatedItem key={clinic.id}>
-                <Card className="stack">
-                  <div className="between">
-                    <strong>{clinic.name}</strong>
-                    <Badge tone="warning">{t(`ver.status.${clinic.verification}` as any)}</Badge>
-                  </div>
-                  <span className="tiny">{clinic.address}</span>
-                  {clinic.about && <p className="tiny" style={{ color: 'var(--body)' }}>{clinic.about}</p>}
-                  {/* Hujjatlarni ko'rmasdan tasdiqlash — verifikatsiyaning ma'nosini yo'qotadi */}
-                  <ClinicDocuments clinicId={clinic.id} />
-
-                  <div className="row" style={{ gap: 'var(--s-2)' }}>
-                    <Button size="sm" block icon={<IconCheck size={15} />} onClick={() => decide(clinic, 'approved', null)}>
-                      {t('admin.approve')}
-                    </Button>
-                    <Button size="sm" block variant="danger" onClick={() => setRejecting(clinic)}>
-                      {t('admin.reject')}
-                    </Button>
-                  </div>
-                </Card>
-              </AnimatedItem>
-            ))}
-          </AnimatedList>
-        ))}
-
-      {tab === 'disputes' &&
-        (disputes === null ? (
-          <SkeletonList count={2} />
-        ) : disputes.length === 0 ? (
-          <EmptyState icon={<IconShield size={32} />} title={t('admin.noDisputes')} />
-        ) : (
-          <AnimatedList>
-            {disputes.map((deal) => (
-              <AnimatedItem key={deal.id}>
-                <button className="list-item" onClick={() => openDispute(deal.id)}>
-                  <div className="list-item__body">
-                    <div className="list-item__title">#{deal.id}</div>
-                    <div className="list-item__sub truncate">
-                      {money(deal.agreedPriceUzs, lang)} · {deal.disputeReason ?? '—'}
-                    </div>
-                  </div>
-                  <Badge tone="warning">{deal.status}</Badge>
-                </button>
-              </AnimatedItem>
-            ))}
-          </AnimatedList>
-        ))}
-
-      {/* Klinikalar: tasdiqlash, komissiya foizi, sinov davri */}
-      {tab === 'clinics' && <AdminClinics />}
-
-      {/* Platforma bo'yicha umumiy shartlar */}
-      {/* Katalog banisa.uz dan sinxronlanadi */}
-      {tab === 'catalog' && <CatalogSync />}
-
-      {tab === 'settings' && <PlatformSettingsScreen />}
-
-      {tab === 'metrics' &&
-        (metrics === null ? (
-          <SkeletonList count={2} />
-        ) : (
-          <div className="kpi-grid">
-            <MetricCard label={t('home.greeting')} value={metrics.users} />
-            <MetricCard label={t('clinic.title')} value={metrics.clinics} />
-            <MetricCard label={t('home.active')} value={metrics.requests} />
-            <MetricCard label={t('offers.title')} value={metrics.offers} />
-            <MetricCard label={t('home.deals')} value={metrics.deals} />
-            <MetricCard label={t('deal.step.CONFIRMED')} value={metrics.confirmedDeals} />
-            <MetricCard label={t('clinic.kpi.winRate')} value={metrics.conversionPercent} suffix="%" />
-            <MetricCard label={t('clinic.kpi.commission')} value={metrics.commissionUzs} isMoney />
-            <MetricCard label={t('clinic.subscription')} value={metrics.subscriptionRevenueUzs} isMoney />
-            <MetricCard label={t('admin.disputes')} value={metrics.disputes} />
-          </div>
-        ))}
+    <>
+      <AdminShell sections={sections} active={tab} onChange={(id) => setTab(id as Tab)} who={who} />
 
       {/* Rad etish sababi majburiy */}
       <RejectSheet
@@ -216,7 +147,103 @@ export function AdminHome() {
       />
 
       <DisputeSheet data={reviewing} onClose={() => setReviewing(null)} onResolve={resolve} />
-    </Screen>
+    </>
+  );
+}
+
+/* ═════════════════  Bo'limlar  ═════════════════ */
+
+function VerificationList({
+  pending,
+  onDecide,
+  onReject,
+}: {
+  pending: Clinic[] | null;
+  onDecide: (clinic: Clinic, status: 'approved' | 'rejected', note: string | null) => void;
+  onReject: (clinic: Clinic) => void;
+}) {
+  const { t } = useApp();
+
+  if (pending === null) return <SkeletonList count={2} />;
+  if (pending.length === 0) return <EmptyState icon={<IconShield size={32} />} title={t('admin.noPending')} />;
+
+  return (
+    <AnimatedList>
+      {pending.map((clinic) => (
+        <AnimatedItem key={clinic.id}>
+          <Card className="stack">
+            <div className="between">
+              <strong>{clinic.name}</strong>
+              <Badge tone="warning">{t(`ver.status.${clinic.verification}` as any)}</Badge>
+            </div>
+            <span className="tiny">{clinic.address}</span>
+            {clinic.about && <p className="tiny" style={{ color: 'var(--body)' }}>{clinic.about}</p>}
+            {/* Hujjatlarni ko'rmasdan tasdiqlash — verifikatsiyaning ma'nosini yo'qotadi */}
+            <ClinicDocuments clinicId={clinic.id} />
+
+            <div className="row" style={{ gap: 'var(--s-2)' }}>
+              <Button size="sm" icon={<IconCheck size={15} />} onClick={() => onDecide(clinic, 'approved', null)}>
+                {t('admin.approve')}
+              </Button>
+              <Button size="sm" variant="danger" onClick={() => onReject(clinic)}>
+                {t('admin.reject')}
+              </Button>
+            </div>
+          </Card>
+        </AnimatedItem>
+      ))}
+    </AnimatedList>
+  );
+}
+
+function DisputeList({
+  disputes,
+  onOpen,
+}: {
+  disputes: Deal[] | null;
+  onOpen: (id: number) => void;
+}) {
+  const { t, lang } = useApp();
+
+  if (disputes === null) return <SkeletonList count={2} />;
+  if (disputes.length === 0) return <EmptyState icon={<IconShield size={32} />} title={t('admin.noDisputes')} />;
+
+  return (
+    <AnimatedList>
+      {disputes.map((deal) => (
+        <AnimatedItem key={deal.id}>
+          <button className="list-item" onClick={() => onOpen(deal.id)}>
+            <div className="list-item__body">
+              <div className="list-item__title">#{deal.id}</div>
+              <div className="list-item__sub truncate">
+                {money(deal.agreedPriceUzs, lang)} · {deal.disputeReason ?? '—'}
+              </div>
+            </div>
+            <Badge tone="warning">{deal.status}</Badge>
+          </button>
+        </AnimatedItem>
+      ))}
+    </AnimatedList>
+  );
+}
+
+function MetricsPanel({ metrics }: { metrics: AdminMetrics | null }) {
+  const { t } = useApp();
+  if (metrics === null) return <SkeletonList count={2} />;
+
+  return (
+    <div className="kpi-grid">
+      <MetricCard label={t('home.greeting')} value={metrics.users} />
+      <MetricCard label={t('clinic.title')} value={metrics.clinics} />
+      <MetricCard label={t('home.active')} value={metrics.requests} />
+      <MetricCard label={t('offers.title')} value={metrics.offers} />
+      <MetricCard label={t('home.deals')} value={metrics.deals} />
+      <MetricCard label={t('deal.step.CONFIRMED')} value={metrics.confirmedDeals} />
+      <MetricCard label={t('clinic.kpi.winRate')} value={metrics.conversionPercent} suffix="%" />
+      <MetricCard label={t('clinic.kpi.commission')} value={metrics.commissionUzs} isMoney />
+      <MetricCard label={t('clinic.subscription')} value={metrics.subscriptionRevenueUzs} isMoney />
+      <MetricCard label={t('admin.disputes')} value={metrics.disputes} />
+    </div>
   );
 }
 

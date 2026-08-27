@@ -65,10 +65,7 @@ export function ClinicSignup() {
   /** Har bosqichning o'z sharti — keyingisiga o'tishdan oldin tekshiriladi. */
   const stepValid: Record<Step, boolean> = {
     clinic: name.trim().length >= 2 && cityId !== null && address.trim().length >= 3 && licenseNo.trim().length >= 3,
-    contact:
-      contactName.trim().length >= 2 &&
-      contactPhone.trim().length >= 7 &&
-      /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contactEmail.trim()),
+    contact: contactName.trim().length >= 2 && contactPhone.trim().length >= 7,
     operations: operationIds.length > 0,
   };
 
@@ -98,7 +95,7 @@ export function ClinicSignup() {
           licenseNo: licenseNo.trim(),
           contactName: contactName.trim(),
           contactPhone: contactPhone.trim(),
-          contactEmail: contactEmail.trim(),
+          contactEmail: contactEmail.trim() || null,
           operationIds,
         }),
       });
@@ -141,12 +138,13 @@ export function ClinicSignup() {
               <li>
                 <span className="cs__nextN">2</span>
                 <span>
-                  Ko‘rsatgan pochtangizga <strong>kabinetga kirish havolasi</strong> yuboriladi
+                  Tasdiqlangach botimizga <strong>/start</strong> bosasiz va shu raqamingizni
+                  yuborasiz — bot sizni tanib oladi
                 </span>
               </li>
               <li>
                 <span className="cs__nextN">3</span>
-                <span>Havolada parolingizni qo‘yasiz va brauzerdan ishlay boshlaysiz</span>
+                <span>Parolingizni qo‘yasiz va kabinetga kirasiz — Telegramda ham, brauzerda ham</span>
               </li>
             </ol>
           </motion.div>
@@ -199,7 +197,8 @@ export function ClinicSignup() {
           </ul>
 
           <div className="cs__note">
-            Kabinet oddiy veb-sahifada ishlaydi — Telegram <strong>kerak emas</strong>.
+            Kirish uchun <strong>telefon raqamingiz</strong> yetarli. Kabinet Telegramda ham,
+            brauzerda ham ochiladi.
           </div>
         </motion.aside>
 
@@ -308,7 +307,10 @@ export function ClinicSignup() {
                         />
                       </Field>
 
-                      <Field label="Telefon" hint="Moderator shu raqamga bog‘lanadi">
+                      <Field
+                label="Telefon"
+                hint="Kabinetga shu raqam bilan kirasiz. Moderator ham shu raqamga qo‘ng‘iroq qiladi."
+              >
                         <Input
                           type="tel"
                           value={contactPhone}
@@ -318,10 +320,7 @@ export function ClinicSignup() {
                         />
                       </Field>
 
-                      <Field
-                        label="Email"
-                        hint="Kabinetga shu manzil bilan kirasiz — kirish havolasi shu yerga keladi"
-                      >
+                      <Field label="Email · ixtiyoriy" hint="Xabar yuborish uchun">
                         <Input
                           type="email"
                           value={contactEmail}

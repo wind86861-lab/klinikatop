@@ -277,13 +277,15 @@ clinicRouter.post('/operators', (req, res) => {
   const clinicId = requireClinicAdmin(req);
   const body = z
     .object({
-      email: z.string().trim().email().max(160),
+      phone: z.string().trim().min(7).max(32),
+      email: z.string().trim().email().max(160).nullable().default(null),
       fullName: z.string().trim().min(2).max(160),
       role: z.enum(['clinic_admin', 'clinic_operator']).default('clinic_operator'),
     })
     .parse(req.body);
 
   const { user, setupToken } = createAccount({
+    phone: body.phone,
     email: body.email,
     fullName: body.fullName,
     level: body.role,

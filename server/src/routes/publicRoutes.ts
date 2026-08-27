@@ -35,11 +35,11 @@ const applicationSchema = z.object({
   contactName: z.string().trim().min(2).max(120),
   contactPhone: z.string().trim().min(7).max(40),
   /*
-   * Email MAJBURIY: tasdiqlangach shu manzil kabinetga kirish
-   * identifikatoriga aylanadi va parol o'rnatish havolasi shu yerga
-   * yuboriladi. Usiz hisob ocha olmaymiz.
+   * Email IXTIYORIY. Kirish identifikatori — telefon raqami: klinika
+   * egasi pochtadan kamdan-kam foydalanadi, telefon esa hammada bor
+   * va uni moderator qo'ng'iroq qilib tekshiradi.
    */
-  contactEmail: z.string().trim().email().max(160),
+  contactEmail: z.string().trim().email().max(160).nullable().default(null),
   operationIds: z.array(z.number().int().positive()).min(1).max(60),
 });
 
