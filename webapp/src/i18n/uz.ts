@@ -464,6 +464,11 @@ export const uz = {
   'status.COLLECTING': 'Takliflar kelmoqda',
   'status.CHOSEN': 'Tanlangan',
   'status.COMPLETED': 'Yakunlangan',
+  'request.delete': 'So‘rovni o‘chirish',
+  'request.deleteWarn': 'So‘rov va unga biriktirilgan fayllar butunlay o‘chadi. Buni qaytarib bo‘lmaydi.',
+  'request.deleteOffers': '{n} ta klinika taklif yuborgan — ular xabardor qilinadi.',
+  'request.deleteConfirm': 'Ha, o‘chirilsin',
+  'request.deleted': 'So‘rov o‘chirildi',
   'status.CANCELLED': 'Bekor qilingan',
 
   // ── Klinika kabineti (23 ekran) ──

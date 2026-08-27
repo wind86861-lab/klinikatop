@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { forbidden } from '../lib/errors';
 import {
   cancelRequest,
+  deleteRequest,
   createRequest,
   getRequest,
   listPatientRequests,
@@ -109,6 +110,18 @@ requestsRouter.patch('/:id', (req, res) => {
 
 requestsRouter.post('/:id/cancel', (req, res) => {
   res.json(cancelRequest(Number(req.params.id), req.user!.id));
+});
+
+/**
+ * So'rovni butunlay o'chirish.
+ *
+ * Bekor qilishdan farqi: bekor qilingani ro'yxatda qoladi, o'chirilgani
+ * yo'q bo'ladi. Bitim tuzilgan so'rov o'chirilmaydi — servis buni
+ * tekshiradi va 409 qaytaradi.
+ */
+requestsRouter.delete('/:id', (req, res) => {
+  deleteRequest(Number(req.params.id), req.user!.id);
+  res.status(204).end();
 });
 
 /** 7.1: taklifni tanlash → bitim yaratiladi va chat ochiladi. */

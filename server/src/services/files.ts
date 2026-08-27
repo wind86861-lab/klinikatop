@@ -165,3 +165,44 @@ export function assertOwnedFiles(ids: string[], ownerId: number): void {
     .all(...ids, ownerId) as { id: string }[];
   if (rows.length !== ids.length) throw forbidden('Hujjat topilmadi yoki sizga tegishli emas');
 }
+
+/**
+ * Fayllarni butunlay o'chirish — diskdan ham, bazadan ham.
+ *
+ * Faqat EGASINING fayllari o'chiriladi. Bu ortiqcha ehtiyot emas:
+ * so'rovga birovning fayli biriktirilgan bo'lsa (masalan klinika
+ * yuborgan hujjat), uni so'rov bilan birga yo'q qilib yuborish
+ * noto'g'ri bo'lardi.
+ *
+ * Diskdagi fayl topilmasa — jim o'tamiz. Yozuvni o'chirishga bu
+ * to'sqinlik qilmasligi kerak: maqsad ma'lumotni yo'q qilish, va
+ * fayl allaqachon yo'q bo'lsa maqsadga erishilgan.
+ */
+export function deleteFiles(ids: string[], ownerId: number): number {
+  if (ids.length === 0) return 0;
+
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = db
+    .prepare(`SELECT id, storage_path FROM files WHERE id IN (${placeholders}) AND owner_id = ?`)
+    .all(...ids, ownerId) as { id: string; storage_path: string }[];
+
+  for (const row of rows) {
+    /*
+     * `storage_path` — nisbiy fayl nomi, to'liq yo'l emas. `readFile`
+     * ham shunday qiladi: `basename` olinadi va `uploadDir` bilan
+     * qo'shiladi. Bu bir vaqtning o'zida yo'ldan chiqishning ham
+     * oldini oladi — bazada qandaydir `../../etc/passwd` paydo bo'lsa
+     * ham u papkadan tashqariga chiqmaydi.
+     */
+    try {
+      fs.unlinkSync(path.join(uploadDir, path.basename(row.storage_path)));
+    } catch {
+      /* fayl allaqachon yo'q — maqsadga erishilgan */
+    }
+  }
+
+  const del = db.prepare(`DELETE FROM files WHERE id = ? AND owner_id = ?`);
+  for (const row of rows) del.run(row.id, ownerId);
+
+  return rows.length;
+}

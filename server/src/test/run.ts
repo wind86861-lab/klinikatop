@@ -710,9 +710,10 @@ async function main() {
   check('o‘ziga bo‘lsa forSelf true', mine.forSelf === true);
   requests.cancelRequest(forMe.id, patient.id);
 
-  section('11. Spam cheklovi');
+  section('11. So‘rovlar soni va o‘chirish');
   db.prepare(`UPDATE clinics SET subscription_status = 'active', subscription_until = datetime('now','+30 days') WHERE id = ?`).run(clinic.id);
-  for (let i = 0; i < 3; i++) {
+
+  const makeRequest = () =>
     requests.createRequest({
       patientId: patient.id,
       operationId: gallbladder.id,
@@ -725,25 +726,147 @@ async function main() {
       conditionText: "Holatim: qorin o'ng tomonida og'riq, tekshiruvda tosh topildi.",
       acceptTerms: true,
     });
-  }
-  throws(
-    'faol so‘rovlar limiti majburlanadi',
-    () =>
-      requests.createRequest({
-        patientId: patient.id,
-        operationId: gallbladder.id,
-        cityId: tashkent.id,
-        budgetUzs: 9_000_000,
-        note: null,
-        urgency: 'normal',
-        attachments: [],
-        aiSuggested: false,
-        conditionText: "Holatim: qorin o'ng tomonida og'riq, tekshiruvda tosh topildi.",
-        acceptTerms: true,
-      }),
-    'too_many_active_requests',
+
+  /*
+   * Faol so'rovlar soniga cheklov YO'Q.
+   *
+   * Ilgari uchtadan keyin to'xtardi. Bir odamda bir necha muammo
+   * bo'lishi mumkin va oila a'zolari uchun ham so'rov qoldiradi.
+   * Spamdan himoya daqiqalik tezlik cheklovida.
+   */
+  const activeBefore = db
+    .prepare("SELECT COUNT(*) c FROM requests WHERE patient_id = ? AND status IN ('NEW','COLLECTING')")
+    .get(patient.id).c;
+
+  for (let i = 0; i < 6; i++) makeRequest();
+
+  const activeAfter = db
+    .prepare("SELECT COUNT(*) c FROM requests WHERE patient_id = ? AND status IN ('NEW','COLLECTING')")
+    .get(patient.id).c;
+  check('cheklovsiz so‘rov qoldirildi', activeAfter === activeBefore + 6, { activeBefore, activeAfter });
+
+  /* ── O'chirish ── */
+
+  const doomed = makeRequest();
+  check('o‘chirish uchun so‘rov yaratildi', doomed.id > 0);
+
+  throws('boshqa odam so‘rovni o‘chirib bo‘lmaydi', () => requests.deleteRequest(doomed.id, clinicUser.id));
+
+  requests.deleteRequest(doomed.id, patient.id);
+  check(
+    'so‘rov bazadan yo‘qoldi',
+    db.prepare('SELECT COUNT(*) c FROM requests WHERE id = ?').get(doomed.id).c === 0,
   );
 
+  /*
+   * Takliflar va tarqatmalar kaskad bilan ketishi kerak — aks holda
+   * klinika ro'yxatida yo'q so'rovga havola qolib, ekran buzilardi.
+   */
+  const withOffer = makeRequest();
+  offers.createOffer({
+    requestId: withOffer.id,
+    clinicId: clinic.id,
+    priceUzs: 8_000_000,
+    includes: ['Operatsiya'],
+    advantages: [],
+    leadTimeDays: 5,
+    note: null,
+  });
+
+  const offerCount = db.prepare('SELECT COUNT(*) c FROM offers WHERE request_id = ?').get(withOffer.id).c;
+  check('taklif yuborildi', offerCount === 1, offerCount);
+
+  requests.deleteRequest(withOffer.id, patient.id);
+  check(
+    'takliflar ham o‘chdi',
+    db.prepare('SELECT COUNT(*) c FROM offers WHERE request_id = ?').get(withOffer.id).c === 0,
+  );
+  check(
+    'tarqatmalar ham o‘chdi',
+    db.prepare('SELECT COUNT(*) c FROM request_broadcasts WHERE request_id = ?').get(withOffer.id).c === 0,
+  );
+
+  /*
+   * Biriktirilgan fayllar ham ketishi kerak. Aks holda o'chirilgan
+   * so'rovning tibbiy suratlari serverda qolib ketardi va
+   * "o'chirdim" degan so'z yolg'on bo'lardi.
+   */
+  const fileSvc = require('../services/files');
+  const attached = fileSvc.saveFile({
+    ownerId: patient.id,
+    name: 'tekshiruv.pdf',
+    mimeType: 'application/pdf',
+    kind: 'other',
+    dataBase64: Buffer.from('%PDF-1.4 UZI natijasi').toString('base64'),
+  });
+
+  const withFile = requests.createRequest({
+    patientId: patient.id,
+    operationId: gallbladder.id,
+    cityId: tashkent.id,
+    budgetUzs: 9_000_000,
+    note: null,
+    urgency: 'normal',
+    attachments: [attached.id],
+    aiSuggested: false,
+    conditionText: "Holatim: qorin o'ng tomonida og'riq, tekshiruvda tosh topildi.",
+    acceptTerms: true,
+  });
+
+  // `storage_path` — nisbiy nom; to'liq yo'lni servisdagi kabi yig'amiz
+  const uploadsDir = path.resolve(path.dirname(TEST_DB), 'uploads');
+  const onDisk = db.prepare('SELECT storage_path FROM files WHERE id = ?').get(attached.id);
+  const fullPath = path.join(uploadsDir, path.basename(onDisk.storage_path));
+  check('fayl diskda paydo bo‘ldi', fs.existsSync(fullPath), fullPath);
+
+  requests.deleteRequest(withFile.id, patient.id);
+
+  check(
+    'fayl yozuvi bazadan o‘chdi',
+    db.prepare('SELECT COUNT(*) c FROM files WHERE id = ?').get(attached.id).c === 0,
+  );
+  check('fayl diskdan ham o‘chdi', !fs.existsSync(fullPath));
+
+  // Boshqa odamning fayliga tegilmaydi
+  const foreign = fileSvc.saveFile({
+    ownerId: clinicUser.id,
+    name: 'klinika.pdf',
+    mimeType: 'application/pdf',
+    kind: 'other',
+    dataBase64: Buffer.from('%PDF-1.4 klinika hujjati').toString('base64'),
+  });
+  fileSvc.deleteFiles([foreign.id], patient.id);
+  check(
+    'begona fayl o‘chmadi',
+    db.prepare('SELECT COUNT(*) c FROM files WHERE id = ?').get(foreign.id).c === 1,
+  );
+
+  /*
+   * BITIM tuzilgan so'rov o'chirilmaydi. Bu adolat masalasi: bitimda
+   * klinikaning ishi va komissiya hisobi bor, bir tomon uni bir
+   * bosishda yo'q qila olmasligi kerak.
+   */
+  const withDeal = makeRequest();
+  const dealOffer = offers.createOffer({
+    requestId: withDeal.id,
+    clinicId: clinic.id,
+    priceUzs: 7_500_000,
+    includes: ['Operatsiya'],
+    advantages: [],
+    leadTimeDays: 5,
+    note: null,
+  });
+  deals.chooseOffer(withDeal.id, dealOffer.id, patient.id);
+
+  throws(
+    'bitim tuzilgan so‘rov o‘chirilmaydi',
+    () => requests.deleteRequest(withDeal.id, patient.id),
+    'request_has_deal',
+  );
+  check(
+    'bitim joyida qoldi',
+    db.prepare('SELECT COUNT(*) c FROM deals WHERE request_id = ?').get(withDeal.id).c === 1,
+  );
 
   /* ═════ 14. Veb hisoblar: klinika va admin ═════ */
   console.log('\n14. Veb hisoblar va rollarning ajratilishi');

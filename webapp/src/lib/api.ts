@@ -264,6 +264,8 @@ export const api = {
   updateRequest: (id: number, body: { budgetUzs?: number | null; note?: string | null; urgency?: Urgency }) =>
     patch<RequestWithMeta>(`/requests/${id}`, body),
   cancelRequest: (id: number) => post<RequestWithMeta>(`/requests/${id}/cancel`),
+  /** So'rovni butunlay o'chirish — fayllari bilan birga. Qaytarib bo'lmaydi. */
+  deleteRequest: (id: number) => del<void>(`/requests/${id}`),
   chooseOffer: (requestId: number, offerId: number) =>
     post<DealDetail>(`/requests/${requestId}/choose`, { offerId }),
 

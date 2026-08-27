@@ -48,6 +48,8 @@ export function RequestDetail() {
   const [sort, setSort] = useState<Sort>('price');
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [choosing, setChoosing] = useState<OfferWithClinic | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [freshIds, setFreshIds] = useState<Set<number>>(new Set());
@@ -156,6 +158,27 @@ export function RequestDetail() {
     );
   }
 
+  /*
+   * O'chirish bekor qilishdan boshqa narsa: bekor qilingan so'rov
+   * ro'yxatda qoladi, o'chirilgani butunlay yo'q bo'ladi — fayllari
+   * bilan birga. Bitim tuzilgan so'rov o'chirilmaydi va tugma ham
+   * ko'rsatilmaydi; server buni alohida tekshiradi.
+   */
+  const remove = async () => {
+    setDeleting(true);
+    try {
+      await api.deleteRequest(requestId);
+      haptic.success();
+      toast(t('request.deleted'), 'success');
+      navigate('/requests', { replace: true });
+    } catch (err: any) {
+      haptic.error();
+      toast(err?.message ?? t('common.error'), 'error');
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
   const left = timeLeft(request.expiresAt, lang);
   const waiting = offers.length === 0 && (request.status === 'NEW' || request.status === 'COLLECTING');
   const closed = request.status === 'CHOSEN' || request.status === 'COMPLETED' || request.status === 'CANCELLED';
@@ -257,6 +280,32 @@ export function RequestDetail() {
       {closed && request.status === 'CANCELLED' && (
         <Notice tone="warning">{t('status.CANCELLED')}</Notice>
       )}
+
+      {/*
+        O'chirish — eng pastda va ohista.
+        Bu qaytarib bo'lmaydigan amal, uni tasodifan bosish oson
+        bo'lmasligi kerak. Bitim tuzilgan so'rovda umuman chiqmaydi.
+      */}
+      {request.status !== 'CHOSEN' && request.status !== 'COMPLETED' && (
+        <button type="button" className="danger-link" onClick={() => setConfirmDelete(true)}>
+          {t('request.delete')}
+        </button>
+      )}
+
+      <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title={t('request.delete')}>
+        <div className="stack">
+          <Notice tone="danger">{t('request.deleteWarn')}</Notice>
+          {offers.length > 0 && (
+            <p className="tiny">{t('request.deleteOffers', { n: offers.length })}</p>
+          )}
+          <Button block variant="danger" loading={deleting} onClick={remove}>
+            {t('request.deleteConfirm')}
+          </Button>
+          <Button block variant="ghost" onClick={() => setConfirmDelete(false)}>
+            {t('common.cancel')}
+          </Button>
+        </div>
+      </Sheet>
 
       {/* Taqqoslash varag'i */}
       <Sheet open={compareOpen} onClose={() => setCompareOpen(false)} title={t('compare.title')}>

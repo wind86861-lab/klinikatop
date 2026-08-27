@@ -3434,3 +3434,24 @@
 .tg-gate__badge.is-wait { background: var(--accent-pale); color: var(--accent-ink); }
 .tg-gate__badge.is-ok { background: var(--primary-soft); color: var(--primary); }
 .tg-gate__badge.is-no { background: rgba(229, 83, 60, 0.12); color: var(--danger); }
+
+/*
+ * Qaytarib bo'lmaydigan amal uchun havola ko'rinishidagi tugma.
+ *
+ * Ataylab tugmaga o'xshamaydi: o'chirish kundalik amal emas va uni
+ * boshqa tugmalar bilan bir qatorda ko'rsatish tasodifan bosilishiga
+ * yo'l ochardi. Tasdiqlash varag'i esa ikkinchi to'siq.
+ */
+.danger-link {
+  align-self: center;
+  margin-top: var(--s-6);
+  padding: var(--s-2) var(--s-3);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--t-sm);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--d-micro) var(--ease);
+}
+.danger-link:hover { color: var(--danger); }

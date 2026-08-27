@@ -441,6 +441,11 @@ export const ru: Record<TranslationKey, string> = {
   'status.COLLECTING': 'Идут предложения',
   'status.CHOSEN': 'Выбрано',
   'status.COMPLETED': 'Завершена',
+  'request.delete': 'Удалить заявку',
+  'request.deleteWarn': 'Заявка и прикреплённые файлы будут удалены навсегда. Отменить это нельзя.',
+  'request.deleteOffers': 'Предложения прислали клиник: {n} — они получат уведомление.',
+  'request.deleteConfirm': 'Да, удалить',
+  'request.deleted': 'Заявка удалена',
   'status.CANCELLED': 'Отменена',
 
   // ── Klinika kabineti (23 ekran) ──

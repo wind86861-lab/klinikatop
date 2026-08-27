@@ -7,6 +7,7 @@
 import { db, hoursFromNow, parseJson, tx } from '../db';
 import { config } from '../lib/config';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { deleteFiles } from './files';
 import { formatUzs } from '../lib/format';
 import { mapCity, mapOperation, mapRequest, mapUser } from '../lib/mappers';
 import {
@@ -107,17 +108,19 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
     throw badRequest('terms_not_accepted', 'Ommaviy oferta shartlarini qabul qiling');
   }
 
-  // 2.1: spam oldini olish — bir vaqtda cheklangan sondagi faol so'rov
-  const active = db
-    .prepare(`SELECT COUNT(*) AS n FROM requests WHERE patient_id = ? AND status IN ('NEW','COLLECTING')`)
-    .get(input.patientId) as { n: number };
-
-  if (active.n >= config.rules.maxActiveRequestsPerPatient) {
-    throw conflict(
-      'too_many_active_requests',
-      `Bir vaqtda ${config.rules.maxActiveRequestsPerPatient} tadan ortiq faol so‘rov bo‘lishi mumkin emas`,
-    );
-  }
+  /*
+   * Faol so'rovlar soniga cheklov YO'Q.
+   *
+   * Ilgari bir vaqtda uchtadan ortiq so'rov qoldirib bo'lmasdi. Amalda
+   * bu haqiqiy bemorga xalaqit berardi: bitta odamda bir necha muammo
+   * bo'lishi mumkin, oila a'zolari uchun ham so'rov qoldiradi va eski
+   * so'rovlar yopilishini kutib o'tirishga majbur edi.
+   *
+   * Spamdan himoya boshqa qatlamda: `limits.write` daqiqada 60 ta
+   * yozuv amaliga ruxsat beradi. Odam uchun bu juda keng, skript uchun
+   * esa tor — ya'ni toshqinni o'sha yerda to'xtatamiz, oddiy
+   * foydalanuvchini cheklamasdan.
+   */
 
   // "Bilmayman" yozuvi katalogda active=0 — u ro'yxatlarda ko'rinmaydi,
   // lekin so'rovda tanlanishi mumkin
@@ -294,6 +297,61 @@ export function cancelRequest(requestId: number, patientId: number): RequestWith
   }
   bus.publish(ch.request(requestId), { type: 'request:status', requestId, status: 'CANCELLED' });
   return getRequest(requestId);
+}
+
+/**
+ * So'rovni butunlay o'chirish.
+ *
+ * Bekor qilishdan farqi: bekor qilingan so'rov ro'yxatda qoladi va
+ * tarixda ko'rinadi, o'chirilgani esa yo'q bo'ladi. Bemor tibbiy
+ * holati haqidagi yozuvni butunlay olib tashlay olishi kerak — bu
+ * uning ma'lumoti.
+ *
+ * BITIM TUZILGAN so'rov o'chirilmaydi. Sabab texnik emas, adolat
+ * masalasi: bitim ikki tomonning kelishuvi, unda klinikaning ishi,
+ * to'lovi va komissiya hisobi bor. Bir tomon uni bir bosishda yo'q
+ * qila olsa, ikkinchi tomon himoyasiz qolardi. Bunday so'rovni bekor
+ * qilish yoki nizo ochish mumkin.
+ *
+ * Biriktirilgan fayllar ham o'chiriladi — diskdan ham, bazadan ham.
+ * Aks holda o'chirilgan so'rovning tibbiy suratlari serverda qolib
+ * ketardi va "o'chirdim" degan so'z yolg'on bo'lardi.
+ */
+export function deleteRequest(requestId: number, patientId: number): void {
+  const req = getRequest(requestId);
+  if (req.patientId !== patientId) throw forbidden('Bu so‘rov sizniki emas');
+
+  const deal = db.prepare(`SELECT id FROM deals WHERE request_id = ?`).get(requestId);
+  if (deal) {
+    throw conflict(
+      'request_has_deal',
+      'Bitim tuzilgan so‘rovni o‘chirib bo‘lmaydi. Uni bekor qilishingiz mumkin.',
+    );
+  }
+
+  // Takliflar bekor bo'lgani haqida klinikalarga xabar beramiz:
+  // ular vaqt sarflagan va javob kutayotgan bo'lishi mumkin
+  const affected = db
+    .prepare(`SELECT clinic_id FROM offers WHERE request_id = ? AND status = 'SENT'`)
+    .all(requestId) as { clinic_id: number }[];
+
+  const attachments = req.attachments;
+
+  tx(() => {
+    /*
+     * So'rov o'chirilsa `request_broadcasts` va `offers` kaskad bilan
+     * ketadi. Fayllarni esa qo'lda olamiz: ular alohida jadvalda va
+     * so'rovga faqat identifikator orqali bog'langan.
+     */
+    db.prepare(`DELETE FROM requests WHERE id = ?`).run(requestId);
+    if (attachments.length > 0) deleteFiles(attachments, patientId);
+  });
+
+  for (const o of affected) {
+    notifyClinic(o.clinic_id, 'offer_rejected', { operation: req.operation.nameUz }, `/clinic/offers`);
+  }
+
+  bus.publish(ch.request(requestId), { type: 'request:status', requestId, status: 'CANCELLED' });
 }
 
 /**

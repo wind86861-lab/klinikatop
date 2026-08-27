@@ -739,6 +739,38 @@ check "chiqqandan keyin sessiya ishlamaydi (401)" "$([ "$code" = 401 ] && echo 1
 code=$(status "${MOD[@]}" -X DELETE "$API/admin/applications/$APP")
 check "tasdiqlangan arizani o'chirib bo'lmaydi (409)" "$([ "$code" = 409 ] && echo 1)" "$code"
 
+echo
+echo "16. So'rovni o'chirish"
+
+# Cheklov olib tashlangan — ketma-ket bir necha so'rov qoldiriladi
+DEL_IDS=""
+for i in 1 2 3 4; do
+  RID=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+    -d '{"operationId":1,"cityId":1,"budgetUzs":9000000,"urgency":"normal","attachments":[],"aiSuggested":false,"conditionText":"Holatim: qorin ong tomonida ogriq, tekshiruvda tosh topildi.","acceptTerms":true}' | jqv '.id')
+  DEL_IDS="$DEL_IDS $RID"
+done
+COUNT=$(echo $DEL_IDS | wc -w)
+check "cheklovsiz 4 ta so'rov yaratildi" "$([ "$COUNT" = 4 ] && echo 1)" "$COUNT"
+
+FIRST=$(echo $DEL_IDS | awk '{print $1}')
+
+# Begona odam o'chira olmaydi
+code=$(status "${STRANGER[@]}" -X DELETE "$API/requests/$FIRST")
+check "begona so'rovni o'chirib bo'lmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
+# Egasi o'chiradi
+code=$(status "${PATIENT[@]}" -X DELETE "$API/requests/$FIRST")
+check "egasi o'chirdi (204)" "$([ "$code" = 204 ] && echo 1)" "$code"
+
+# O'chirilgan so'rov endi ochilmaydi
+code=$(status "${PATIENT[@]}" "$API/requests/$FIRST")
+check "o'chirilgan so'rov topilmaydi (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
+
+# Qolganlarini tozalaymiz
+for r in $(echo $DEL_IDS | cut -d' ' -f2-); do
+  curl -s "${PATIENT[@]}" -X DELETE "$API/requests/$r" > /dev/null
+done
+
 # ── Tozalash ──
 # Test yaratgan arizalar kunlik IP chegarasini yeb qo'ymasligi uchun
 # rad etilganlarini o'chiramiz. Bu moderatorning spam tozalash yo'li.
