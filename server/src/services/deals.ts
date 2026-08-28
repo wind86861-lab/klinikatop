@@ -9,7 +9,12 @@ import { config } from '../lib/config';
 import { commissionPercentFor, listSettings } from './terms.business';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { mapClinicPublic, mapDeal, mapOffer } from '../lib/mappers';
-import { DEAL_TRANSITIONS, type DealDetail, type DealStatus } from '../../../shared/types';
+import {
+  DEAL_TRANSITIONS,
+  type DealDetail,
+  type DealPriceChange,
+  type DealStatus,
+} from '../../../shared/types';
 import { bus, ch } from './events';
 import { notify, notifyClinic } from './notifications';
 import { getRequest, hydrate } from './requests';
@@ -315,4 +320,194 @@ export function autoConfirmStaleDeals(): number {
   }
 
   return closed;
+}
+
+/* ═════════════════  Narxning o'zgarishi  ═════════════════ */
+
+/**
+ * Klinika xodimlari — narx taklifiga kim javob bera oladi.
+ *
+ * Klinika nomidan har qanday xodimi ish ko'ra oladi: bitta odamga
+ * bog'lab qo'yilsa, u ta'tilga chiqqanda bemor javob kutib qolardi.
+ */
+function clinicMemberIds(clinicId: number): number[] {
+  return (
+    db.prepare(`SELECT id FROM users WHERE clinic_id = ? AND blocked_at IS NULL`).all(clinicId) as {
+      id: number;
+    }[]
+  ).map((r) => r.id);
+}
+
+/**
+ * Bitim narxini o'zgartirish — IKKI TOMON roziligi bilan.
+ *
+ * ═══ Nima uchun alohida jarayon ═══
+ *
+ * Hayotda narx o'zgaradi: tekshiruvda qo'shimcha muammo chiqadi, yoki
+ * aksincha, rejalashtirilgan bosqich kerak bo'lmay qoladi. Ilgari bunga
+ * yagona yo'l bor edi — tasdiqlash paytida boshqa summa kiritish. U
+ * yomon edi:
+ *
+ *   • kim rozi bo'lgani hech qayerda qolmasdi
+ *   • bemor "shunday kelishgandik" deb, klinika "yo'q" deb aytardi va
+ *     moderatorda dalil bo'lmasdi
+ *   • avtomatik tasdiqlash eski narxda ishlab ketardi
+ *
+ * Endi o'zgarish taklif qilinadi, ikkinchi tomon qabul qiladi yoki rad
+ * etadi, va har qadam yozib boriladi.
+ *
+ * ═══ Moliyaviy tomoni ═══
+ *
+ * Komissiya HAR DOIM oxirgi kelishilgan narxdan hisoblanadi. Foiz esa
+ * tasdiqlash paytidagi qiymatdan olinadi va bitimga yozib qo'yiladi —
+ * admin keyin foizni o'zgartirsa eski bitim qayta hisoblanmaydi.
+ */
+export interface ProposePriceChangeInput {
+  dealId: number;
+  /** Kim taklif qilyapti */
+  actorId: number;
+  newPriceUzs: number;
+  reason: string;
+}
+
+export function proposePriceChange(input: ProposePriceChangeInput): DealPriceChange {
+  const deal = getDeal(input.dealId);
+
+  const isPatient = deal.patientId === input.actorId;
+  const isClinic = clinicMemberIds(deal.clinicId).includes(input.actorId);
+  if (!isPatient && !isClinic) throw forbidden('Bu bitim sizniki emas');
+
+  /*
+   * Narx faqat ish BAJARILGUNCHA o'zgaradi.
+   *
+   * Bajarilgandan keyin o'zgartirish — bu allaqachon qilingan ishning
+   * narxini keyin ko'tarish demak. Agar haqiqatan farq bo'lsa, nizo
+   * ochiladi va moderator hal qiladi.
+   */
+  if (deal.status !== 'SELECTED' && deal.status !== 'AGREED') {
+    throw conflict('price_locked', 'Bu bosqichda narxni o‘zgartirib bo‘lmaydi');
+  }
+
+  const price = Math.round(input.newPriceUzs);
+  if (!Number.isFinite(price) || price < 100_000 || price > 2_000_000_000) {
+    throw badRequest('invalid_price', 'Narx noto‘g‘ri');
+  }
+  if (price === deal.agreedPriceUzs) {
+    throw badRequest('same_price', 'Narx o‘zgarmadi');
+  }
+
+  const reason = (input.reason ?? '').trim();
+  if (reason.length < 10) {
+    throw badRequest('reason_required', 'Nima uchun o‘zgarayotganini tushuntiring');
+  }
+
+  // Bir vaqtda bitta kutilayotgan taklif — aks holda qaysi biri
+  // qabul qilinishi noaniq bo'lardi (bazada ham noyob indeks bor)
+  const pending = db
+    .prepare(`SELECT id FROM deal_price_changes WHERE deal_id = ? AND status = 'pending'`)
+    .get(input.dealId);
+  if (pending) throw conflict('change_pending', 'Avvalgi taklif hali javobsiz');
+
+  const proposedBy = isPatient ? 'patient' : 'clinic';
+
+  const info = db
+    .prepare(
+      `INSERT INTO deal_price_changes (deal_id, from_uzs, to_uzs, reason, proposed_by)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(input.dealId, deal.agreedPriceUzs, price, reason.slice(0, 400), proposedBy);
+
+  // Ikkinchi tomonga xabar — javob kutilyapti
+  if (isPatient) {
+    notifyClinic(deal.clinicId, 'price_change_proposed', { dealId: input.dealId }, `/clinic/deals/${input.dealId}`);
+  } else {
+    notify(deal.patientId, 'price_change_proposed', { dealId: input.dealId }, `/deal/${input.dealId}`);
+  }
+
+  bus.publish(ch.deal(input.dealId), { type: 'deal:status', dealId: input.dealId, status: deal.status });
+
+  return getPriceChange(Number(info.lastInsertRowid));
+}
+
+/**
+ * Taklifga javob.
+ *
+ * Qabul qilinsa bitim narxi yangilanadi. Rad etilsa eski narx qoladi —
+ * bitim bekor bo'lmaydi: tomonlar yana gaplashishi mumkin.
+ */
+export function respondToPriceChange(
+  changeId: number,
+  actorId: number,
+  accept: boolean,
+): DealPriceChange {
+  const change = getPriceChange(changeId);
+  if (change.status !== 'pending') throw conflict('already_decided', 'Bu taklifga javob berilgan');
+
+  const deal = getDeal(change.dealId);
+  const isPatient = deal.patientId === actorId;
+  const isClinic = clinicMemberIds(deal.clinicId).includes(actorId);
+  if (!isPatient && !isClinic) throw forbidden('Bu bitim sizniki emas');
+
+  /*
+   * Javobni faqat IKKINCHI tomon beradi. Aks holda taklif qilgan
+   * tomon o'zi qabul qilib, narxni bir tomonlama o'zgartirardi —
+   * butun jarayonning ma'nosi shunda yo'qolardi.
+   */
+  const responderSide = isPatient ? 'patient' : 'clinic';
+  if (responderSide === change.proposedBy) {
+    throw forbidden('Javobni ikkinchi tomon beradi');
+  }
+
+  tx(() => {
+    db.prepare(
+      `UPDATE deal_price_changes SET status = ?, decided_at = datetime('now') WHERE id = ?`,
+    ).run(accept ? 'accepted' : 'rejected', changeId);
+
+    if (accept) {
+      db.prepare(`UPDATE deals SET agreed_price_uzs = ? WHERE id = ?`).run(change.toUzs, change.dealId);
+    }
+  });
+
+  const target = change.proposedBy === 'patient' ? deal.patientId : null;
+  if (target) {
+    notify(target, accept ? 'price_change_accepted' : 'price_change_rejected', { dealId: change.dealId }, `/deal/${change.dealId}`);
+  } else {
+    notifyClinic(
+      deal.clinicId,
+      accept ? 'price_change_accepted' : 'price_change_rejected',
+      { dealId: change.dealId },
+      `/clinic/deals/${change.dealId}`,
+    );
+  }
+
+  bus.publish(ch.deal(change.dealId), { type: 'deal:status', dealId: change.dealId, status: deal.status });
+
+  return getPriceChange(changeId);
+}
+
+export function getPriceChange(id: number): DealPriceChange {
+  const row = db.prepare(`SELECT * FROM deal_price_changes WHERE id = ?`).get(id) as any;
+  if (!row) throw notFound('Narx taklifi topilmadi');
+  return mapPriceChange(row);
+}
+
+/** Bitim bo'yicha narx tarixi — eng yangisi birinchi. */
+export function listPriceChanges(dealId: number): DealPriceChange[] {
+  return (
+    db.prepare(`SELECT * FROM deal_price_changes WHERE deal_id = ? ORDER BY id DESC`).all(dealId) as any[]
+  ).map(mapPriceChange);
+}
+
+function mapPriceChange(r: any): DealPriceChange {
+  return {
+    id: r.id,
+    dealId: r.deal_id,
+    fromUzs: r.from_uzs,
+    toUzs: r.to_uzs,
+    reason: r.reason,
+    proposedBy: r.proposed_by,
+    status: r.status,
+    createdAt: new Date(r.created_at.replace(' ', 'T') + 'Z').toISOString(),
+    decidedAt: r.decided_at ? new Date(r.decided_at.replace(' ', 'T') + 'Z').toISOString() : null,
+  };
 }

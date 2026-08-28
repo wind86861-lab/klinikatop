@@ -23,7 +23,56 @@ export interface CreateOfferInput {
   includes: string[];
   advantages: string[];
   leadTimeDays: number;
+  /** Klinika taklif qilgan aniq sanalar (YYYY-MM-DD) */
+  proposedDates?: string[];
+  /** Budjetdan yuqori narx uchun izoh */
+  aboveBudgetReason?: string | null;
   note: string | null;
+}
+
+/** Ro'yxatdagi bandlar: erkin matn ham qabul qilinadi. */
+const MAX_LIST_ITEMS = 12;
+const MAX_ITEM_LEN = 80;
+
+/**
+ * Bandlarni tozalaydi.
+ *
+ * Klinika o'z bandini yozishi mumkin — tayyor variantlar hammasini
+ * qamrab ololmaydi. Shuning uchun bu yerda faqat shakl tekshiriladi:
+ * bo'shlar tashlanadi, uzunlari qisqartiriladi, takrorlar olib
+ * tashlanadi. Nima yozish klinikaning ishi, bemor esa buni ko'rib
+ * o'zi baho beradi.
+ */
+function cleanList(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const raw of items) {
+    if (typeof raw !== 'string') continue;
+    const value = raw.trim().replace(/\s+/g, ' ').slice(0, MAX_ITEM_LEN);
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+    if (out.length >= MAX_LIST_ITEMS) break;
+  }
+  return out;
+}
+
+/** Sana ro'yxati: faqat YYYY-MM-DD, o'tmish emas, tartiblangan. */
+function cleanDates(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  const today = new Date().toISOString().slice(0, 10);
+  const seen = new Set<string>();
+
+  return items
+    .filter((d): d is string => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .filter((d) => d >= today)
+    .filter((d) => (seen.has(d) ? false : (seen.add(d), true)))
+    .sort()
+    .slice(0, 6);
 }
 
 function hydrateOffer(row: any, allOffers?: any[]): OfferWithClinic {
@@ -109,24 +158,48 @@ function assertClinicCanOffer(clinicId: number) {
   }
 }
 
-function validateOfferBody(input: Pick<CreateOfferInput, 'priceUzs' | 'includes' | 'leadTimeDays'>) {
+function validateOfferBody(
+  input: Pick<CreateOfferInput, 'priceUzs' | 'includes' | 'leadTimeDays' | 'aboveBudgetReason'>,
+  budgetUzs: number | null,
+) {
   if (!Number.isFinite(input.priceUzs) || input.priceUzs < 100_000 || input.priceUzs > 2_000_000_000) {
     throw badRequest('invalid_price', 'Narx noto‘g‘ri');
   }
   // Shaffoflik siyosati: nima kirishi ko'rsatilmasa taklif qabul qilinmaydi
-  if (!Array.isArray(input.includes) || input.includes.length === 0) {
+  if (cleanList(input.includes).length === 0) {
     throw badRequest('includes_required', 'Narxga nima kirishini ko‘rsating — bu majburiy');
   }
   if (!Number.isFinite(input.leadTimeDays) || input.leadTimeDays < 0 || input.leadTimeDays > 365) {
     throw badRequest('invalid_lead_time', 'Bajarish muddati noto‘g‘ri');
   }
+
+  /*
+   * Budjetdan YUQORI narx ruxsat etiladi.
+   *
+   * Bemor ko'rsatgan summa — mo'ljal, narx chegarasi emas. Klinika
+   * yaxshiroq shart bilan qimmatroq taklif bera olishi kerak: aks
+   * holda platforma faqat eng arzon variantni ko'rsatadigan joyga
+   * aylanadi va sifat raqobati yo'qoladi.
+   *
+   * Lekin SABABSIZ emas. Bemor nima uchun qimmatroq ekanini bilmasa,
+   * u shunchaki eng arzonini tanlaydi va tafovutni tushunmaydi.
+   */
+  if (budgetUzs && input.priceUzs > budgetUzs) {
+    const reason = (input.aboveBudgetReason ?? '').trim();
+    if (reason.length < 10) {
+      throw badRequest(
+        'above_budget_reason_required',
+        'Narx bemor budjetidan yuqori — nima uchun ekanini tushuntiring',
+      );
+    }
+  }
 }
 
 export function createOffer(input: CreateOfferInput): OfferWithClinic {
   assertClinicCanOffer(input.clinicId);
-  validateOfferBody(input);
 
   const req = getRequest(input.requestId);
+  validateOfferBody(input, req.budgetUzs);
   if (req.status !== 'NEW' && req.status !== 'COLLECTING') {
     throw conflict('request_closed', 'Bu so‘rov taklif qabul qilmaydi');
   }
@@ -147,15 +220,23 @@ export function createOffer(input: CreateOfferInput): OfferWithClinic {
   const offerId = tx(() => {
     const info = db
       .prepare(
-        `INSERT INTO offers (request_id, clinic_id, price_uzs, includes, advantages, lead_time_days, note)
-         VALUES (@requestId, @clinicId, @priceUzs, @includes, @advantages, @leadTimeDays, @note)`,
+        `INSERT INTO offers
+           (request_id, clinic_id, price_uzs, includes, advantages, lead_time_days,
+            proposed_dates, above_budget_reason, note)
+         VALUES (@requestId, @clinicId, @priceUzs, @includes, @advantages, @leadTimeDays,
+                 @proposedDates, @aboveBudgetReason, @note)`,
       )
       .run({
         requestId: input.requestId,
         clinicId: input.clinicId,
         priceUzs: Math.round(input.priceUzs),
-        includes: toJson(input.includes),
-        advantages: toJson(input.advantages ?? []),
+        includes: toJson(cleanList(input.includes)),
+        advantages: toJson(cleanList(input.advantages)),
+        proposedDates: toJson(cleanDates(input.proposedDates)),
+        aboveBudgetReason:
+          req.budgetUzs && input.priceUzs > req.budgetUzs
+            ? (input.aboveBudgetReason ?? '').trim().slice(0, 300)
+            : null,
         leadTimeDays: Math.round(input.leadTimeDays),
         note: input.note,
       });
@@ -192,32 +273,48 @@ export function createOffer(input: CreateOfferInput): OfferWithClinic {
 export function updateOffer(
   offerId: number,
   clinicId: number,
-  patch: Partial<Pick<CreateOfferInput, 'priceUzs' | 'includes' | 'advantages' | 'leadTimeDays' | 'note'>>,
+  patch: Partial<
+    Pick<
+      CreateOfferInput,
+      'priceUzs' | 'includes' | 'advantages' | 'leadTimeDays' | 'proposedDates' | 'aboveBudgetReason' | 'note'
+    >
+  >,
 ): OfferWithClinic {
   const row = db.prepare(`SELECT * FROM offers WHERE id = ?`).get(offerId) as any;
   if (!row) throw notFound('Taklif topilmadi');
   if (row.clinic_id !== clinicId) throw forbidden('Bu taklif sizniki emas');
   if (row.status !== 'SENT') throw conflict('offer_locked', 'Bu taklifni endi tahrirlab bo‘lmaydi');
 
+  const req = getRequest(row.request_id);
+
   const next = {
     priceUzs: patch.priceUzs ?? row.price_uzs,
     includes: patch.includes ?? JSON.parse(row.includes),
     advantages: patch.advantages ?? JSON.parse(row.advantages),
     leadTimeDays: patch.leadTimeDays ?? row.lead_time_days,
+    proposedDates: patch.proposedDates ?? JSON.parse(row.proposed_dates ?? '[]'),
+    aboveBudgetReason: patch.aboveBudgetReason ?? row.above_budget_reason,
     note: patch.note ?? row.note,
   };
-  validateOfferBody(next);
+  validateOfferBody(next, req.budgetUzs);
+
+  const aboveBudget = Boolean(req.budgetUzs && next.priceUzs > req.budgetUzs);
 
   db.prepare(
     `UPDATE offers SET price_uzs = @priceUzs, includes = @includes, advantages = @advantages,
-                       lead_time_days = @leadTimeDays, note = @note, updated_at = datetime('now')
+                       lead_time_days = @leadTimeDays, proposed_dates = @proposedDates,
+                       above_budget_reason = @aboveBudgetReason,
+                       note = @note, updated_at = datetime('now')
       WHERE id = @id`,
   ).run({
     id: offerId,
     priceUzs: Math.round(next.priceUzs),
-    includes: toJson(next.includes),
-    advantages: toJson(next.advantages),
+    includes: toJson(cleanList(next.includes)),
+    advantages: toJson(cleanList(next.advantages)),
     leadTimeDays: Math.round(next.leadTimeDays),
+    proposedDates: toJson(cleanDates(next.proposedDates)),
+    // Narx budjetga tushib qolsa izoh ham kerak emas
+    aboveBudgetReason: aboveBudget ? (next.aboveBudgetReason ?? '').trim().slice(0, 300) : null,
     note: next.note,
   });
 

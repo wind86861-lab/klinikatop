@@ -32,6 +32,7 @@ import {
   Textarea,
 } from '@/ui';
 import { DEAL_STEPS, REVIEW_ASPECTS, type ChatMessage, type DealDetail, type ReviewAspect } from '@shared/types';
+import { PriceChangePanel } from '@/components/PriceChangePanel';
 
 export function DealScreen() {
   const { id } = useParams();
@@ -210,6 +211,22 @@ export function DealScreen() {
             </div>
           )}
 
+          {/*
+            Komissiya faqat KLINIKAGA ko'rsatiladi va faqat yopilgach.
+            Bu klinikaning pulidan chiqadi — "qancha oldingiz" degan
+            savol albatta keladi va javob shu yerda turishi kerak.
+            Bemorga bu raqamning ma'nosi yo'q: u to'liq summani to'laydi.
+          */}
+          {isClinicSide && deal.status === 'CONFIRMED' && deal.commissionUzs !== null && (
+            <div className="between">
+              <span className="tiny">
+                Platforma komissiyasi
+                {deal.commissionPercent !== null && ` · ${deal.commissionPercent}%`}
+              </span>
+              <strong className="num">{money(deal.commissionUzs, lang)}</strong>
+            </div>
+          )}
+
           <DealActions
             deal={deal}
             isClinicSide={isClinicSide}
@@ -220,6 +237,19 @@ export function DealScreen() {
             onDispute={() => setSheet('dispute')}
           />
         </Card>
+
+        {/*
+          Narxni o'zgartirish — ish bajarilgunicha.
+          Bajarilgandan keyin o'zgartirish qilingan ishning narxini
+          keyin ko'tarish bo'lardi; u yerda nizo yo'li bor.
+        */}
+        <PriceChangePanel
+          dealId={deal.id}
+          agreedPriceUzs={deal.agreedPriceUzs}
+          side={isClinicSide ? 'clinic' : 'patient'}
+          editable={deal.status === 'SELECTED' || deal.status === 'AGREED'}
+          onChanged={load}
+        />
       </div>
 
       {/* Chat */}

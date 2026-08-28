@@ -3645,3 +3645,210 @@
   min-width: 0;
 }
 .list-item__meta .list-item__sub { min-width: 0; }
+
+/* ══════════════════  Bemor holati (klinika ko'radi)  ══════════════════ */
+
+.pcase__tag {
+  font-size: var(--t-xs);
+  padding: 2px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--accent-pale);
+  color: var(--accent-ink);
+}
+
+.pcase__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+  gap: var(--s-2);
+}
+.pcase__fact {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+.pcase__factLabel {
+  font-size: var(--t-xs);
+  color: var(--muted);
+}
+.pcase__factValue {
+  font-size: var(--t-lg);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.pcase__factNote { font-size: var(--t-xs); color: var(--muted); }
+
+/* Xavf darajasi rang bilan — jarroh uni qidirib topmasligi kerak */
+.pcase__fact.is-ok .pcase__factNote { color: var(--success); }
+.pcase__fact.is-warn .pcase__factNote { color: var(--accent-ink); }
+.pcase__fact.is-risk .pcase__factNote { color: var(--danger); }
+
+.pcase__risks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.pcase__risk {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: var(--t-sm);
+  padding: 3px var(--s-3);
+  border-radius: var(--r-pill);
+  background: rgba(229, 83, 60, 0.09);
+  color: var(--ink);
+}
+.pcase__riskKind {
+  font-size: var(--t-xs);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ══════════════════  Tayyor variant + o'z matni  ══════════════════ */
+
+.chip-picker__add {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.chip-picker__add .input { flex: 1; min-width: 0; }
+
+.chip-picker__btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--primary-soft);
+  color: var(--primary);
+  cursor: pointer;
+  transition: opacity var(--d-micro) var(--ease);
+}
+.chip-picker__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ══════════════════  Kun tanlash  ══════════════════ */
+
+.dp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+/* Ikki hafta bir qatorda — yon tomonga siljiydi, sahifa emas */
+.dp__row {
+  display: flex;
+  gap: var(--s-2);
+  overflow-x: auto;
+  padding-bottom: var(--s-1);
+  scroll-snap-type: x proximity;
+}
+
+.dp__day {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 52px;
+  padding: var(--s-2) 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: border-color var(--d-micro) var(--ease), background var(--d-micro) var(--ease);
+}
+.dp__wd { font-size: var(--t-xs); color: var(--muted); }
+.dp__num {
+  font-size: var(--t-lg);
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bemor so'ragan oraliq — chegara bilan ajratiladi */
+.dp__day.is-preferred { border-color: var(--primary); }
+
+.dp__day.is-picked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.dp__day.is-picked .dp__wd,
+.dp__day.is-picked .dp__num { color: #fff; }
+
+/* Taklifdagi "nega qimmatroq" izohi — narxning yonida turadi */
+.offer__why {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--accent-pale);
+  color: var(--accent-ink);
+  font-size: var(--t-sm);
+}
+.offer__whyTag {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+}
+
+.offer__dates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+/* ══════════════════  Narxning o'zgarishi  ══════════════════ */
+
+.pchange {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--accent-pale);
+  color: var(--accent-ink);
+}
+.pchange__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+/* Eski narx chizib tashlanadi — nima o'zgarayotgani darhol ko'rinsin */
+.pchange__old {
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+.pchange__arrow { opacity: 0.6; }
+.pchange__new {
+  font-size: var(--t-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.pchange__log {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  font-size: var(--t-sm);
+}
+.pchange__badge {
+  font-size: var(--t-xs);
+  padding: 1px var(--s-2);
+  border-radius: var(--r-pill);
+}
+.pchange__badge.is-ok { background: var(--primary-soft); color: var(--primary); }
+.pchange__badge.is-no { background: var(--bg); color: var(--muted); }

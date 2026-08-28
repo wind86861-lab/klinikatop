@@ -50,6 +50,11 @@ function section(title: string) {
 
 import nodeCrypto from 'node:crypto';
 
+/** Bugundan N kun keyingi sana (YYYY-MM-DD). */
+function futureDate(days: number): string {
+  return new Date(Date.now() + days * 24 * 3600_000).toISOString().slice(0, 10);
+}
+
 /** Test uchun TOTP kodi — servisdagi bilan bir xil algoritm. */
 function totpFor(secret: string): string {
   const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -515,10 +520,12 @@ async function main() {
   const offer2 = offers.createOffer({
     requestId: request2.id,
     clinicId: clinic.id,
+    // Budjetdan yuqori — endi sabab majburiy
     priceUzs: 13_500_000,
     includes: ['Operatsiya', 'Narkoz'],
     advantages: [],
     leadTimeDays: 7,
+    aboveBudgetReason: 'Narkoz turi murakkabroq va bir kecha yotoq narxga kiradi',
     note: null,
   });
   const deal2 = deals.chooseOffer(request2.id, offer2.id, patient.id);
@@ -1430,6 +1437,244 @@ async function main() {
   // Telegramga tegishli maydonlar esa yangilanadi
   const fourthUser = upsertUser({ ...tgUser, username: 'yangi_login' });
   check('username yangilandi', fourthUser.username === 'yangi_login', fourthUser.username);
+
+
+  /* ═════ 19. Taklif tafsilotlari va narx o'zgarishi ═════ */
+  console.log('\n19. Taklif tafsilotlari va narx o‘zgarishi');
+
+  const patientCase = require('../services/patientCase');
+
+  /*
+   * Katalog testlari (15-bo'lim) manbadan bo'lmagan operatsiyalarni
+   * yashirgan. Bu yerga toza, faol yozuv kerak — aks holda so'rov
+   * "operatsiya topilmadi" bilan yiqiladi.
+   */
+  const liveOp = db
+    .prepare(
+      "INSERT INTO operations (category_id, slug, name_uz, name_ru, active, source, external_id) VALUES (?, 'narx-sinov', 'Narx sinovi', 'Тест цены', 1, 'banisa', 'op-price-test')",
+    )
+    .run(catId).lastInsertRowid;
+  db.prepare('INSERT OR IGNORE INTO clinic_operations (clinic_id, operation_id) VALUES (?, ?)').run(
+    clinic.id,
+    liveOp,
+  );
+
+  /*
+   * Klinika bemor holatini taklif berishdan OLDIN ko'rishi kerak:
+   * yosh, vazn, surunkali kasallik narxni o'zgartiradi.
+   */
+  const caseReq = requests.createRequest({
+    patientId: patient.id,
+    operationId: liveOp,
+    cityId: tashkent.id,
+    budgetUzs: 8_000_000,
+    note: null,
+    urgency: 'normal',
+    attachments: [],
+    aiSuggested: false,
+    conditionText: "Holatim: qorin o'ng tomonida og'riq, tekshiruvda tosh topildi.",
+    acceptTerms: true,
+  });
+
+  const pc = patientCase.patientCaseForRequest(caseReq.id);
+  check('yosh ko‘rinadi', typeof pc.ageYears === 'number', pc.ageYears);
+  check('jins ko‘rinadi', pc.gender !== null, pc.gender);
+  check('bo‘y va vazn ko‘rinadi', pc.heightCm !== null && pc.weightKg !== null, {
+    h: pc.heightCm,
+    w: pc.weightKg,
+  });
+  check('tana massasi indeksi hisoblandi', typeof pc.bmi === 'number' && pc.bmi > 10, pc.bmi);
+  check('surunkali kasalliklar uzatildi', pc.chronicConditions.length > 0, pc.chronicConditions);
+  check('holat matni bor', Boolean(pc.conditionText));
+
+  // SHAXS ma'lumoti chiqmasligi kerak — klinika holatni ko'radi, odamni emas
+  const caseKeys = Object.keys(pc);
+  check(
+    'ism va telefon uzatilmaydi',
+    !caseKeys.some((k) => /name|phone|telegram|email/i.test(k)),
+    caseKeys,
+  );
+
+  /* ── Tanishga so'rov: anketa ISHLATILMAYDI ── */
+  const relativeReq = requests.createRequest({
+    patientId: patient.id,
+    operationId: liveOp,
+    cityId: tashkent.id,
+    budgetUzs: 8_000_000,
+    note: null,
+    urgency: 'normal',
+    attachments: [],
+    aiSuggested: false,
+    conditionText: "Holatim: qorin o'ng tomonida og'riq, tekshiruvda tosh topildi.",
+    acceptTerms: true,
+    forSelf: false,
+    subjectName: 'Onam',
+    subjectBirthYear: 1960,
+    subjectGender: 'female',
+  });
+
+  const relativeCase = patientCase.patientCaseForRequest(relativeReq.id);
+  check('tanishning yoshi olindi', relativeCase.ageYears === new Date().getFullYear() - 1960, relativeCase.ageYears);
+  check('tanishning jinsi olindi', relativeCase.gender === 'female');
+  check(
+    'so‘rov qoldirgan odamning anketasi ISHLATILMADI',
+    relativeCase.chronicConditions.length === 0 && relativeCase.weightKg === null,
+    relativeCase,
+  );
+
+  /* ── Budjetdan yuqori narx ── */
+
+  throws(
+    'budjetdan yuqori narx sababsiz rad etiladi',
+    () =>
+      offers.createOffer({
+        requestId: caseReq.id,
+        clinicId: clinic.id,
+        priceUzs: 9_000_000,
+        includes: ['Operatsiya'],
+        advantages: [],
+        leadTimeDays: 5,
+        note: null,
+      }),
+    'above_budget_reason_required',
+  );
+
+  const pricier = offers.createOffer({
+    requestId: caseReq.id,
+    clinicId: clinic.id,
+    priceUzs: 9_000_000,
+    includes: ['Operatsiya', 'Narkoz', 'Bir kecha yotoq'],
+    advantages: ['Oliy toifali jarroh'],
+    leadTimeDays: 5,
+    proposedDates: [futureDate(7), futureDate(9), futureDate(3)],
+    aboveBudgetReason: 'Robot yordamida operatsiya va bir kecha yotoq narxga kiradi',
+    note: null,
+  });
+
+  check('budjetdan yuqori taklif qabul qilindi', pricier.priceUzs === 9_000_000);
+  check('sabab saqlandi', Boolean(pricier.aboveBudgetReason), pricier.aboveBudgetReason);
+  check('sanalar tartiblandi', pricier.proposedDates[0] === futureDate(3), pricier.proposedDates);
+  check('sanalar soni to‘g‘ri', pricier.proposedDates.length === 3, pricier.proposedDates);
+
+  // O'tmish sanalari va takrorlar tashlanadi
+  const cleaned = offers.updateOffer(pricier.id, clinic.id, {
+    proposedDates: ['2020-01-01', futureDate(5), futureDate(5), 'axlat'],
+  });
+  check('o‘tmish sanasi tashlandi', !cleaned.proposedDates.includes('2020-01-01'), cleaned.proposedDates);
+  check('takror sana bir marta qoldi', cleaned.proposedDates.length === 1, cleaned.proposedDates);
+
+  // Erkin matnli bandlar
+  const freeText = offers.updateOffer(pricier.id, clinic.id, {
+    includes: ['  Operatsiya  ', 'Operatsiya', 'O‘zim yozgan xizmat'],
+    advantages: ['Xalqaro sertifikat'],
+  });
+  check('bo‘sh joylar tozalandi', freeText.includes[0] === 'Operatsiya', freeText.includes);
+  check('takror band olib tashlandi', freeText.includes.length === 2, freeText.includes);
+  check('erkin matn qabul qilindi', freeText.includes.includes('O‘zim yozgan xizmat'));
+
+  /* ── Narxning o'zgarishi ── */
+
+  const priceDeal = deals.chooseOffer(caseReq.id, pricier.id, patient.id);
+  check('bitim 9 mln bilan ochildi', priceDeal.agreedPriceUzs === 9_000_000);
+
+  throws(
+    'sababsiz o‘zgartirib bo‘lmaydi',
+    () =>
+      deals.proposePriceChange({
+        dealId: priceDeal.id,
+        actorId: clinicUser.id,
+        newPriceUzs: 10_000_000,
+        reason: 'qisqa',
+      }),
+    'reason_required',
+  );
+  throws(
+    'bir xil narx taklif qilinmaydi',
+    () =>
+      deals.proposePriceChange({
+        dealId: priceDeal.id,
+        actorId: clinicUser.id,
+        newPriceUzs: 9_000_000,
+        reason: 'Hech narsa o‘zgargani yo‘q aslida',
+      }),
+    'same_price',
+  );
+
+  const change = deals.proposePriceChange({
+    dealId: priceDeal.id,
+    actorId: clinicUser.id,
+    newPriceUzs: 10_500_000,
+    reason: 'Tekshiruvda qo‘shimcha churra aniqlandi, uni ham bir vaqtda olamiz',
+  });
+  check('o‘zgarish taklif qilindi', change.status === 'pending' && change.toUzs === 10_500_000);
+  check('eski narx yozib qolindi', change.fromUzs === 9_000_000, change.fromUzs);
+
+  throws(
+    'ikkinchi taklif kutayotgani ustiga qo‘shilmaydi',
+    () =>
+      deals.proposePriceChange({
+        dealId: priceDeal.id,
+        actorId: clinicUser.id,
+        newPriceUzs: 11_000_000,
+        reason: 'Yana bir narsa aniqlandi deylik',
+      }),
+    'change_pending',
+  );
+
+  /*
+   * Taklif qilgan tomon o'zi qabul qila olmasligi kerak — aks holda
+   * narx bir tomonlama o'zgarardi va jarayonning ma'nosi qolmasdi.
+   */
+  throws(
+    'taklif qilgan tomon o‘zi qabul qilolmaydi',
+    () => deals.respondToPriceChange(change.id, clinicUser.id, true),
+  );
+
+  const accepted = deals.respondToPriceChange(change.id, patient.id, true);
+  check('bemor qabul qildi', accepted.status === 'accepted');
+  check(
+    'bitim narxi yangilandi',
+    deals.getDeal(priceDeal.id).agreedPriceUzs === 10_500_000,
+    deals.getDeal(priceDeal.id).agreedPriceUzs,
+  );
+
+  throws(
+    'javob berilganiga qayta javob bo‘lmaydi',
+    () => deals.respondToPriceChange(change.id, patient.id, false),
+    'already_decided',
+  );
+
+  /* ── Komissiya YANGI narxdan hisoblanadi ── */
+
+  deals.agreeSchedule(priceDeal.id, patient.id, null, futureDate(5) + 'T10:00:00.000Z');
+  deals.markPerformed(priceDeal.id, clinic.id);
+  const priceConfirmed = deals.confirmDeal(priceDeal.id, patient.id, 10_500_000);
+
+  const percent = priceConfirmed.commissionPercent;
+  check('komissiya foizi yozildi', typeof percent === 'number' && percent > 0, percent);
+  check(
+    'komissiya YANGI narxdan hisoblandi',
+    priceConfirmed.commissionUzs === Math.round((10_500_000 * percent) / 100),
+    { commission: priceConfirmed.commissionUzs, percent },
+  );
+  check('tasdiqlangan summa yangi narx', priceConfirmed.confirmedAmountUzs === 10_500_000);
+
+  // Tarix nizoda dalil bo'ladi
+  const history = deals.listPriceChanges(priceDeal.id);
+  check('narx tarixi saqlandi', history.length === 1 && history[0].status === 'accepted', history);
+
+  /* ── Bajarilgandan keyin narx qulflanadi ── */
+  throws(
+    'bajarilgan bitim narxi o‘zgarmaydi',
+    () =>
+      deals.proposePriceChange({
+        dealId: priceDeal.id,
+        actorId: clinicUser.id,
+        newPriceUzs: 12_000_000,
+        reason: 'Endi kech, lekin urinib ko‘ramiz',
+      }),
+    'price_locked',
+  );
 
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);

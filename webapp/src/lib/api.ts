@@ -32,6 +32,8 @@ import type {
   OfferWithClinic,
   Operation,
   OperationCategory,
+  DealPriceChange,
+  PatientCase,
   PriceStats,
   RequestStatus,
   RequestWithMeta,
@@ -278,6 +280,13 @@ export const api = {
   updateRequest: (id: number, body: { budgetUzs?: number | null; note?: string | null; urgency?: Urgency }) =>
     patch<RequestWithMeta>(`/requests/${id}`, body),
   cancelRequest: (id: number) => post<RequestWithMeta>(`/requests/${id}/cancel`),
+
+  /* ── Bitim narxining o'zgarishi ── */
+  priceChanges: (dealId: number) => get<DealPriceChange[]>(`/deals/${dealId}/price-changes`),
+  proposePriceChange: (dealId: number, newPriceUzs: number, reason: string) =>
+    post<DealPriceChange>(`/deals/${dealId}/price-change`, { newPriceUzs, reason }),
+  respondToPriceChange: (changeId: number, accept: boolean) =>
+    post<DealPriceChange>(`/deals/price-change/${changeId}/respond`, { accept }),
   /** So'rovni butunlay o'chirish — fayllari bilan birga. Qaytarib bo'lmaydi. */
   deleteRequest: (id: number) => del<void>(`/requests/${id}`),
   chooseOffer: (requestId: number, offerId: number) =>
@@ -320,7 +329,8 @@ export const api = {
   dashboard: () => get<ClinicDashboard>('/clinic/dashboard'),
   clinicReviews: () => get<Review[]>('/clinic/reviews'),
   clinicRequests: (onlyNew = false) => get<RequestWithMeta[]>(`/clinic/requests?onlyNew=${onlyNew}`),
-  clinicRequest: (id: number) => get<{ request: RequestWithMeta; stats: PriceStats }>(`/clinic/requests/${id}`),
+  clinicRequest: (id: number) =>
+    get<{ request: RequestWithMeta; patientCase: PatientCase; stats: PriceStats }>(`/clinic/requests/${id}`),
   clinicDeals: () => get<DealDetail[]>('/clinic/deals'),
   clinicOffers: () =>
     get<(OfferWithClinic & { requestStatus: RequestStatus; operationName: string })[]>('/offers'),
@@ -330,6 +340,10 @@ export const api = {
     includes: string[];
     advantages: string[];
     leadTimeDays: number;
+    /** Klinika taklif qilgan aniq sanalar (YYYY-MM-DD) */
+    proposedDates?: string[];
+    /** Budjetdan yuqori narx uchun izoh — server majburlaydi */
+    aboveBudgetReason?: string | null;
     note: string | null;
   }) => post<OfferWithClinic>('/offers', body),
   updateOffer: (id: number, body: Partial<Omit<Offer, 'id' | 'requestId' | 'clinicId' | 'status'>>) =>

@@ -8,10 +8,18 @@ export const offersRouter = Router();
 const offerBody = z.object({
   requestId: z.number().int().positive(),
   priceUzs: z.number().int().positive(),
-  // Shaffoflik siyosati: nima kirishi ko'rsatilishi shart
+  /*
+   * Bandlar ERKIN matn. Tayyor variantlar hamma holatni qamrab
+   * ololmaydi: har klinikaning o'z xizmati bor va uni ro'yxatga
+   * sig'dirishga majburlash shaffoflikni kamaytiradi.
+   */
   includes: z.array(z.string().min(1).max(120)).min(1).max(12),
-  advantages: z.array(z.string().min(1).max(120)).max(8).default([]),
+  advantages: z.array(z.string().min(1).max(120)).max(12).default([]),
   leadTimeDays: z.number().int().min(0).max(365),
+  /** Klinika taklif qilgan aniq sanalar */
+  proposedDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(6).default([]),
+  /** Budjetdan yuqori narx uchun izoh — servis majburlaydi */
+  aboveBudgetReason: z.string().trim().max(300).nullable().optional(),
   note: z.string().max(600).nullable().optional(),
 });
 

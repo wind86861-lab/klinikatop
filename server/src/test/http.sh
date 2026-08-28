@@ -835,6 +835,64 @@ check "qisqa parol rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/web/totp/start" -d '{}')
 check "bemor 2FA marshrutiga kirmaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
+echo
+echo "18. Taklif tafsilotlari va narx o'zgarishi"
+
+OVER_REQ=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d '{"operationId":1,"cityId":1,"budgetUzs":5000000,"urgency":"normal","attachments":[],"aiSuggested":false,"conditionText":"Holatim: qorin ong tomonida ogriq, tekshiruvda tosh topildi.","acceptTerms":true}' | jqv '.id')
+
+# Klinika bemor holatini taklif berishdan OLDIN ko'radi.
+# So'rov OCHIQ bo'lishi kerak — yopilgani klinika ro'yxatida qolmaydi.
+PCASE=$(curl -s "${CLINIC[@]}" "$API/clinic/requests/$OVER_REQ")
+check "bemor yoshi ko'rinadi" "$(echo "$PCASE" | jqv '.patientCase.ageYears' | grep -qE '^[0-9]+$' && echo 1)" \
+  "$(echo "$PCASE" | head -c 90)"
+check "jinsi ko'rinadi" "$(echo "$PCASE" | jqv '.patientCase.gender' | grep -qE 'male|female' && echo 1)" ""
+check "ism uzatilmaydi" "$(echo "$PCASE" | jqv '.patientCase' | grep -qv 'irstName' && echo 1)" ""
+
+# Budjetdan yuqori narx: sababsiz rad, sabab bilan qabul
+
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
+  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":7000000,\"includes\":[\"Operatsiya\"],\"advantages\":[],\"leadTimeDays\":5}")
+check "budjetdan yuqori narx sababsiz rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+TOMORROW=$(date -d '+3 days' +%Y-%m-%d)
+OVER_OFFER=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
+  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":7000000,\"includes\":[\"Operatsiya\",\"Ozim yozgan xizmat\"],\"advantages\":[\"Oliy toifali jarroh\"],\"leadTimeDays\":5,\"proposedDates\":[\"$TOMORROW\"],\"aboveBudgetReason\":\"Robot yordamida operatsiya va bir kecha yotoq narxga kiradi\"}")
+check "sabab bilan qabul qilindi" "$(echo "$OVER_OFFER" | jqv '.priceUzs' | grep -q '7000000' && echo 1)" ""
+check "erkin matnli band saqlandi" "$(echo "$OVER_OFFER" | grep -q 'Ozim yozgan xizmat' && echo 1)" ""
+check "taklif qilingan sana saqlandi" "$(echo "$OVER_OFFER" | grep -q "$TOMORROW" && echo 1)" ""
+
+# O'tmish sanasi tashlanadi
+PAST_OFFER=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X PATCH "$API/offers/$(echo "$OVER_OFFER" | jqv '.id')" \
+  -d '{"proposedDates":["2020-01-01"]}')
+check "o'tmish sanasi tashlandi" "$(echo "$PAST_OFFER" | grep -qv '2020-01-01' && echo 1)" ""
+
+# Narx o'zgarishi: ikki tomon roziligi
+OVER_DEAL=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests/$OVER_REQ/choose" \
+  -d "{\"offerId\":$(echo "$OVER_OFFER" | jqv '.id')}" | jqv '.id')
+
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$OVER_DEAL/price-change" \
+  -d '{"newPriceUzs":8000000,"reason":"qisqa"}')
+check "qisqa sabab rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+CHANGE=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$OVER_DEAL/price-change" \
+  -d '{"newPriceUzs":8000000,"reason":"Tekshiruvda qoshimcha churra aniqlandi, uni ham olamiz"}' | jqv '.id')
+check "o'zgarish taklif qilindi" "$([ -n "$CHANGE" ] && echo 1)" ""
+
+# Taklif qilgan tomon o'zi qabul qila olmaydi
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/price-change/$CHANGE/respond" -d '{"accept":true}')
+check "taklif qilgan tomon o'zi qabul qilolmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
+ACCEPTED=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/price-change/$CHANGE/respond" -d '{"accept":true}' | jqv '.status')
+check "bemor qabul qildi" "$([ "$ACCEPTED" = "accepted" ] && echo 1)" "$ACCEPTED"
+
+NEW_PRICE=$(curl -s "${PATIENT[@]}" "$API/deals/$OVER_DEAL" | jqv '.deal.agreedPriceUzs')
+check "bitim narxi yangilandi" "$([ "$NEW_PRICE" = "8000000" ] && echo 1)" "$NEW_PRICE"
+
+# Uchinchi shaxs tarixni ko'ra olmaydi
+code=$(status "${STRANGER[@]}" "$API/deals/$OVER_DEAL/price-changes")
+check "begona narx tarixini ko'ra olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
 # ── Tozalash ──
 # Test yaratgan arizalar kunlik IP chegarasini yeb qo'ymasligi uchun
 # rad etilganlarini o'chiramiz. Bu moderatorning spam tozalash yo'li.

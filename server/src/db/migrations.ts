@@ -786,6 +786,56 @@ export const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE users SET roles = '["admin"]' WHERE roles = '["admin","admin"]'`);
     },
   },
+  {
+    /**
+     * Taklifni aniqroq qiladigan uch narsa.
+     *
+     * `proposed_dates` — klinika taklif qilgan aniq sanalar. "7 kun
+     * ichida" mo'ljal beradi, sana esa qaror qildiradi: bemor ishdan
+     * ta'til olishi va yaqinini chaqirishi kerak.
+     *
+     * `above_budget_reason` — bemor budjetidan yuqori narx uchun izoh.
+     * Klinika yaxshiroq shart bilan qimmatroq taklif bera oladi, lekin
+     * sababsiz emas: aks holda bemor eng arzonini tanlaydi va tafovutni
+     * tushunmaydi.
+     *
+     * `deal_price_changes` — bitim narxining o'zgarishi tarixi. Ilgari
+     * narx faqat tasdiqlash paytida o'zgara olardi va nima uchun
+     * o'zgargani hech qayerda qolmasdi. Endi har o'zgarish IKKI TOMON
+     * roziligi bilan bo'ladi va yozib boriladi — komissiya ham, nizo
+     * ham shu yozuvga tayanadi.
+     */
+    id: '015_offer_details',
+    up: (db) => {
+      addColumn(db, 'offers', 'proposed_dates', `TEXT NOT NULL DEFAULT '[]'`);
+      addColumn(db, 'offers', 'above_budget_reason', 'TEXT');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS deal_price_changes (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          deal_id     INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+          from_uzs    INTEGER NOT NULL,
+          to_uzs      INTEGER NOT NULL,
+          reason      TEXT NOT NULL,
+          proposed_by TEXT NOT NULL CHECK (proposed_by IN ('clinic','patient')),
+          status      TEXT NOT NULL DEFAULT 'pending'
+                      CHECK (status IN ('pending','accepted','rejected')),
+          created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+          decided_at  TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_price_changes_deal ON deal_price_changes(deal_id, status);
+
+        /*
+         * Bir bitimda bir vaqtda faqat BITTA kutilayotgan taklif
+         * bo'lishi mumkin. Aks holda ikki xil narx bir vaqtda
+         * kutilib turardi va qaysi biri qabul qilinsa — noaniq.
+         */
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_price_change_pending
+          ON deal_price_changes(deal_id) WHERE status = 'pending';
+      `);
+    },
+  },
 ];
 
 /**

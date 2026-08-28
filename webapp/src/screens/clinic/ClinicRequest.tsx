@@ -3,7 +3,7 @@
  * Klinika bu yerda bemor byudjetini va bozor narxini yonma-yon ko'radi.
  */
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
@@ -28,7 +28,10 @@ import {
   SkeletonList,
   Textarea,
 } from '@/ui';
-import type { PriceStats, RequestWithMeta } from '@shared/types';
+import type { PatientCase, PriceStats, RequestWithMeta } from '@shared/types';
+import { PatientCaseCard } from '@/components/PatientCaseCard';
+import { ChipPicker } from '@/components/ChipPicker';
+import { DatePicker } from '@/components/DatePicker';
 
 /** Tez javob uchun tayyor variantlar — klinika bir tegishda qo'shadi. */
 const INCLUDE_PRESETS = [
@@ -57,6 +60,7 @@ export function ClinicRequest() {
   const { t, lang, toast } = useApp();
 
   const [request, setRequest] = useState<RequestWithMeta | null>(null);
+  const [patientCase, setPatientCase] = useState<PatientCase | null>(null);
   const [stats, setStats] = useState<PriceStats | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,7 +68,14 @@ export function ClinicRequest() {
   const [includes, setIncludes] = useState<string[]>(['Operatsiya', 'Narkoz (anesteziya)']);
   const [advantages, setAdvantages] = useState<string[]>([]);
   const [leadTimeDays, setLeadTimeDays] = useState(7);
+  /** Klinika taklif qilgan aniq sanalar */
+  const [dates, setDates] = useState<string[]>([]);
+  /** Budjetdan yuqori narx uchun izoh */
+  const [aboveReason, setAboveReason] = useState('');
   const [note, setNote] = useState('');
+  /** Ro'yxatga o'z bandini qo'shish */
+  const [customInclude, setCustomInclude] = useState('');
+  const [customAdvantage, setCustomAdvantage] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
@@ -75,6 +86,7 @@ export function ClinicRequest() {
       .then((data) => {
         if (cancelled) return;
         setRequest(data.request);
+        setPatientCase(data.patientCase ?? null);
         setStats(data.stats);
         // Boshlang'ich narx: bemor byudjeti yoki bozor medianasi
         setPrice(data.request.budgetUzs ?? data.stats.median ?? 0);
@@ -99,6 +111,8 @@ export function ClinicRequest() {
         includes,
         advantages,
         leadTimeDays,
+        proposedDates: dates,
+        aboveBudgetReason: aboveReason.trim() || null,
         note: note.trim() || null,
       });
       haptic.success();
@@ -129,8 +143,24 @@ export function ClinicRequest() {
   }
 
   const left = timeLeft(request.expiresAt, lang);
+
+  /*
+   * Budjetdan YUQORI narx ruxsat etiladi: klinika yaxshiroq shart bilan
+   * qimmatroq taklif bera olishi kerak, aks holda platforma faqat eng
+   * arzon variantni ko'rsatadigan joyga aylanadi.
+   *
+   * Lekin sababsiz emas — bemor nima uchun qimmatroq ekanini bilmasa,
+   * u shunchaki eng arzonini tanlaydi.
+   */
+  const aboveBudget = Boolean(request.budgetUzs && price > request.budgetUzs);
+  const overBy = aboveBudget && request.budgetUzs ? price - request.budgetUzs : 0;
+
   // Shaffoflik siyosati: "nima kiradi" bo'sh bo'lsa taklif yuborilmaydi
-  const valid = price >= 100_000 && includes.length > 0 && !sent;
+  const valid =
+    price >= 100_000 &&
+    includes.length > 0 &&
+    (!aboveBudget || aboveReason.trim().length >= 10) &&
+    !sent;
 
   return (
     <Screen
@@ -197,6 +227,9 @@ export function ClinicRequest() {
         )}
       </Card>
 
+      {/* Holat taklif berishdan OLDIN: narx shunga bog'liq */}
+      {patientCase && <PatientCaseCard data={patientCase} />}
+
       {/* Tekshiruv natijalari */}
       {request.files && request.files.length > 0 && (
         <Card className="stack">
@@ -231,29 +264,86 @@ export function ClinicRequest() {
         />
       </Field>
 
+      {/*
+        Budjetdan yuqori narx — to'siq emas, tushuntirish talab qiladi.
+        Klinika yaxshiroq shart bilan qimmatroq taklif bera olishi kerak.
+      */}
+      <AnimatePresence>
+        {aboveBudget && (
+          <motion.div
+            className="stack"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+          >
+            <Notice tone="warning">
+              Narx bemor budjetidan {money(overBy, lang)} yuqori. Nima uchun qimmatroq ekanini
+              yozing — bemor buni taklifingiz bilan birga ko‘radi.
+            </Notice>
+            <Textarea
+              rows={2}
+              value={aboveReason}
+              maxLength={300}
+              placeholder="Masalan: robot yordamida operatsiya va bir kecha yotoq narxga kiradi"
+              onChange={(e) => setAboveReason(e.target.value)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <Field label={t('clinic.includes')} hint={t('clinic.includesHint')} error={includes.length === 0 ? t('common.required') : undefined}>
-        <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-          {INCLUDE_PRESETS.map((item) => (
-            <Chip key={item} size="sm" active={includes.includes(item)} onClick={() => toggle(includes, setIncludes, item)}>
-              {includes.includes(item) && <IconCheck size={11} />} {item}
-            </Chip>
-          ))}
-        </div>
+        <ChipPicker
+          presets={INCLUDE_PRESETS}
+          selected={includes}
+          onToggle={(v) => toggle(includes, setIncludes, v)}
+          draft={customInclude}
+          onDraft={setCustomInclude}
+          onAdd={(v) => {
+            if (!includes.includes(v)) setIncludes([...includes, v]);
+            setCustomInclude('');
+          }}
+          addPlaceholder="O‘z bandingizni yozing"
+        />
       </Field>
 
       <Field label={`${t('clinic.advantages')} · ${t('common.optional')}`}>
-        <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-          {ADVANTAGE_PRESETS.map((item) => (
-            <Chip
-              key={item}
-              size="sm"
-              active={advantages.includes(item)}
-              onClick={() => toggle(advantages, setAdvantages, item)}
-            >
-              {item}
-            </Chip>
-          ))}
-        </div>
+        <ChipPicker
+          presets={ADVANTAGE_PRESETS}
+          selected={advantages}
+          onToggle={(v) => toggle(advantages, setAdvantages, v)}
+          draft={customAdvantage}
+          onDraft={setCustomAdvantage}
+          onAdd={(v) => {
+            if (!advantages.includes(v)) setAdvantages([...advantages, v]);
+            setCustomAdvantage('');
+          }}
+          addPlaceholder="O‘z afzalligingizni yozing"
+        />
+      </Field>
+
+      {/*
+        Aniq sanalar.
+        "7 kun ichida" mo'ljal beradi, sana esa qaror qildiradi: bemor
+        ishdan ta'til olishi va yaqinini chaqirishi kerak. Bemor
+        ko'rsatgan oraliq bo'lsa, u birinchi ko'rinadi.
+      */}
+      <Field
+        label="Qulay kunlar · ixtiyoriy"
+        hint={
+          request.dateFrom
+            ? `Bemor ${formatDate(request.dateFrom, lang)}${
+                request.dateTo ? ` – ${formatDate(request.dateTo, lang)}` : ''
+              } oralig‘ini ko‘rsatgan`
+            : 'Bemor sana ko‘rsatmagan — o‘zingiz taklif qiling'
+        }
+      >
+        <DatePicker
+          value={dates}
+          onChange={setDates}
+          preferFrom={request.dateFrom}
+          preferTo={request.dateTo}
+          lang={lang}
+        />
       </Field>
 
       <Field label={t('clinic.leadTime')}>

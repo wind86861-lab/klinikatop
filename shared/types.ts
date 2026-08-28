@@ -316,10 +316,71 @@ export interface Offer {
   advantages: string[];
   /** Necha kun ichida bajaradi */
   leadTimeDays: number;
+  /**
+   * Klinika taklif qilgan aniq sanalar (YYYY-MM-DD).
+   *
+   * "Necha kun ichida" mo'ljal beradi, sana esa qaror qildiradi: bemor
+   * ishdan ta'til olishi, qarindoshini chaqirishi kerak. Bo'sh bo'lsa —
+   * klinika sanani keyin kelishadi.
+   */
+  proposedDates: string[];
+  /**
+   * Bemor budjetidan yuqori narx uchun izoh — MAJBURIY.
+   *
+   * Klinika yaxshiroq shart bilan qimmatroq taklif bera oladi, lekin
+   * bemor nima uchun qimmatroq ekanini bilishi kerak: aks holda u
+   * shunchaki eng arzonini tanlaydi va tafovutni tushunmaydi.
+   */
+  aboveBudgetReason: string | null;
   note: string | null;
   status: OfferStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Bemorning KLINIKAGA ko'rinadigan tibbiy tavsifi.
+ *
+ * Narx holatga bog'liq: 70 yoshli va 30 yoshli bemorda bir xil
+ * operatsiya boshqacha, ortiqcha vazn va surunkali kasallik xavfni
+ * oshiradi. Klinika buni taklif berishdan OLDIN bilishi kerak, aks
+ * holda narx taxminiy bo'ladi va keyin o'zgaradi.
+ *
+ * Shaxsni aniqlaydigan hech narsa yo'q: ism ham, raqam ham. Klinika
+ * holatni ko'radi, odamni emas — tanlangandan keyin tanishadi.
+ */
+export interface PatientCase {
+  ageYears: number | null;
+  gender: Gender | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  /** Bo'y va vazndan hisoblanadi; ikkalasi bo'lmasa null */
+  bmi: number | null;
+  bloodType: string | null;
+  chronicConditions: string[];
+  pastSurgeries: string[];
+  allergies: string[];
+  medications: string[];
+  /** Bemor o'z so'zi bilan yozgan holat */
+  conditionText: string | null;
+  /** So'rov o'ziga emas, tanishiga bo'lsa — anketa ishlatilmaydi */
+  forSelf: boolean;
+}
+
+/** Bitim narxining o'zgarishi — ikki tomon roziligi bilan. */
+export type PriceChangeStatus = 'pending' | 'accepted' | 'rejected';
+
+export interface DealPriceChange {
+  id: number;
+  dealId: number;
+  fromUzs: number;
+  toUzs: number;
+  reason: string;
+  /** Kim taklif qildi */
+  proposedBy: 'clinic' | 'patient';
+  status: PriceChangeStatus;
+  createdAt: string;
+  decidedAt: string | null;
 }
 
 export interface OfferWithClinic extends Offer {
@@ -340,6 +401,14 @@ export interface Deal {
   status: DealStatus;
   confirmedAmountUzs: number | null;
   commissionUzs: number | null;
+  /**
+   * Tasdiqlash paytidagi foiz — bitimga YOZIB qo'yiladi.
+   *
+   * Admin keyin foizni o'zgartirsa eski bitim qayta hisoblanmaydi.
+   * Klinika o'zidan qancha olinganini ko'ra olishi kerak: bu uning
+   * pulidan chiqadi va "qancha oldingiz" degan savol albatta keladi.
+   */
+  commissionPercent: number | null;
   confirmedAt: string | null;
   disputeReason: string | null;
   createdAt: string;
@@ -399,6 +468,10 @@ export const NOTIFICATION_TYPES = [
   'bonus_earned',
   /** Bemor javob bermagani uchun bitim avtomatik yopildi */
   'deal_auto_confirmed',
+  /** Ikkinchi tomon narxni o'zgartirishni taklif qildi */
+  'price_change_proposed',
+  'price_change_accepted',
+  'price_change_rejected',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

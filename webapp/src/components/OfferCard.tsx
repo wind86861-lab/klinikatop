@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { money, responseSpeed } from '@/lib/format';
+import { formatDate, money, responseSpeed } from '@/lib/format';
 import { spring } from '@/lib/motion';
 import { Avatar, Badge, Button, Card, IconCheck, IconClock, IconShield } from '@/ui';
 import { useApp } from '@/store/app';
@@ -100,6 +100,32 @@ export function OfferCard({
               {item}
             </span>
           ))}
+        </div>
+      )}
+
+      {/*
+        Budjetdan yuqori narx uchun izoh — narxning YONIDA turadi.
+        Bemor "nega qimmatroq" degan savolga javobni shu yerda topsin,
+        aks holda u shunchaki eng arzonini tanlaydi.
+      */}
+      {offer.aboveBudgetReason && (
+        <div className="offer__why">
+          <span className="offer__whyTag">Nega qimmatroq</span>
+          <span>{offer.aboveBudgetReason}</span>
+        </div>
+      )}
+
+      {/* Klinika taklif qilgan aniq kunlar */}
+      {offer.proposedDates.length > 0 && (
+        <div className="offer__dates">
+          <span className="tiny">Taklif qilingan kunlar</span>
+          <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+            {offer.proposedDates.map((d) => (
+              <span className="badge badge--neutral num" key={d}>
+                {formatDate(d, lang)}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 

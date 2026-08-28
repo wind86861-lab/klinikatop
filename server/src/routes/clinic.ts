@@ -39,6 +39,7 @@ import {
 } from '../services/clinicCabinet';
 import { CLINIC_DOC_KINDS } from '../../../shared/types';
 import { forbidden } from '../lib/errors';
+import { patientCaseForRequest } from '../services/patientCase';
 import { createAccount } from '../services/webAuth';
 
 /** Faqat klinika administratori: pul, jamoa va profil qarorlari. */
@@ -111,7 +112,20 @@ clinicRouter.get('/requests/:id', (req, res) => {
 
   // Ko'rildi belgisi — bemor radarida klinika avatari "yonadi"
   markViewed(requestId, clinicId);
-  res.json({ request, stats: getPriceStats(request.operationId, request.cityId) });
+
+  /*
+   * Bemor holati taklif berishdan OLDIN beriladi.
+   *
+   * Narx holatga bog'liq: yosh, vazn, surunkali kasallik jarrohlik
+   * rejasini o'zgartiradi. Buni ko'rmasdan qo'yilgan narx taxminiy
+   * bo'ladi va bemor kelganda o'zgaradi — nizolar aynan shundan
+   * chiqadi. Shaxsni aniqlaydigan ma'lumot bu yerda yo'q.
+   */
+  res.json({
+    request,
+    patientCase: patientCaseForRequest(requestId),
+    stats: getPriceStats(request.operationId, request.cityId),
+  });
 });
 
 clinicRouter.get('/deals', (req, res) => {
