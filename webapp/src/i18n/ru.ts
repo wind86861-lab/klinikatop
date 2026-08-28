@@ -390,11 +390,11 @@ export const ru: Record<TranslationKey, string> = {
   'wz.budget.set': 'Указать бюджет',
 
   'wz.date.title': 'Когда удобно?',
-  'wz.date.sub': 'Достаточно примерного диапазона',
+  'wz.date.sub': 'Оставьте гибкой или укажите точные дни',
   'wz.date.from': 'С',
   'wz.date.to': 'По',
   'wz.date.flexible': 'Дата гибкая',
-  'wz.date.flexibleHint': 'Клиника может предложить свободный день — часто дешевле',
+  'wz.date.flexibleHint': 'Клиника предложит свой свободный день — часто дешевле',
   'wz.date.asap': 'Как можно скорее',
 
   'wz.note.title': 'Хотите добавить что-то ещё?',

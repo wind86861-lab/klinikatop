@@ -497,32 +497,70 @@ function DateStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) =
         ))}
       </div>
 
-      <div className="row" style={{ gap: 'var(--s-2)', alignItems: 'flex-end' }}>
-        <Field label={t('wz.date.from')}>
-          <Input
-            type="date"
-            min={today}
-            value={draft.dateFrom ?? ''}
-            onChange={(e) => patch({ dateFrom: e.target.value || null })}
-          />
-        </Field>
-        <Field label={t('wz.date.to')}>
-          <Input
-            type="date"
-            min={draft.dateFrom ?? today}
-            value={draft.dateTo ?? ''}
-            onChange={(e) => patch({ dateTo: e.target.value || null })}
-          />
-        </Field>
-      </div>
+      {/*
+        Moslashuvchanlik va aniq oraliq — BIR narsaning ikki holati,
+        ikki mustaqil sozlama emas.
 
-      {/* Moslashuvchanlik klinikaga bo'sh kunini taklif qilish imkonini beradi */}
+        Ilgari ikkalasi alohida turardi va bemor 28–31 avgustni
+        belgilab, ustiga "moslashuvchan" ni ham yoqib qo'yardi.
+        Klinika buni qanday tushunishi kerak edi — sanaga qat'iymi
+        yoki yo'qmi? Javob yo'q edi.
+
+        Endi sana tanlansa moslashuvchanlik o'chadi, moslashuvchanlik
+        yoqilsa sanalar tozalanadi. Zid holat yuzaga kelmaydi.
+      */}
       <ToggleRow
         on={draft.dateFlexible}
         title={t('wz.date.flexible')}
         hint={t('wz.date.flexibleHint')}
-        onToggle={() => patch({ dateFlexible: !draft.dateFlexible })}
+        onToggle={() =>
+          patch(
+            draft.dateFlexible
+              ? { dateFlexible: false }
+              : { dateFlexible: true, dateFrom: null, dateTo: null },
+          )
+        }
       />
+
+      <AnimatePresence initial={false}>
+        {!draft.dateFlexible && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: EASE }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="row" style={{ gap: 'var(--s-2)', alignItems: 'flex-end' }}>
+              <Field label={t('wz.date.from')}>
+                <Input
+                  type="date"
+                  min={today}
+                  value={draft.dateFrom ?? ''}
+                  onChange={(e) => {
+                    // O'tgan sana kiritilsa e'tiborga olinmaydi: kelgusi
+                    // operatsiyani o'tgan kunga belgilab bo'lmaydi
+                    const v = e.target.value;
+                    patch({ dateFrom: v && v >= today ? v : null });
+                  }}
+                />
+              </Field>
+              <Field label={t('wz.date.to')}>
+                <Input
+                  type="date"
+                  min={draft.dateFrom ?? today}
+                  value={draft.dateTo ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const floor = draft.dateFrom ?? today;
+                    patch({ dateTo: v && v >= floor ? v : null });
+                  }}
+                />
+              </Field>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

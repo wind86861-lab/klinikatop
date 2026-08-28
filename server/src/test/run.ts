@@ -1676,6 +1676,104 @@ async function main() {
     'price_locked',
   );
 
+
+  /* ═════ 20. Sana oralig'i va moslashuvchanlik ═════ */
+  console.log('\n20. Sana oralig‘i');
+
+  const { normalizeDateWindow } = require('../services/requests');
+
+  /*
+   * "Moslashuvchan" va "aniq oraliq" bir narsaning ikki holati.
+   * Ilgari ikkalasi alohida yozilardi va bemor sanani belgilab, ustiga
+   * moslashuvchanlikni ham yoqib qo'yardi — klinika buni qanday
+   * tushunishi kerakligi noaniq edi.
+   */
+  const noDates = normalizeDateWindow(null, null);
+  check('sanasiz — moslashuvchan', noDates.dateFlexible === true);
+
+  const withDates = normalizeDateWindow(futureDate(3), futureDate(6));
+  check('sana bor — moslashuvchan EMAS', withDates.dateFlexible === false);
+  check('oraliq saqlandi', withDates.dateFrom === futureDate(3) && withDates.dateTo === futureDate(6));
+
+  const onlyEnd = normalizeDateWindow(null, futureDate(4));
+  check('faqat tugash sanasi boshlanish bo‘ldi', onlyEnd.dateFrom === futureDate(4), onlyEnd);
+  check('yolg‘iz sana moslashuvchan emas', onlyEnd.dateFlexible === false);
+
+  /* ── O'tgan sana ── */
+  throws('o‘tgan boshlanish sanasi rad etiladi', () => normalizeDateWindow('2020-01-01', null), 'date_in_past');
+  throws('o‘tgan tugash sanasi rad etiladi', () => normalizeDateWindow(null, '2020-01-01'), 'date_in_past');
+  throws('teskari tartib rad etiladi', () => normalizeDateWindow(futureDate(6), futureDate(3)), 'date_order');
+  throws('buzuq sana rad etiladi', () => normalizeDateWindow('kecha', null), 'invalid_date');
+
+  // Bugun ruxsat etiladi — shoshilinch holat bo'lishi mumkin
+  const todayWindow = normalizeDateWindow(new Date().toISOString().slice(0, 10), null);
+  check('bugungi sana qabul qilinadi', todayWindow.dateFrom !== null);
+
+  /* ── So'rov yaratilganda ham amal qiladi ── */
+  throws(
+    'o‘tgan sana bilan so‘rov yaratilmaydi',
+    () =>
+      requests.createRequest({
+        patientId: patient.id,
+        operationId: liveOp,
+        cityId: tashkent.id,
+        budgetUzs: 9_000_000,
+        note: null,
+        urgency: 'normal',
+        attachments: [],
+        aiSuggested: false,
+        conditionText: "Holatim: qorin o'ng tomonida og'riq, tekshiruvda tosh topildi.",
+        acceptTerms: true,
+        dateFrom: '2020-01-01',
+      }),
+    'date_in_past',
+  );
+
+  const dateReq = requests.createRequest({
+    patientId: patient.id,
+    operationId: liveOp,
+    cityId: tashkent.id,
+    budgetUzs: 9_000_000,
+    note: null,
+    urgency: 'normal',
+    attachments: [],
+    aiSuggested: false,
+    conditionText: "Holatim: qorin o'ng tomonida og'riq, tekshiruvda tosh topildi.",
+    acceptTerms: true,
+    dateFrom: futureDate(4),
+    dateTo: futureDate(8),
+    // Mijoz zid qiymat yuborsa ham server buni e'tiborga olmaydi
+    dateFlexible: true,
+  });
+  check('zid moslashuvchanlik e‘tiborga olinmadi', dateReq.dateFlexible === false, dateReq.dateFlexible);
+  // Mapper sanani to'liq ISO'ga o'giradi — kun qismini solishtiramiz
+  check(
+    'so‘rovda oraliq saqlandi',
+    (dateReq.dateFrom ?? '').slice(0, 10) === futureDate(4),
+    dateReq.dateFrom,
+  );
+
+  /* ── Bitim sanasi ham o'tmishda bo'lmaydi ── */
+  const schedOffer = offers.createOffer({
+    requestId: dateReq.id,
+    clinicId: clinic.id,
+    priceUzs: 8_000_000,
+    includes: ['Operatsiya'],
+    advantages: [],
+    leadTimeDays: 5,
+    note: null,
+  });
+  const schedDeal = deals.chooseOffer(dateReq.id, schedOffer.id, patient.id);
+
+  throws(
+    'bitimni o‘tgan sanaga belgilab bo‘lmaydi',
+    () => deals.agreeSchedule(schedDeal.id, patient.id, null, '2020-01-01T10:00:00.000Z'),
+    'date_in_past',
+  );
+
+  const scheduled = deals.agreeSchedule(schedDeal.id, patient.id, null, futureDate(5) + 'T10:00:00.000Z');
+  check('kelgusi sana qabul qilindi', scheduled.status === 'AGREED');
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

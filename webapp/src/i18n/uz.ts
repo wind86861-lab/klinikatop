@@ -409,11 +409,11 @@ export const uz = {
   'wz.budget.set': 'Byudjet ko‘rsataman',
 
   'wz.date.title': 'Qachon qulay?',
-  'wz.date.sub': 'Taxminiy oraliq yetarli',
+  'wz.date.sub': 'Moslashuvchan qoldiring yoki aniq kunlarni ko‘rsating',
   'wz.date.from': 'Dan',
   'wz.date.to': 'Gacha',
   'wz.date.flexible': 'Sana moslashuvchan',
-  'wz.date.flexibleHint': 'Klinika bo‘sh kunini taklif qilishi mumkin — ko‘pincha arzonroq',
+  'wz.date.flexibleHint': 'Klinika o‘z bo‘sh kunini taklif qiladi — ko‘pincha arzonroq',
   'wz.date.asap': 'Imkon qadar tez',
 
   'wz.note.title': 'Qo‘shimcha aytmoqchi narsa bormi?',

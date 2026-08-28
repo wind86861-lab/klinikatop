@@ -94,6 +94,62 @@ export interface CreateRequestInput {
   userAgent?: string | null;
 }
 
+/**
+ * Sana oralig'i va "moslashuvchan" belgisini bir shaklga keltiradi.
+ *
+ * ═══ Ular MUSTAQIL maydon emas ═══
+ *
+ * "Moslashuvchan" degani "aniq oraliq yo'q" degani. Ilgari ikkalasi
+ * alohida yozilardi va bir-biriga zid holat yuzaga kelardi: bemor
+ * 28–31 avgustni belgilab, ustiga "moslashuvchan" ni ham yoqib
+ * qo'yardi. Klinika buni qanday tushunishi kerak edi — sanaga
+ * qat'iymi yoki yo'qmi? Javob yo'q edi.
+ *
+ * Endi belgi HISOBLANADI: oraliq bor bo'lsa moslashuvchan emas,
+ * oraliq yo'q bo'lsa moslashuvchan. Zid holatni yozib bo'lmaydi.
+ *
+ * ═══ O'tmish sanasi ═══
+ *
+ * Kelgusi operatsiyani o'tgan kunga belgilab bo'lmaydi. Ilgari server
+ * buni umuman tekshirmasdi: har qanday matn 40 belgigacha o'tardi va
+ * klinikaga "2020-yil 1-yanvar" bo'lib borardi.
+ */
+export interface DateWindow {
+  dateFrom: string | null;
+  dateTo: string | null;
+  dateFlexible: boolean;
+}
+
+export function normalizeDateWindow(
+  dateFrom: string | null | undefined,
+  dateTo: string | null | undefined,
+): DateWindow {
+  const today = new Date().toISOString().slice(0, 10);
+  const shape = /^\d{4}-\d{2}-\d{2}$/;
+
+  const from = (dateFrom ?? '').slice(0, 10) || null;
+  const to = (dateTo ?? '').slice(0, 10) || null;
+
+  if (from && !shape.test(from)) throw badRequest('invalid_date', 'Sana noto‘g‘ri');
+  if (to && !shape.test(to)) throw badRequest('invalid_date', 'Sana noto‘g‘ri');
+
+  if (from && from < today) {
+    throw badRequest('date_in_past', 'O‘tgan sanaga operatsiya belgilab bo‘lmaydi');
+  }
+  if (to && to < today) {
+    throw badRequest('date_in_past', 'O‘tgan sanaga operatsiya belgilab bo‘lmaydi');
+  }
+  if (from && to && to < from) {
+    throw badRequest('date_order', 'Tugash sanasi boshlanishidan oldin bo‘lmaydi');
+  }
+
+  // Faqat tugash sanasi berilgan bo'lsa — u oraliqning boshi bo'ladi
+  const start = from ?? to;
+  const end = from ? to : null;
+
+  return { dateFrom: start, dateTo: end, dateFlexible: start === null };
+}
+
 export function createRequest(input: CreateRequestInput): RequestWithMeta {
   // Profil to'liq bo'lmasa so'rov yuborilmaydi: klinika kimga taklif
   // berayotganini bilishi kerak (ism, familiya, viloyat)
@@ -107,6 +163,8 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
   if (!input.acceptTerms) {
     throw badRequest('terms_not_accepted', 'Ommaviy oferta shartlarini qabul qiling');
   }
+
+  const window = normalizeDateWindow(input.dateFrom, input.dateTo);
 
   /*
    * Faol so'rovlar soniga cheklov YO'Q.
@@ -169,9 +227,10 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
         subjectName: input.forSelf === false ? (input.subjectName?.trim()?.slice(0, 120) || null) : null,
         subjectBirthYear: input.forSelf === false ? (input.subjectBirthYear ?? null) : null,
         subjectGender: input.forSelf === false ? (input.subjectGender ?? null) : null,
-        dateFrom: input.dateFrom,
-        dateTo: input.dateTo,
-        dateFlexible: input.dateFlexible ? 1 : 0,
+        dateFrom: window.dateFrom,
+        dateTo: window.dateTo,
+        // Belgi hisoblanadi — zid holat yozib bo'lmaydi
+        dateFlexible: window.dateFlexible ? 1 : 0,
         aiConversation: input.aiConversation?.length ? JSON.stringify(input.aiConversation) : null,
         aiSuggested: input.aiSuggested ? 1 : 0,
         expiresAt: hoursFromNow(config.rules.requestTtlHours),

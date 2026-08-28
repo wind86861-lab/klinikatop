@@ -893,6 +893,38 @@ check "bitim narxi yangilandi" "$([ "$NEW_PRICE" = "8000000" ] && echo 1)" "$NEW
 code=$(status "${STRANGER[@]}" "$API/deals/$OVER_DEAL/price-changes")
 check "begona narx tarixini ko'ra olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
 
+echo
+echo "19. Sana oralig'i"
+
+# O'tgan sana rad etiladi
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d '{"operationId":1,"cityId":1,"budgetUzs":9000000,"urgency":"normal","attachments":[],"aiSuggested":false,"conditionText":"Holatim: qorin ong tomonida ogriq, tekshiruvda tosh topildi.","acceptTerms":true,"dateFrom":"2020-01-01"}')
+check "o'tgan sanali so'rov rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# Sana bor bo'lsa moslashuvchanlik o'chadi — mijoz zid qiymat yuborsa ham
+D1=$(date -d '+4 days' +%Y-%m-%d)
+D2=$(date -d '+8 days' +%Y-%m-%d)
+DR=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d "{\"operationId\":1,\"cityId\":1,\"budgetUzs\":9000000,\"urgency\":\"normal\",\"attachments\":[],\"aiSuggested\":false,\"conditionText\":\"Holatim: qorin ong tomonida ogriq, tekshiruvda tosh topildi.\",\"acceptTerms\":true,\"dateFrom\":\"$D1\",\"dateTo\":\"$D2\",\"dateFlexible\":true}")
+check "sana bor — moslashuvchan emas" "$(echo "$DR" | jqv '.dateFlexible' | grep -q false && echo 1)" \
+  "$(echo "$DR" | jqv '.dateFlexible')"
+
+# Sanasiz so'rov moslashuvchan bo'ladi
+FR=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d '{"operationId":1,"cityId":1,"budgetUzs":9000000,"urgency":"normal","attachments":[],"aiSuggested":false,"conditionText":"Holatim: qorin ong tomonida ogriq, tekshiruvda tosh topildi.","acceptTerms":true,"dateFlexible":false}')
+check "sanasiz — moslashuvchan" "$(echo "$FR" | jqv '.dateFlexible' | grep -q true && echo 1)" \
+  "$(echo "$FR" | jqv '.dateFlexible')"
+
+# Teskari tartib rad etiladi
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d "{\"operationId\":1,\"cityId\":1,\"budgetUzs\":9000000,\"urgency\":\"normal\",\"attachments\":[],\"aiSuggested\":false,\"conditionText\":\"Holatim: qorin ong tomonida ogriq, tekshiruvda tosh topildi.\",\"acceptTerms\":true,\"dateFrom\":\"$D2\",\"dateTo\":\"$D1\"}")
+check "teskari tartib rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# Tozalash
+for r in $DR $FR; do
+  curl -s "${PATIENT[@]}" -X DELETE "$API/requests/$(echo "$r" | jqv '.id')" > /dev/null 2>&1
+done
+
 # ── Tozalash ──
 # Test yaratgan arizalar kunlik IP chegarasini yeb qo'ymasligi uchun
 # rad etilganlarini o'chiramiz. Bu moderatorning spam tozalash yo'li.

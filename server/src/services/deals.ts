@@ -127,6 +127,21 @@ export function agreeSchedule(dealId: number, userId: number, clinicId: number |
   const when = new Date(scheduledAt);
   if (Number.isNaN(when.getTime())) throw badRequest('invalid_date', 'Sana noto‘g‘ri');
 
+  /*
+   * Operatsiya o'tgan kunga belgilanmaydi.
+   *
+   * Ilgari bu tekshirilmasdi va bitimda kechagi sana turib qolardi —
+   * bemor uni ko'rib, o'tkazib yuborganman deb o'ylardi.
+   *
+   * Bugun ruxsat etiladi: shoshilinch holatda operatsiya shu kuni
+   * bo'lishi mumkin va uni kelishib bo'lgach yozib qo'yish kerak.
+   */
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  if (when.getTime() < startOfToday.getTime()) {
+    throw badRequest('date_in_past', 'O‘tgan sanaga operatsiya belgilab bo‘lmaydi');
+  }
+
   db.prepare(`UPDATE deals SET scheduled_at = ?, status = 'AGREED' WHERE id = ?`).run(
     when.toISOString().replace('T', ' ').slice(0, 19),
     dealId,
