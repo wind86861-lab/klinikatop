@@ -8,16 +8,84 @@
     />
     <meta name="theme-color" content="#0E766B" />
     <title>KlinikaTop</title>
+
+    <!--
+      Telegram ko'prigi — ilova undan `initData` oladi, ya'ni usiz
+      kirish mumkin emas. Shuning uchun u kutiladigan yagona tashqi
+      skript. `async` qo'yilmaydi: modul yuklanganda `window.Telegram`
+      allaqachon turgan bo'lishi kerak.
+    -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+
+    <!--
+      Shriftlar render'ni TO'SMAYDI.
+
+      Ilgari oddiy `stylesheet` edi va brauzer uni kutib turardi:
+      Google'ga ikkita qo'shimcha ulanish, sekin telefonda bir necha
+      soniya oq ekran. Bundan ham yomoni — o'sha manzil sekin javob
+      bersa sahifa umuman ochilmasdi.
+
+      Endi u `print` sifatida yuklanadi (brauzer kutmaydi), kelgach
+      `all` ga o'tadi. Tizim shrifti bilan matn darhol ko'rinadi.
+    -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
     />
+
+    <style>
+      /*
+        Boshlang'ich ekran — JS yuklanmasdan OLDIN ko'rinadi.
+
+        Ilgari `<div id="root">` bo'sh edi va butun paket yuklanib,
+        tahlil qilinib, React ulanmaguncha odam oq ekranga qarab
+        turardi. Telefonda sekin internetda bu bir necha soniya va
+        odam ilova buzilgan deb o'ylaydi.
+
+        Bu uslub sahifa ichida: alohida fayl yana bitta so'rov
+        bo'lardi va maqsadni yo'qotardi.
+      */
+      html { background: #eaf0ee; }
+      @media (prefers-color-scheme: dark) { html { background: #0c1817; } }
+
+      body { margin: 0; }
+
+      .boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: inherit;
+      }
+      /*
+        Nom DARHOL ko'rinadi.
+
+        Birinchi urinishda unga 150 ms kechikish va 400 ms sekin
+        paydo bo'lish qo'ygandim — natijada 400 ms da ekranda hali
+        hech narsa yo'q edi va butun maqsad yo'qolgandi. Tez ulanishda
+        qisqa ko'rinib o'tishi mumkin, lekin bu oq ekrandan yaxshiroq.
+      */
+      .boot__mark {
+        font: 600 17px/1.2 system-ui, -apple-system, sans-serif;
+        letter-spacing: -0.02em;
+        color: #0e766b;
+        animation: bootPulse 1.6s 0.4s ease-in-out infinite;
+      }
+      @keyframes bootPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+      /* Harakat kamaytirilgan bo'lsa — jimgina turadi */
+      @media (prefers-reduced-motion: reduce) {
+        .boot__mark { animation: none; opacity: 1; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot"><span class="boot__mark">KlinikaTop</span></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

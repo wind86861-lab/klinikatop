@@ -3996,3 +3996,66 @@
   opacity: 0.7;
   font-weight: 400;
 }
+
+/* ══════════════════  Xato ushlagich  ══════════════════
+
+   React'da render xatosi butun daraxtni yechib tashlaydi va odam
+   TO'LIQ OQ ekranni ko'radi. Telegram ichida u yerda yangilash
+   tugmasi ham yo'q — odam ilovani yopib qayta ochishdan boshqa nima
+   qilishni bilmaydi va ko'pincha qaytmaydi.
+
+   Bu ekran shu holatda chiqadi: nima bo'lgani va nima qilish
+   kerakligi yoziladi.
+                                                                        */
+.crash {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--s-6);
+  background: var(--bg);
+  color: var(--body);
+  line-height: 1.55;
+}
+.crash__box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  max-width: 340px;
+  text-align: center;
+}
+.crash__mark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--t-sm);
+  color: var(--primary);
+}
+.crash__title {
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  margin: 0;
+  text-wrap: balance;
+}
+.crash__text {
+  font-size: var(--t-sm);
+  margin: 0;
+}
+.crash__btn {
+  margin-top: var(--s-2);
+  min-height: 48px;
+  padding: 0 var(--s-8);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.crash__link {
+  font-size: var(--t-sm);
+  color: var(--muted);
+}

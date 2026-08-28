@@ -122,15 +122,51 @@ export function authHeaders(): Record<string, string> {
   return tg?.initData ? { 'x-init-data': tg.initData } : {};
 }
 
+/**
+ * So'rov qancha kutiladi.
+ *
+ * Chegarasiz `fetch` MANGU osilib turadi: mobil tarmoq uzilganda
+ * brauzer xato bermaydi, shunchaki javob kelmaydi. Natijada ilova
+ * yuklanish ekranida qotib qolardi va odam oq ekranga qarab
+ * o'tirardi — aynan shundan "ochilmayapti" degan tuyg'u paydo
+ * bo'ladi.
+ *
+ * 20 soniya: sekin 3G da og'ir so'rov ham ulguradi, lekin uzilgan
+ * ulanish shuncha vaqtda ma'lum bo'ladi.
+ */
+const REQUEST_TIMEOUT_MS = 20_000;
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}/api${path}`, {
-    ...init,
-    headers: {
-      ...(init.body ? { 'content-type': 'application/json' } : {}),
-      ...authHeaders(),
-      ...(init.headers as Record<string, string>),
-    },
-  });
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api${path}`, {
+      ...init,
+      signal: abort.signal,
+      headers: {
+        ...(init.body ? { 'content-type': 'application/json' } : {}),
+        ...authHeaders(),
+        ...(init.headers as Record<string, string>),
+      },
+    });
+  } catch (err: any) {
+    /*
+     * Tarmoq xatosi ham ApiError bo'lib chiqadi: chaqiruvchi kod
+     * ikki xil xato shaklini ajratib o'tirmasin va foydalanuvchi
+     * "Xatolik" o'rniga nima bo'lganini o'qisin.
+     */
+    throw new ApiError(
+      0,
+      err?.name === 'AbortError' ? 'timeout' : 'network',
+      err?.name === 'AbortError'
+        ? 'Server javob bermadi. Internetni tekshirib, qayta urinib ko‘ring.'
+        : 'Internet aloqasi yo‘q. Ulanishni tekshiring.',
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     let payload: any = {};
