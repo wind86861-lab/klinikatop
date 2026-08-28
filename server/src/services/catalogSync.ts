@@ -272,6 +272,16 @@ export async function planSync(): Promise<SyncPlan> {
  */
 const SPECIALTY_LEVEL = 1;
 
+/**
+ * Bo'lim darajasi — soha ichidagi guruh.
+ *
+ * Faqat soha bo'lganda "Ko'z Xirurgiyasi" ni ochgan odam 23 ta
+ * operatsiyani bitta ro'yxatda ko'rardi. Bo'lim bilan esa "Katarakta"
+ * (5), "Glaukoma" (3) — har biri bir ekranga sig'adi va odam
+ * qidirayotganini topadi.
+ */
+const SECTION_LEVEL = 2;
+
 /** Operatsiyaning kategoriyasidan uning sohasiga ko'tariladi. */
 function specialtyOf(all: SourceCategory[]): Map<string, string> {
   const byId = new Map(all.map((c) => [c.id, c]));
@@ -315,6 +325,27 @@ function usedSpecialties(
   return all.filter((c) => used.has(c.id) && text(c.nameUz));
 }
 
+/**
+ * Ichida operatsiyasi bor BO'LIMLAR.
+ *
+ * Bo'sh bo'lim ekranda ochiladigan, lekin ichi bo'sh joy bo'lardi.
+ * Manbada esa ular ko'p: diagnostika uchun yasalgan bo'limlar
+ * jarrohlikda ishlatilmaydi.
+ */
+function usedSubcategories(
+  all: SourceCategory[],
+  operations: SourceOperation[],
+): SourceCategory[] {
+  const used = new Set<string>();
+  for (const op of operations) {
+    if (op.isActive && op.categoryId) used.add(op.categoryId);
+  }
+
+  return all.filter(
+    (c) => c.level === SECTION_LEVEL && used.has(c.id) && text(c.nameUz),
+  );
+}
+
 /* ─────────────────────────  Qo'llash  ───────────────────────── */
 
 export interface SyncResult {
@@ -351,12 +382,14 @@ export async function runSync(startedBy: number | null): Promise<SyncResult> {
         `SELECT id FROM operation_categories WHERE source = ? AND external_id = ?`,
       );
       const insCat = db.prepare(
-        `INSERT INTO operation_categories (slug, name_uz, name_ru, icon, source, external_id, synced_at)
-         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+        `INSERT INTO operation_categories
+           (slug, name_uz, name_ru, icon, source, external_id, parent_id, sort_order, synced_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       );
       const updCat = db.prepare(
         `UPDATE operation_categories
-            SET name_uz = ?, name_ru = ?, icon = ?, synced_at = datetime('now')
+            SET name_uz = ?, name_ru = ?, icon = ?, parent_id = ?, sort_order = ?,
+                synced_at = datetime('now')
           WHERE id = ?`,
       );
 
@@ -382,7 +415,8 @@ export async function runSync(startedBy: number | null): Promise<SyncResult> {
           WHERE id = ?`,
       );
 
-      for (const c of specialties) {
+      /** Kategoriya (soha yoki bo'lim) yozadi va id sini qaytaradi. */
+      const upsertCategory = (c: SourceCategory, parentId: number | null): number => {
         const nameUz = text(c.nameUz);
         const nameRu = text(c.nameRu) || nameUz;
         const icon = text(c.icon);
@@ -399,8 +433,9 @@ export async function runSync(startedBy: number | null): Promise<SyncResult> {
         }
 
         if (existing) {
-          updCat.run(nameUz, nameRu, icon, existing.id);
+          updCat.run(nameUz, nameRu, icon, parentId, c.sortOrder ?? 0, existing.id);
           catIdByExternal.set(c.id, existing.id);
+          return existing.id;
         } else {
           /*
            * Slug noyob bo'lishi shart. banisa'dagi slug bo'sh yoki
@@ -409,9 +444,31 @@ export async function runSync(startedBy: number | null): Promise<SyncResult> {
            * qo'shamiz.
            */
           const slug = uniqueSlug('operation_categories', text(c.slug) || slugify(nameUz));
-          const info = insCat.run(slug, nameUz, nameRu, icon, SOURCE, c.id);
-          catIdByExternal.set(c.id, Number(info.lastInsertRowid));
+          const info = insCat.run(slug, nameUz, nameRu, icon, SOURCE, c.id, parentId, c.sortOrder ?? 0);
+          const id = Number(info.lastInsertRowid);
+          catIdByExternal.set(c.id, id);
+          return id;
         }
+      };
+
+      /*
+       * Avval sohalar, keyin bo'limlar: bo'lim ota-onasining
+       * identifikatorini biladigan bo'lishi kerak.
+       */
+      for (const c of specialties) {
+        upsertCategory(c, null);
+        catCount++;
+      }
+
+      const toSpecialtyForSections = specialtyOf(categories);
+      const usedSections = usedSubcategories(categories, operations);
+
+      for (const c of usedSections) {
+        const parentExternal = toSpecialtyForSections.get(c.id);
+        const parentId = parentExternal ? catIdByExternal.get(parentExternal) : undefined;
+        // Ota sohasi olinmagan bo'lim ham olinmaydi — osilib qolmasin
+        if (!parentId) continue;
+        upsertCategory(c, parentId);
         catCount++;
       }
 
@@ -432,13 +489,14 @@ export async function runSync(startedBy: number | null): Promise<SyncResult> {
       const findOp = db.prepare(`SELECT id, active FROM operations WHERE source = ? AND external_id = ?`);
       const insOp = db.prepare(
         `INSERT INTO operations
-           (category_id, slug, name_uz, name_ru, desc_uz, desc_ru, active, source, external_id, synced_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+           (category_id, subcategory_id, slug, name_uz, name_ru, desc_uz, desc_ru,
+            active, source, external_id, synced_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       );
       const updOp = db.prepare(
         `UPDATE operations
-            SET category_id = ?, name_uz = ?, name_ru = ?, desc_uz = ?, desc_ru = ?,
-                active = ?, synced_at = datetime('now')
+            SET category_id = ?, subcategory_id = ?, name_uz = ?, name_ru = ?,
+                desc_uz = ?, desc_ru = ?, active = ?, synced_at = datetime('now')
           WHERE id = ?`,
       );
 
@@ -496,6 +554,13 @@ export async function runSync(startedBy: number | null): Promise<SyncResult> {
         const specialtyId = op.categoryId ? toSpecialty.get(op.categoryId) : null;
         const categoryId = (specialtyId && catIdByExternal.get(specialtyId)) || fallbackCategory();
 
+        /*
+         * Bo'lim — operatsiya manbada turgan aynan o'sha kategoriya.
+         * Topilmasa `null`: operatsiya to'g'ridan-to'g'ri sohada
+         * ko'rinadi va yo'qolib ketmaydi.
+         */
+        const subcategoryId = (op.categoryId && catIdByExternal.get(op.categoryId)) ?? null;
+
         let existing = findOp.get(SOURCE, op.id) as { id: number; active: number } | undefined;
 
         if (!existing) {
@@ -508,7 +573,7 @@ export async function runSync(startedBy: number | null): Promise<SyncResult> {
         }
 
         if (existing) {
-          updOp.run(categoryId, nameUz, nameRu, desc, desc, active, existing.id);
+          updOp.run(categoryId, subcategoryId, nameUz, nameRu, desc, desc, active, existing.id);
           if (existing.active === 1 && active === 0) deactivated++;
           else updated++;
         } else if (active === 1) {
@@ -517,7 +582,7 @@ export async function runSync(startedBy: number | null): Promise<SyncResult> {
             continue;
           }
           const slug = uniqueSlug('operations', slugify(nameUz));
-          insOp.run(categoryId, slug, nameUz, nameRu, desc, desc, 1, SOURCE, op.id);
+          insOp.run(categoryId, subcategoryId, slug, nameUz, nameRu, desc, desc, 1, SOURCE, op.id);
           takenNames.add(normalize(nameUz));
           added++;
         }

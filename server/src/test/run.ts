@@ -1774,6 +1774,91 @@ async function main() {
   const scheduled = deals.agreeSchedule(schedDeal.id, patient.id, null, futureDate(5) + 'T10:00:00.000Z');
   check('kelgusi sana qabul qilindi', scheduled.status === 'AGREED');
 
+
+  /* ═════ 21. Katalog daraxti: soha → bo'lim ═════ */
+  console.log('\n21. Katalog daraxti');
+
+  /*
+   * 104 ta operatsiyani tekis ro'yxatda ko'rsatish ishlamadi: "Ko'z
+   * Xirurgiyasi" ni ochgan odam 23 ta yozuvni birdaniga ko'rardi.
+   * Endi ikki daraja: soha → bo'lim → operatsiya.
+   */
+  const soha = db
+    .prepare(
+      "INSERT INTO operation_categories (slug, name_uz, name_ru, icon, source, external_id) VALUES ('sinov-soha','Sinov sohasi','Тест','', 'banisa','cat-soha')",
+    )
+    .run().lastInsertRowid;
+  const bolim = db
+    .prepare(
+      "INSERT INTO operation_categories (slug, name_uz, name_ru, icon, source, external_id, parent_id) VALUES ('sinov-bolim','Sinov bo‘limi','Раздел','', 'banisa','cat-bolim', ?)",
+    )
+    .run(soha).lastInsertRowid;
+
+  const inBolim = db
+    .prepare(
+      "INSERT INTO operations (category_id, subcategory_id, slug, name_uz, name_ru, active, source, external_id) VALUES (?, ?, 'op-bolimda', 'Bo‘limdagi', 'В разделе', 1, 'banisa', 'op-b1')",
+    )
+    .run(soha, bolim).lastInsertRowid;
+  const looseOp = db
+    .prepare(
+      "INSERT INTO operations (category_id, subcategory_id, slug, name_uz, name_ru, active, source, external_id) VALUES (?, NULL, 'op-erkin', 'Bo‘limsiz', 'Без раздела', 1, 'banisa', 'op-b2')",
+    )
+    .run(soha).lastInsertRowid;
+
+  const tree = catalog.catalogTree();
+  const branch = tree.find((b: any) => b.category.id === soha);
+
+  check('soha daraxtda bor', Boolean(branch));
+  check('jami soni to‘g‘ri', branch.total === 2, branch.total);
+  check('bo‘lim ajratildi', branch.sections.length === 1, branch.sections.length);
+  check(
+    'bo‘limdagi operatsiya o‘z joyida',
+    branch.sections[0].operations[0].id === inBolim,
+    branch.sections[0].operations.map((o: any) => o.id),
+  );
+  check('bo‘limsiz operatsiya alohida', branch.loose.length === 1 && branch.loose[0].id === looseOp);
+  check('bo‘lim ota-onasini biladi', branch.sections[0].category.parentId === soha);
+
+  /*
+   * Begona bo'lim e'tiborga olinmasligi kerak: manba o'zgarganda
+   * shunday holat yuzaga kelishi mumkin va operatsiya boshqa sohada
+   * paydo bo'lib qolardi.
+   */
+  const otherSoha = db
+    .prepare(
+      "INSERT INTO operation_categories (slug, name_uz, name_ru, icon, source, external_id) VALUES ('boshqa-soha','Boshqa','Другое','', 'banisa','cat-boshqa')",
+    )
+    .run().lastInsertRowid;
+  const alienBolim = db
+    .prepare(
+      "INSERT INTO operation_categories (slug, name_uz, name_ru, icon, source, external_id, parent_id) VALUES ('begona-bolim','Begona','Чужой','', 'banisa','cat-begona', ?)",
+    )
+    .run(otherSoha).lastInsertRowid;
+
+  db.prepare('UPDATE operations SET subcategory_id = ? WHERE id = ?').run(alienBolim, looseOp);
+
+  const tree2 = catalog.catalogTree();
+  const branch2 = tree2.find((b: any) => b.category.id === soha);
+  check(
+    'begona bo‘lim e‘tiborga olinmadi',
+    branch2.loose.some((o: any) => o.id === looseOp),
+    branch2.loose.map((o: any) => o.id),
+  );
+  check(
+    'begona sohada paydo bo‘lmadi',
+    !tree2.find((b: any) => b.category.id === otherSoha),
+    tree2.map((b: any) => b.category.id),
+  );
+
+  // Bo'sh soha daraxtga chiqmaydi
+  db.prepare(
+    "INSERT INTO operation_categories (slug, name_uz, name_ru, icon) VALUES ('bosh-soha','Bo‘sh','Пустая','')",
+  ).run();
+  check(
+    'bo‘sh soha daraxtda yo‘q',
+    !catalog.catalogTree().some((b: any) => b.category.slug === 'bosh-soha'),
+  );
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

@@ -3852,3 +3852,147 @@
 }
 .pchange__badge.is-ok { background: var(--primary-soft); color: var(--primary); }
 .pchange__badge.is-no { background: var(--bg); color: var(--muted); }
+
+/* ══════════════════  Katalog: soha → bo'lim → operatsiya  ══════════════════
+
+   104 ta operatsiyani tekis ro'yxatda ko'rsatish ishlamadi: "Ko'z
+   Xirurgiyasi" ni ochgan odam 23 ta yozuvni birdaniga ko'rardi va
+   kerakligini topa olmasdi. Endi ikki daraja va qidiruv.
+
+   Bir xil ko'rinish bemorda ham, klinikada ham — ular bir tuzilmani
+   ko'rishi shart, aks holda nima uchun so'rov kelmayotgani
+   tushunarsiz bo'ladi.
+                                                                        */
+.cat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.cat__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.cat__search > svg {
+  position: absolute;
+  left: 14px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.cat__search .input { padding-left: 40px; }
+
+.cat__tree,
+.cat__results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.cat__branch {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.cat__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  padding: var(--s-3) var(--s-4);
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.cat__head:hover { background: var(--bg-elevated); }
+
+.cat__caret {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--t-lg);
+  line-height: 1;
+  transition: transform var(--d-base) var(--ease);
+}
+.cat__caret.is-open { transform: rotate(90deg); }
+
+.cat__name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.cat__count {
+  flex: none;
+  font-size: var(--t-xs);
+  color: var(--muted);
+  padding: 2px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--bg);
+  font-variant-numeric: tabular-nums;
+}
+.cat__count.is-on {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.cat__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: 0 var(--s-4) var(--s-4);
+}
+
+.cat__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.cat__sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+.cat__sectionName {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cat__all {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--t-xs);
+  color: var(--primary);
+  cursor: pointer;
+}
+.cat__all:hover { text-decoration: underline; }
+
+.cat__ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* Operatsiya nomi ustunda: tibbiy nom, ostida xalq tilidagisi */
+.cat__opName {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+}
+.cat__alias,
+.cat__path {
+  font-size: var(--t-xs);
+  opacity: 0.7;
+  font-weight: 400;
+}

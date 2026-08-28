@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  catalogTree,
   listCategories,
   listCities,
   listOperations,
@@ -18,6 +19,14 @@ export const catalogRouter = Router();
 
 catalogRouter.get('/cities', (_req, res) => res.json(listCities()));
 catalogRouter.get('/categories', (_req, res) => res.json(listCategories()));
+
+/**
+ * Katalog daraxti — soha → bo'lim → operatsiya.
+ *
+ * Bemor ham, klinika ham shu bitta manbadan foydalanadi: ikki joyda
+ * ikki xil tuzilma bo'lsa, ular bir-biriga mos kelmay qoladi.
+ */
+catalogRouter.get('/tree', (_req, res) => res.json(catalogTree()));
 
 catalogRouter.get('/operations', (req, res) => {
   const q = String(req.query.q ?? '').trim();

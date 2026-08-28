@@ -14,7 +14,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { rateLimit } from '../middleware/rateLimit';
 import { submitApplication } from '../services/clinicApplications';
-import { listCities, listOperations } from '../services/catalog';
+import { catalogTree, listCities, listOperations } from '../services/catalog';
 
 export const publicRouter = Router();
 
@@ -23,6 +23,8 @@ publicRouter.get('/reference', (_req, res) => {
   res.json({
     cities: listCities(),
     operations: listOperations().filter((o) => o.slug !== 'unknown'),
+    // Ariza formasi ham daraxt ko'rinishida ko'rsatadi
+    tree: catalogTree(),
   });
 });
 

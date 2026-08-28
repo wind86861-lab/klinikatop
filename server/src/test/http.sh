@@ -925,6 +925,22 @@ for r in $DR $FR; do
   curl -s "${PATIENT[@]}" -X DELETE "$API/requests/$(echo "$r" | jqv '.id')" > /dev/null 2>&1
 done
 
+echo
+echo "20. Katalog daraxti"
+
+TREE=$(curl -s "$API/catalog/tree")
+check "daraxt ochiq (autentifikatsiyasiz)" "$(echo "$TREE" | jqv '.length' | grep -qE '^[0-9]+$' && echo 1)" ""
+check "sohada bo'limlar bor" \
+  "$(echo "$TREE" | jqv '.some(function(b){return b.sections.length>0})' | grep -q true && echo 1)" ""
+check "har bir bo'limda operatsiya bor" \
+  "$(echo "$TREE" | jqv '.every(function(b){return b.sections.every(function(s){return s.operations.length>0})})' | grep -q true && echo 1)" ""
+check "bo'lim ota-onasini biladi" \
+  "$(echo "$TREE" | jqv '.every(function(b){return b.sections.every(function(s){return s.category.parentId===b.category.id})})' | grep -q true && echo 1)" ""
+check "jami son bo'limlar va erkinlar yig'indisi" \
+  "$(echo "$TREE" | jqv '.every(function(b){return b.total===b.loose.length+b.sections.reduce(function(n,s){return n+s.operations.length},0)})' | grep -q true && echo 1)" ""
+check "bo'sh soha daraxtda yo'q" \
+  "$(echo "$TREE" | jqv '.every(function(b){return b.total>0})' | grep -q true && echo 1)" ""
+
 # ── Tozalash ──
 # Test yaratgan arizalar kunlik IP chegarasini yeb qo'ymasligi uchun
 # rad etilganlarini o'chiramiz. Bu moderatorning spam tozalash yo'li.

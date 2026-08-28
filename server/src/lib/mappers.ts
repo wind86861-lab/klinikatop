@@ -49,13 +49,21 @@ export function mapCity(r: any): City {
 }
 
 export function mapCategory(r: any): OperationCategory {
-  return { id: r.id, slug: r.slug, nameUz: r.name_uz, nameRu: r.name_ru, icon: r.icon };
+  return {
+    id: r.id,
+    parentId: r.parent_id ?? null,
+    slug: r.slug,
+    nameUz: r.name_uz,
+    nameRu: r.name_ru,
+    icon: r.icon,
+  };
 }
 
 export function mapOperation(r: any): Operation {
   return {
     id: r.id,
     categoryId: r.category_id,
+    subcategoryId: r.subcategory_id ?? null,
     slug: r.slug,
     nameUz: r.name_uz,
     nameRu: r.name_ru,

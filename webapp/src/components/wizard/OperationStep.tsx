@@ -12,21 +12,18 @@ import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
 import { EASE, spring } from '@/lib/motion';
-import { opAlias, opName } from '@/i18n';
+import { opName } from '@/i18n';
 import {
-  AnimatedItem,
-  AnimatedList,
   Card,
-  Chip,
   EmptyState,
   IconCheck,
   IconSearch,
   IconSparkle,
-  Input,
   Skeleton,
 } from '@/ui';
-import { UNKNOWN_OPERATION_SLUG, type Operation } from '@shared/types';
+import type { Operation } from '@shared/types';
 import { AiChatStep, type AiChatOutcome } from './AiChatStep';
+import { CatalogBrowser, type CatalogBranch } from '@/components/CatalogBrowser';
 
 type Mode = 'choose' | 'catalog' | 'describe';
 
@@ -158,87 +155,48 @@ function PathCard({
 /* ─────────────────────────  Katalogdan tanlash  ───────────────────────── */
 
 function CatalogPicker({ onPick }: { onPick: (op: Operation) => void }) {
-  const { t, lang, categories } = useApp();
-  const [query, setQuery] = useState('');
-  const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [operations, setOperations] = useState<Operation[] | null>(null);
+  const { t, lang } = useApp();
+  const [tree, setTree] = useState<CatalogBranch[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const timer = window.setTimeout(
-      async () => {
-        const list = await api.operations({
-          q: query.trim() || undefined,
-          categoryId: query.trim() ? undefined : (categoryId ?? undefined),
-        });
-        // "Bilmayman" yozuvi bu ro'yxatda chiqmasin — u alohida yo'l
-        if (!cancelled) setOperations(list.filter((o) => o.slug !== UNKNOWN_OPERATION_SLUG));
-      },
-      query ? 180 : 0,
-    );
-
+    void api.catalogTree().then((data) => !cancelled && setTree(data));
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
-  }, [query, categoryId]);
+  }, []);
 
-  return (
-    <>
-      <div style={{ position: 'relative' }}>
-        <span style={{ position: 'absolute', left: 14, top: 14, color: 'var(--muted)' }}>
-          <IconSearch size={18} />
-        </span>
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('need.searchPlaceholder')}
-          style={{ paddingLeft: 42 }}
-          aria-label={t('common.search')}
-        />
+  if (tree === null) {
+    return (
+      <div className="stack">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} h={56} />
+        ))}
       </div>
+    );
+  }
 
-      {!query && (
-        <div className="scroll-x">
-          <div className="row" style={{ gap: 'var(--s-2)', paddingBottom: 4 }}>
-            <Chip active={categoryId === null} onClick={() => setCategoryId(null)}>
-              {t('common.all')}
-            </Chip>
-            {categories.map((c) => (
-              <Chip key={c.id} active={categoryId === c.id} onClick={() => setCategoryId(c.id)}>
-                {lang === 'ru' ? c.nameRu : c.nameUz}
-              </Chip>
-            ))}
-          </div>
-        </div>
-      )}
+  if (tree.length === 0) {
+    return <EmptyState icon={<IconSearch size={30} />} title={t('need.noMatch')} text={t('need.noMatchText')} />;
+  }
 
-      {operations === null ? (
-        <div className="stack">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} h={64} />
-          ))}
-        </div>
-      ) : operations.length === 0 ? (
-        <EmptyState icon={<IconSearch size={30} />} title={t('need.noMatch')} text={t('need.noMatchText')} />
-      ) : (
-        <AnimatedList>
-          {operations.map((op) => (
-            <AnimatedItem key={op.id}>
-              <button className="list-item" onClick={() => onPick(op)}>
-                <span className="list-item__body">
-                  <span className="list-item__title" style={{ display: 'block' }}>
-                    {opName(op, lang)}
-                  </span>
-                  <span className="list-item__sub" style={{ display: 'block' }}>
-                    {opAlias(op, lang)}
-                  </span>
-                </span>
-              </button>
-            </AnimatedItem>
-          ))}
-        </AnimatedList>
-      )}
-    </>
+  /*
+   * Klinika bilan BIR XIL ko'rinish.
+   *
+   * Ilgari bemor tekis ro'yxatni ko'rardi: "Ko'z Xirurgiyasi" ni
+   * tanlasa 23 ta operatsiya birdaniga chiqardi va ular orasida
+   * "Katarakta FEK+IOL (AQSH) Alkon" kabi nomlar bor. Bunday
+   * ro'yxatdan odam kerakligini topa olmaydi — u birinchi ko'ringanini
+   * bosadi yoki umuman chiqib ketadi.
+   */
+  return (
+    <CatalogBrowser
+      tree={tree}
+      lang={lang}
+      mode="single"
+      selected={[]}
+      onSelect={onPick}
+      emptyText={t('need.noMatchText')}
+    />
   );
 }

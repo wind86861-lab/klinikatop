@@ -1,6 +1,7 @@
 /** REST klienti — autentifikatsiya sarlavhalari bir joyda. */
 import { tg } from './telegram';
 import { isCabinetPath, webToken } from './session';
+import type { CatalogBranch } from '@/components/CatalogBrowser';
 import type {
   AdminClinicFilter,
   AdminClinicRow,
@@ -224,6 +225,8 @@ export const api = {
   /* ── Katalog ── */
   cities: () => get<City[]>('/catalog/cities'),
   categories: () => get<OperationCategory[]>('/catalog/categories'),
+  /** Katalog daraxti: soha → bo'lim → operatsiya */
+  catalogTree: () => get<CatalogBranch[]>('/catalog/tree'),
   operations: (params: { q?: string; categoryId?: number } = {}) => {
     const qs = new URLSearchParams();
     if (params.q) qs.set('q', params.q);

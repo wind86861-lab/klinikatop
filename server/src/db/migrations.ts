@@ -836,6 +836,42 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    /**
+     * Katalogga IKKINCHI daraja qo'shiladi: soha → bo'lim → operatsiya.
+     *
+     * Ilgari faqat soha bor edi va manbadagi bo'limlar tashlab
+     * yuborilardi. Natijada "Ko'z Xirurgiyasi" ni ochgan odam 23 ta
+     * operatsiyani bitta ro'yxatda ko'rardi — ular orasida "Katarakta
+     * FEK+IOL (AQSH) Alkon" kabi nomlar bor. Bemor ham, klinika ham
+     * o'zi qidirayotgan narsani topa olmasdi.
+     *
+     * Endi bo'limlar ham olinadi: "Katarakta" (5), "Glaukoma" (3),
+     * "Refraktiv xirurgiya" (4). Har biri bir ekranga sig'adi.
+     *
+     * Bir jadval, ikki daraja: `parent_id` bo'sh bo'lsa — soha,
+     * to'ldirilgan bo'lsa — bo'lim. Alohida jadval qilinsa, har
+     * so'rovda ikkovini birlashtirish kerak bo'lardi.
+     */
+    id: '016_subcategories',
+    up: (db) => {
+      addColumn(db, 'operation_categories', 'parent_id', 'INTEGER REFERENCES operation_categories(id) ON DELETE CASCADE');
+      addColumn(db, 'operation_categories', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
+
+      /*
+       * Operatsiya BO'LIMGA bog'lanadi, lekin `category_id` ham
+       * qoladi: matching va statistika unga tayanadi va ularni
+       * birdan ko'chirish keraksiz xavf. Bo'lim ko'rsatilmasa
+       * operatsiya to'g'ridan-to'g'ri sohada turadi.
+       */
+      addColumn(db, 'operations', 'subcategory_id', 'INTEGER REFERENCES operation_categories(id) ON DELETE SET NULL');
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_categories_parent ON operation_categories(parent_id);
+        CREATE INDEX IF NOT EXISTS idx_operations_subcategory ON operations(subcategory_id);
+      `);
+    },
+  },
 ];
 
 /**

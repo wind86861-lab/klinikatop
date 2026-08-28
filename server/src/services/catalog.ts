@@ -26,10 +26,87 @@ export function listCategories(): OperationCategory[] {
     .prepare(
       `SELECT c.* FROM operation_categories c
         WHERE EXISTS (SELECT 1 FROM operations o WHERE o.category_id = c.id AND o.active = 1)
-        ORDER BY c.name_uz`,
+           OR EXISTS (SELECT 1 FROM operations o WHERE o.subcategory_id = c.id AND o.active = 1)
+        ORDER BY c.sort_order, c.name_uz`,
     )
     .all() as any[];
   return rows.map(mapCategory);
+}
+
+/**
+ * Katalog daraxti: soha → bo'lim → operatsiya.
+ *
+ * Ilgari faqat tekis ro'yxat bor edi va "Ko'z Xirurgiyasi" ni ochgan
+ * odam 23 ta operatsiyani birdaniga ko'rardi. Bir ekranga sig'maydigan
+ * ro'yxatdan odam kerakligini topa olmaydi — u shunchaki birinchi
+ * ko'ringanini bosadi yoki chiqib ketadi.
+ *
+ * Daraxt SERVERDA yig'iladi: mijoz uni har joyda qaytadan qurishi
+ * kerak emas va bemor bilan klinika bir xil tuzilmani ko'radi.
+ */
+export interface CatalogSection {
+  category: OperationCategory;
+  operations: Operation[];
+}
+
+export interface CatalogBranch {
+  category: OperationCategory;
+  /** Bo'limga tegishli bo'lmagan, to'g'ridan-to'g'ri sohadagilar */
+  loose: Operation[];
+  sections: CatalogSection[];
+  /** Soha ichidagi jami operatsiyalar — ochmasdan ko'rinadi */
+  total: number;
+}
+
+export function catalogTree(): CatalogBranch[] {
+  const categories = (
+    db.prepare(`SELECT * FROM operation_categories ORDER BY sort_order, name_uz`).all() as any[]
+  ).map(mapCategory);
+
+  const operations = listOperations().filter((o) => o.slug !== UNKNOWN_OPERATION_SLUG);
+
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const roots = categories.filter((c) => c.parentId === null);
+
+  const branches: CatalogBranch[] = [];
+
+  for (const root of roots) {
+    const mine = operations.filter((o) => o.categoryId === root.id);
+    if (mine.length === 0) continue;
+
+    const sections: CatalogSection[] = [];
+    const loose: Operation[] = [];
+    const bucket = new Map<number, Operation[]>();
+
+    for (const op of mine) {
+      /*
+       * Bo'lim ko'rsatilgan, lekin u boshqa sohaniki bo'lsa — e'tiborga
+       * olinmaydi. Manba o'zgarganda shunday holat yuzaga kelishi
+       * mumkin va operatsiya begona sohada paydo bo'lib qolardi.
+       */
+      const sub = op.subcategoryId ? byId.get(op.subcategoryId) : null;
+      if (sub && sub.parentId === root.id) {
+        const list = bucket.get(sub.id);
+        if (list) list.push(op);
+        else bucket.set(sub.id, [op]);
+      } else {
+        loose.push(op);
+      }
+    }
+
+    for (const [subId, ops] of bucket) {
+      const category = byId.get(subId);
+      if (category) sections.push({ category, operations: ops });
+    }
+
+    // Katta bo'limlar yuqorida: odam ko'pincha shularni qidiradi
+    sections.sort((a, b) => b.operations.length - a.operations.length);
+
+    branches.push({ category: root, loose, sections, total: mine.length });
+  }
+
+  branches.sort((a, b) => b.total - a.total);
+  return branches;
 }
 
 export function listOperations(categoryId?: number): Operation[] {

@@ -139,6 +139,13 @@ export interface City {
 
 export interface OperationCategory {
   id: number;
+  /**
+   * Ota soha. `null` bo'lsa bu sohaning o'zi, aks holda uning bo'limi.
+   *
+   * Bir jadval, ikki daraja: alohida jadval qilinsa har so'rovda
+   * ikkovini birlashtirish kerak bo'lardi.
+   */
+  parentId: number | null;
   slug: string;
   nameUz: string;
   nameRu: string;
@@ -148,6 +155,8 @@ export interface OperationCategory {
 export interface Operation {
   id: number;
   categoryId: number;
+  /** Soha ichidagi bo'lim. Bo'lmasa operatsiya to'g'ridan-to'g'ri sohada. */
+  subcategoryId: number | null;
   slug: string;
   nameUz: string;
   nameRu: string;

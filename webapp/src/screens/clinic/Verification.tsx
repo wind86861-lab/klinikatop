@@ -14,9 +14,8 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
-import { EASE, popVariants, spring } from '@/lib/motion';
+import { popVariants, spring } from '@/lib/motion';
 import { formatDate } from '@/lib/format';
-import { categoryName, opName } from '@/i18n';
 import { FileOpenButton, FileThumb } from '@/components/wizard/FileThumb';
 import {
   Button,
@@ -33,7 +32,8 @@ import {
   Skeleton,
 } from '@/ui';
 import { Async, useResource } from './shell';
-import { CLINIC_DOC_KINDS, type ClinicDocKind, type Operation, type StoredFile } from '@shared/types';
+import { CLINIC_DOC_KINDS, type ClinicDocKind, type StoredFile } from '@shared/types';
+import { CatalogBrowser } from '@/components/CatalogBrowser';
 
 /* ═════════════════  3-ekran: verifikatsiya holati  ═════════════════ */
 
@@ -213,19 +213,16 @@ export function VerificationDocs() {
 /* ═════════════════  4-ekran: yo'nalishlar  ═════════════════ */
 
 export function ClinicOperations() {
-  const { t, lang, toast, categories } = useApp();
+  const { t, lang, toast } = useApp();
   const navigate = useNavigate();
 
   const res = useResource(async () => {
-    const [clinic, operations] = await Promise.all([api.clinic(), api.operations({})]);
-    return { clinic, operations };
+    const [clinic, tree] = await Promise.all([api.clinic(), api.catalogTree()]);
+    return { clinic, tree };
   });
 
   const [selected, setSelected] = useState<Set<number> | null>(null);
-  const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
-  /** Yopilgan kategoriyalar — sukut bo'yicha hammasi ochiq */
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
 
   const current = selected ?? new Set(res.data?.clinic.operationIds ?? []);
 
@@ -237,12 +234,12 @@ export function ClinicOperations() {
   };
 
   /**
-   * Kategoriyani butunlay tanlash yoki bo'shatish.
+   * Butun bo'limni yoqish yoki bo'shatish.
    *
-   * Katalog kattalashgach bu zarur bo'ldi: "Oftalmologiya" ni to'liq
-   * qiladigan klinika 12 ta yo'nalishni bittalab bosishi kerak edi.
+   * Katalog kattalashgach bu zarur bo'ldi: "Katarakta" ni to'liq
+   * qiladigan klinika 5 ta yozuvni bittalab bosishi kerak emas.
    */
-  const toggleCategory = (ops: Operation[]) => {
+  const toggleMany = (ops: { id: number }[]) => {
     const allOn = ops.every((op) => current.has(op.id));
     const next = new Set(current);
     for (const op of ops) {
@@ -284,115 +281,27 @@ export function ClinicOperations() {
       }
     >
       <Async resource={res} skeleton={<Skeleton h={320} />}>
-        {(data) => {
-          // "Bilmayman" sentineli katalogda ko'rinmasligi kerak — u bemor uchun
-          const list: Operation[] = data.operations.filter((op: Operation) => op.slug !== 'unknown');
-          const q = query.trim().toLowerCase();
-          const filtered = q
-            ? list.filter((op: Operation) => opName(op, lang).toLowerCase().includes(q))
-            : list;
+        {(data) => (
+          <>
+            {current.size > 0 && <Notice tone="info">{t('ops.matchHint', { n: current.size })}</Notice>}
 
-          const grouped = filtered.reduce<Record<number, Operation[]>>(
-            (acc: Record<number, Operation[]>, op: Operation) => {
-              (acc[op.categoryId] ??= []).push(op);
-              return acc;
-            },
-            {},
-          );
-
-          /*
-           * Kategoriyalar tanlanganlari yuqorida turadi.
-           *
-           * Klinika o'z yo'nalishlarini tez-tez qaraydi, boshqalarini esa
-           * kamdan-kam. 20+ kategoriya bo'lganda bu farqni qiladi.
-           */
-          const sections = Object.entries(grouped)
-            .map(([id, ops]) => {
-              const categoryId = Number(id);
-              const chosen = ops.filter((op) => current.has(op.id)).length;
-              const category = categories.find((c) => c.id === categoryId);
-              return { categoryId, ops, chosen, name: category ? categoryName(category, lang) : '' };
-            })
-            .sort((a, b) => (b.chosen > 0 ? 1 : 0) - (a.chosen > 0 ? 1 : 0) || a.name.localeCompare(b.name));
-
-          return (
-            <>
-              <Input
-                value={query}
-                placeholder={t('ops.searchPh')}
-                aria-label={t('ops.searchPh')}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-
-              {current.size > 0 && (
-                <Notice tone="info">{t('ops.matchHint', { n: current.size })}</Notice>
-              )}
-
-              {sections.map(({ categoryId, ops, chosen, name }) => {
-                // Qidiruv paytida hamma narsa ochiq — natijani yashirish mantiqsiz
-                const isOpen = q.length > 0 || !collapsed.has(categoryId);
-                const allOn = ops.every((op) => current.has(op.id));
-
-                return (
-                  <div key={categoryId} className="opgroup">
-                    <button
-                      type="button"
-                      className="opgroup__head"
-                      onClick={() => {
-                        const next = new Set(collapsed);
-                        next.has(categoryId) ? next.delete(categoryId) : next.add(categoryId);
-                        setCollapsed(next);
-                      }}
-                    >
-                      <span className={`opgroup__caret ${isOpen ? 'is-open' : ''}`}>›</span>
-                      <strong className="truncate">{name}</strong>
-                      <span className={`opgroup__count ${chosen > 0 ? 'is-on' : ''} num`}>
-                        {chosen}/{ops.length}
-                      </span>
-                    </button>
-
-                    <AnimatePresence initial={false}>
-                      {isOpen && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2, ease: EASE }}
-                          style={{ overflow: 'hidden' }}
-                        >
-                          <div className="opgroup__body">
-                            <button
-                              type="button"
-                              className="opgroup__all"
-                              onClick={() => toggleCategory(ops)}
-                            >
-                              {allOn ? t('ops.clearAll') : t('ops.selectAll')}
-                            </button>
-
-                            <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-                              {ops.map((op: Operation) => (
-                                <Chip
-                                  key={op.id}
-                                  size="sm"
-                                  active={current.has(op.id)}
-                                  onClick={() => toggle(op.id)}
-                                >
-                                  {current.has(op.id) && <IconCheck size={12} />} {opName(op, lang)}
-                                </Chip>
-                              ))}
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
-
-              {filtered.length === 0 && <Notice tone="info">{t('ops.noMatch')}</Notice>}
-            </>
-          );
-        }}
+            {/*
+              Bemor bilan BIR XIL ko'rinish: u "Katarakta" bo'limidan
+              tanlaydi, klinika esa o'sha bo'limni yoqadi. Ikki xil
+              tuzilma bo'lsa, nima uchun so'rov kelmayotgani
+              tushunarsiz bo'lardi.
+            */}
+            <CatalogBrowser
+              tree={data.tree}
+              lang={lang}
+              mode="multi"
+              selected={[...current]}
+              onSelect={(op) => toggle(op.id)}
+              onToggleMany={toggleMany}
+              emptyText={t('ops.noMatch')}
+            />
+          </>
+        )}
       </Async>
     </Screen>
   );
