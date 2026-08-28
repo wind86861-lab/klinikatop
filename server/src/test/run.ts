@@ -48,6 +48,37 @@ function section(title: string) {
   console.log(`\n${title}`);
 }
 
+import nodeCrypto from 'node:crypto';
+
+/** Test uchun TOTP kodi — servisdagi bilan bir xil algoritm. */
+function totpFor(secret: string): string {
+  const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0;
+  let value = 0;
+  const bytes: number[] = [];
+  for (const ch of secret) {
+    value = (value << 5) | B32.indexOf(ch);
+    bits += 5;
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  const counter = Math.floor(Date.now() / 30_000);
+  const buf = Buffer.alloc(8);
+  buf.writeUInt32BE(Math.floor(counter / 2 ** 32), 0);
+  buf.writeUInt32BE(counter >>> 0, 4);
+
+  const digest = nodeCrypto.createHmac('sha1', Buffer.from(bytes)).update(buf).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const code =
+    ((digest[offset] & 0x7f) << 24) |
+    ((digest[offset + 1] & 0xff) << 16) |
+    ((digest[offset + 2] & 0xff) << 8) |
+    (digest[offset + 3] & 0xff);
+  return String(code % 1_000_000).padStart(6, '0');
+}
+
 async function main() {
   migrate();
   execSync(`npx tsx ${path.resolve(__dirname, '../db/seed.ts')}`, {
@@ -1274,6 +1305,131 @@ async function main() {
     webAuth.loginByVerifiedPhone('998905554433', null, null) === null,
   );
   db.prepare('UPDATE admin_users SET disabled_at = NULL WHERE id = ?').run(idAcc.user.id);
+
+
+  /* ═════ 17. Hisob xavfsizligi: 2FA, parol, sessiyalar ═════ */
+  console.log('\n17. Hisob xavfsizligi');
+
+  const secAcc = webAuth.createAccount({
+    phone: '998907776655',
+    fullName: 'Xavfsizlik Sinovi',
+    level: 'clinic_admin',
+    clinicId: clinic.id,
+  });
+  webAuth.completeSetup(secAcc.setupToken, 'birinchi-parol-2026');
+
+  const s1 = webAuth.login('998907776655', 'birinchi-parol-2026', '1.1.1.1', 'kompyuter');
+  const s2 = webAuth.login('998907776655', 'birinchi-parol-2026', '2.2.2.2', 'telefon');
+  check('ikki sessiya ochildi', webAuth.listSessions(secAcc.user.id, s1.token).length === 2);
+  check('joriy sessiya belgilangan',
+    webAuth.listSessions(secAcc.user.id, s1.token).filter((r: any) => r.current).length === 1);
+
+  /* ── Parol almashtirish ── */
+
+  throws(
+    'joriy parolsiz almashtirib bo‘lmaydi',
+    () => webAuth.changePassword(secAcc.user.id, 'notogri', 'yangi-parol-2026', s1.token),
+  );
+  throws(
+    'qisqa parol qabul qilinmaydi',
+    () => webAuth.changePassword(secAcc.user.id, 'birinchi-parol-2026', 'qisqa', s1.token),
+    'weak_password',
+  );
+  throws(
+    'faqat raqamli parol qabul qilinmaydi',
+    () => webAuth.changePassword(secAcc.user.id, 'birinchi-parol-2026', '12345678901', s1.token),
+    'weak_password',
+  );
+
+  webAuth.changePassword(secAcc.user.id, 'birinchi-parol-2026', 'ikkinchi-parol-2026', s1.token);
+
+  /*
+   * Odam parolni odatda "kimdir kirgan" deb o'ylab almashtiradi.
+   * Eski sessiyalar ochiq qolsa bu harakat ma'nosiz bo'lardi.
+   */
+  check('boshqa sessiya yopildi', webAuth.resolveSession(s2.token) === null);
+  check('joriy sessiya ochiq qoldi', webAuth.resolveSession(s1.token) !== null);
+
+  throws('eski parol endi ishlamaydi', () => webAuth.login('998907776655', 'birinchi-parol-2026'));
+  check('yangi parol ishlaydi',
+    Boolean(webAuth.login('998907776655', 'ikkinchi-parol-2026', null, null).token));
+
+  /* ── 2FA ── */
+
+  check('dastlab 2FA yoqilmagan', secAcc.user.totpEnabled === false);
+
+  const totpSetup = webAuth.startTotpSetup(secAcc.user.id);
+  check('otpauth havolasi to‘g‘ri', totpSetup.otpauth.startsWith('otpauth://totp/'));
+  check('sir base32 shaklida', /^[A-Z2-7]{32}$/.test(totpSetup.secret), totpSetup.secret);
+
+  throws('noto‘g‘ri kod bilan yoqilmaydi', () => webAuth.confirmTotp(secAcc.user.id, '000000'));
+
+  /*
+   * Haqiqiy kodni o'zimiz hisoblaymiz — tekshiruv chinakam TOTP
+   * algoritmidan o'tsin, "har qanday olti raqam bo'ladi" emas.
+   */
+  const validCode = totpFor(totpSetup.secret);
+  webAuth.confirmTotp(secAcc.user.id, validCode);
+
+  const afterTotp = webAuth.login('998907776655', 'ikkinchi-parol-2026', null, null);
+  check('2FA yoqilgach kirish yarim qoladi', afterTotp.mfaRequired === true);
+  check('yarim sessiya to‘liq emas', webAuth.resolveSession(afterTotp.token)?.mfaPassed === false);
+
+  throws('noto‘g‘ri kod sessiyani to‘ldirmaydi', () => webAuth.passMfa(afterTotp.token, '000000'));
+
+  webAuth.passMfa(afterTotp.token, totpFor(totpSetup.secret));
+  check('to‘g‘ri kod sessiyani to‘ldirdi', webAuth.resolveSession(afterTotp.token)?.mfaPassed === true);
+
+  /*
+   * Telegram orqali kirishda ham 2FA talab qilinadi: ikkinchi
+   * bosqichning maqsadi "bitta narsa o'g'irlansa ham yetarli
+   * bo'lmasin", telefonni qo'lga kiritgan odam uchun ham shu qoida.
+   */
+  const tgAfterTotp = webAuth.loginByVerifiedPhone('998907776655', null, null);
+  check('Telegram orqali ham 2FA so‘raladi', tgAfterTotp?.mfaRequired === true);
+  check('u ham yarim sessiya', webAuth.resolveSession(tgAfterTotp.token)?.mfaPassed === false);
+
+  /* ── 2FA ni o'chirish ── */
+
+  throws('parolsiz 2FA o‘chirilmaydi', () => webAuth.disableTotp(secAcc.user.id, 'notogri'));
+  webAuth.disableTotp(secAcc.user.id, 'ikkinchi-parol-2026');
+  check('2FA o‘chirildi',
+    webAuth.login('998907776655', 'ikkinchi-parol-2026', null, null).mfaRequired === false);
+
+
+  /* ═════ 18. Profil ustiga yozilmasligi ═════ */
+  console.log('\n18. Telegram profil ustiga yozmaydi');
+
+  /*
+   * Bemor familiyasini kiritgach, keyingi so'rovda u Telegramdagi
+   * qiymat bilan almashardi — Telegramda familiya yo'q bo'lsa esa
+   * bo'shab qolardi. Natijada profil "to'liq emas" bo'lib, odam
+   * ro'yxatdan o'tish ekraniga qaytaverardi va sababini bilmasdi.
+   */
+  const tgUser = { id: 900555, first_name: 'Telegramdagi', language_code: 'uz' };
+  const createdUser = upsertUser(tgUser);
+  check('birinchi kirishda Telegram ismi olindi', createdUser.firstName === 'Telegramdagi');
+  check('familiya dastlab bo‘sh', !createdUser.lastName);
+
+  db.prepare(`UPDATE users SET first_name = ?, last_name = ? WHERE id = ?`).run(
+    'Aziz',
+    'Karimov',
+    createdUser.id,
+  );
+
+  // Telegramda familiya YO'Q — lekin kiritilgani saqlanib qolishi kerak
+  const againUser = upsertUser(tgUser);
+  check('kiritilgan ism saqlandi', againUser.firstName === 'Aziz', againUser.firstName);
+  check('kiritilgan familiya saqlandi', againUser.lastName === 'Karimov', againUser.lastName);
+
+  // Telegram boshqa ism yuborsa ham tegmaydi
+  const thirdUser = upsertUser({ ...tgUser, first_name: 'Boshqa', last_name: 'Nom' });
+  check('Telegram ismni qayta yozmadi', thirdUser.firstName === 'Aziz', thirdUser.firstName);
+  check('Telegram familiyani qayta yozmadi', thirdUser.lastName === 'Karimov', thirdUser.lastName);
+
+  // Telegramga tegishli maydonlar esa yangilanadi
+  const fourthUser = upsertUser({ ...tgUser, username: 'yangi_login' });
+  check('username yangilandi', fourthUser.username === 'yangi_login', fourthUser.username);
 
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);

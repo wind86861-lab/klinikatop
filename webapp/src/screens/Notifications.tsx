@@ -4,6 +4,7 @@ import { useApp } from '@/store/app';
 import { relativeTime } from '@/lib/format';
 import { AnimatedItem, AnimatedList, Button, EmptyState, IconBell, Screen } from '@/ui';
 import type { TranslationKey } from '@/i18n';
+import { safePath } from '@/lib/safePath';
 
 export function Notifications() {
   const { t, lang, notifications, unread, loadNotifications, markAllRead } = useApp();
@@ -33,7 +34,7 @@ export function Notifications() {
             <AnimatedItem key={n.id}>
               <button
                 className="list-item"
-                onClick={() => n.link && navigate(n.link)}
+                onClick={() => n.link && navigate(safePath(n.link))}
                 style={{ opacity: n.readAt ? 0.7 : 1 }}
               >
                 <div className="list-item__body">

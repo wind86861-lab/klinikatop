@@ -1,6 +1,6 @@
 /** REST klienti — autentifikatsiya sarlavhalari bir joyda. */
 import { tg } from './telegram';
-import { webToken } from './session';
+import { isCabinetPath, webToken } from './session';
 import type {
   AdminClinicFilter,
   AdminClinicRow,
@@ -99,10 +99,24 @@ export class ApiError extends Error {
  * bo'lardi — bu esa rollar chalkashishining eng oson yo'li.
  */
 export function authHeaders(): Record<string, string> {
-  const token = webToken();
-  if (token) return { authorization: `Bearer ${token}` };
-  if (tg?.initData) return { 'x-init-data': tg.initData };
-  return {};
+  /*
+   * Belgini MANZIL tanlaydi, "qaysinisi bor" degan savol emas.
+   *
+   * Ilgari veb token bo'lsa u har doim ustun edi. Natijada klinika
+   * xodimi kabinetga kirgan brauzerda bemor ilovasini ochsa, ilova
+   * uning KLINIKA shaxsi bilan ochilardi — rollarni ajratish shu
+   * yerda buzilardi.
+   *
+   * Endi qaysi ildiz yuklangan bo'lsa (main.tsx shu manzil bo'yicha
+   * hal qiladi), o'sha ildizning belgisi yuboriladi. Ikkisi bir
+   * so'rovda hech qachon uchrashmaydi.
+   */
+  if (isCabinetPath(window.location.pathname)) {
+    const token = webToken();
+    return token ? { authorization: `Bearer ${token}` } : {};
+  }
+
+  return tg?.initData ? { 'x-init-data': tg.initData } : {};
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

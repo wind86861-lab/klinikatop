@@ -122,9 +122,27 @@
   font-size: var(--t-sm);
 }
 
+/*
+ * O'chirilgan tugma.
+ *
+ * Faqat shaffoflik yetarli emas edi: to'q yashil tugma 0.45 shaffoflikda
+ * ham to'ldirilgan va bosiladigan bo'lib ko'rinardi, odam esa nima
+ * uchun ishlamayotganini tushunmasdi. Shuning uchun RANG butunlay
+ * olinadi — tugma tekis, sokin yuzaga aylanadi va bir qarashda
+ * "hozir emas" deb o'qiladi.
+ */
 .btn:disabled {
-  opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
+}
+.btn--primary:disabled,
+.btn--danger:disabled {
+  background: var(--line);
+  color: var(--muted);
+}
+.btn--secondary:disabled,
+.btn--ghost:disabled {
+  opacity: 0.45;
 }
 
 /* Bosilganda tarqaladigan to'lqin */
@@ -3478,3 +3496,152 @@
 }
 /* Barmoq uchun kamida 44px — tasodifan yonidagini bosmasin */
 .list-row__del:active { transform: scale(0.96); }
+
+/* ══════════════════  Hisob xavfsizligi  ══════════════════ */
+
+.sec__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Holat belgisi: rang ma'noni bildiradi, bezak emas */
+.sec__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  padding: 3px var(--s-3);
+  border-radius: var(--r-pill);
+}
+.sec__badge.is-on { background: var(--primary-soft); color: var(--primary); }
+.sec__badge.is-off { background: var(--accent-pale); color: var(--accent-ink); }
+
+.sec__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding-left: var(--s-4);
+  font-size: var(--t-sm);
+  color: var(--body);
+}
+
+/*
+ * QR oq fonda turishi SHART. Qorong'i rejimda ham: skaner qora
+ * kvadratlarni oq fonda kutadi va rangi teskari bo'lsa ko'p ilova
+ * uni umuman o'qiy olmaydi.
+ */
+.sec__qr {
+  align-self: center;
+  display: block;
+  background: #fff;
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+  max-width: 100%;
+  height: auto;
+}
+
+.sec__secret {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+.sec__secret code {
+  font-size: var(--t-sm);
+  letter-spacing: 0.1em;
+  word-break: break-all;
+  color: var(--ink);
+}
+
+.sec__code {
+  /* Olti raqam — maydon shunga yarasha, kartaning butun eniga emas */
+  max-width: 220px;
+  text-align: center;
+  font-size: var(--t-xl);
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Amal tugmalari yonma-yon. Telefonda joy tor bo'lsa ustunga o'tadi —
+ * ikkita tugmani 160 piksel enda yonma-yon siqish o'qishni buzadi.
+ */
+.sec__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.sec__actions .btn { flex: 1 1 auto; }
+
+@media (min-width: 640px) {
+  .sec__actions .btn { flex: 0 0 auto; }
+}
+
+.sec__session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  font-size: var(--t-sm);
+}
+
+/* ══════════════════  Admin panelidagi formalar  ══════════════════
+
+   Bemor ilovasi bitta tor ustun — u yerda hamma narsa kenglikka
+   cho'zilgani to'g'ri. Admin paneli esa keng, va o'sha qoida bu yerda
+   ishlamaydi: 830 piksel enli parol maydoni yoki butun kartani egallab
+   turgan "Saqlash" tugmasi noto'g'ri ko'rinadi va o'qishni
+   qiyinlashtiradi.
+
+   Shuning uchun bu yerda maydonlar o'z tabiiy kengligida qoladi.
+                                                                        */
+
+/* Kiritish maydoni matn uzunligidan kelib chiqadi, kartadan emas */
+.admin .field,
+.admin .input,
+.admin .select,
+.admin textarea {
+  max-width: 420px;
+}
+
+/*
+ * `block` deb belgilanmagan tugma o'z eniga teng bo'ladi.
+ * `.stack` ustunli flex bo'lgani uchun ular sukut bo'yicha cho'ziladi.
+ */
+.admin .btn:not(.btn--block) {
+  align-self: flex-start;
+}
+
+/* Uzun matnli tushuntirishlar ham o'qish uchun qulay enda */
+.admin .card > p,
+.admin .card > .tiny {
+  max-width: 62ch;
+}
+
+/*
+ * Ustunga tizilgan ro'yxat qatori.
+ *
+ * Yonida o'chirish tugmasi bo'lgan qatorda nom va holat bir satrga
+ * sig'maydi: nom "Laparoskopik xoletsi…" bo'lib kesiladi va bemor
+ * qaysi so'rov ekanini ajrata olmaydi. Shuning uchun nom butun
+ * kenglikni oladi, holat esa pastga tushadi.
+ */
+.list-item--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s-1);
+}
+.list-item__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  min-width: 0;
+}
+.list-item__meta .list-item__sub { min-width: 0; }

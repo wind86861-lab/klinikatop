@@ -125,19 +125,25 @@ export function MyRequests() {
             return (
               <AnimatedItem key={request.id}>
                 <div className="list-row">
-                  <button className="list-item" onClick={() => navigate(`/request/${request.id}`)}>
-                    <div className="list-item__body">
-                      <div className="list-item__title truncate">{opName(request.operation, lang)}</div>
-                      <div className="list-item__sub truncate">
+                  {/*
+                    Nom BUTUN kenglikni oladi, holat esa pastki qatorga
+                    tushadi. O'chirish tugmasi qo'shilgach nom juda erta
+                    kesila boshlagan edi: "Laparoskopik xoletsi…" — bemor
+                    qaysi so'rov ekanini ajrata olmasdi.
+                  */}
+                  <button className="list-item list-item--stacked" onClick={() => navigate(`/request/${request.id}`)}>
+                    <div className="list-item__title truncate">{opName(request.operation, lang)}</div>
+                    <div className="list-item__meta">
+                      <span className="list-item__sub truncate">
                         {money(request.budgetUzs, lang)}
                         {live && !left.expired && ` · ${left.text}`}
-                      </div>
+                      </span>
+                      {request.offersCount > 0 ? (
+                        <Badge tone="cheapest">{t('wait.offers', { n: request.offersCount })}</Badge>
+                      ) : (
+                        <Badge tone="neutral">{t(`status.${request.status}` as any)}</Badge>
+                      )}
                     </div>
-                    {request.offersCount > 0 ? (
-                      <Badge tone="cheapest">{t('wait.offers', { n: request.offersCount })}</Badge>
-                    ) : (
-                      <Badge tone="neutral">{t(`status.${request.status}` as any)}</Badge>
-                    )}
                   </button>
 
                   {/*

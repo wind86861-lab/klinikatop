@@ -13,8 +13,20 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 # o'tadi. Imzo sinov boti tokeni bilan yasaladi (server ham shuni ishlatadi).
 sign() { npx tsx "$ROOT/server/src/test/sign.ts" "$1"; }
 
-PATIENT=(-H "x-init-data: $(sign 900001)")
-STRANGER=(-H "x-init-data: $(sign 900777)")
+#
+# Bemor HAR YUGURISHDA yangi.
+#
+# Sabab tezlik cheklovi: bitta yugurish ~50 ta yozuv amali qiladi va
+# `limits.write` daqiqada 60 tani o'tkazadi. Bir xil foydalanuvchi
+# bilan ketma-ket ikki marta yurgizilsa, ikkinchisi 429 ga uriladi.
+#
+# Cheklovni kengaytirish yechim emas: u haqiqiy himoya va oddiy bemor
+# unga hech qachon yetmaydi. Cheklov foydalanuvchi bo'yicha yuritiladi,
+# shuning uchun yangi identifikator yangi hisobni beradi.
+#
+PATIENT_ID=$(( 910000 + $(date +%s) % 80000 ))
+PATIENT=(-H "x-init-data: $(sign $PATIENT_ID)")
+STRANGER=(-H "x-init-data: $(sign $(( PATIENT_ID + 1 )) )")
 JSON=(-H "content-type: application/json")
 
 # Klinika va admin Telegram orqali KIRMAYDI — ular veb sessiya ishlatadi.
@@ -713,6 +725,11 @@ check "raqam boshqa shaklda ham ishlaydi" "$([ -n "$ALT" ] && echo 1)" ""
 code=$(status "${JSON[@]}" -X POST "$API/web/telegram" -d '{}')
 check "Telegram ko'prigi imzosiz yopiq (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
+# Ikkala belgi BIR VAQTDA yuborilsa: veb sessiya ustun bo'lmasligi va
+# bemor imzosi klinika kabinetini ochmasligi kerak
+code=$(status "${PATIENT[@]}" "${CLINIC[@]}" "$API/me")
+check "ikki xil kirish belgisi rad etiladi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
 # Bemor imzosi bilan — raqami bor, lekin klinika emas
 STAND=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/web/telegram" -d '{}' | jqv '.standing.kind')
 check "bemor uchun klinika topilmadi" "$([ "$STAND" = "none" ] || [ "$STAND" = "no_phone" ] && echo 1)" "$STAND"
@@ -742,15 +759,19 @@ check "tasdiqlangan arizani o'chirib bo'lmaydi (409)" "$([ "$code" = 409 ] && ec
 echo
 echo "16. So'rovni o'chirish"
 
-# Cheklov olib tashlangan — ketma-ket bir necha so'rov qoldiriladi
+# Cheklov olib tashlangan.
+# Eski chegara "3 ta faol so'rov" edi, shuning uchun to'rttasi bir
+# vaqtda ochiq tura olishi to'g'ridan-to'g'ri isbot.
 DEL_IDS=""
 for i in 1 2 3 4; do
   RID=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
     -d '{"operationId":1,"cityId":1,"budgetUzs":9000000,"urgency":"normal","attachments":[],"aiSuggested":false,"conditionText":"Holatim: qorin ong tomonida ogriq, tekshiruvda tosh topildi.","acceptTerms":true}' | jqv '.id')
   DEL_IDS="$DEL_IDS $RID"
 done
-COUNT=$(echo $DEL_IDS | wc -w)
-check "cheklovsiz 4 ta so'rov yaratildi" "$([ "$COUNT" = 4 ] && echo 1)" "$COUNT"
+
+ACTIVE=$(curl -s "${PATIENT[@]}" "$API/requests" \
+  | jqv ".filter(function(r){return r.status==='NEW'||r.status==='COLLECTING'}).length")
+check "faol so'rovlar eski chegaradan oshdi" "$([ -n "$ACTIVE" ] && [ "$ACTIVE" -gt 3 ] && echo 1)" "$ACTIVE"
 
 FIRST=$(echo $DEL_IDS | awk '{print $1}')
 
@@ -770,6 +791,49 @@ check "o'chirilgan so'rov topilmaydi (404)" "$([ "$code" = 404 ] && echo 1)" "$c
 for r in $(echo $DEL_IDS | cut -d' ' -f2-); do
   curl -s "${PATIENT[@]}" -X DELETE "$API/requests/$r" > /dev/null
 done
+
+echo
+echo "17. Hisob xavfsizligi"
+
+# NEW_TOKEN yuqorida chiqish sinovida yopilgan — yangi sessiya ochamiz
+SEC_TOKEN=$(curl -s "${JSON[@]}" -X POST "$API/web/login" \
+  -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\"}" | jqv '.token')
+SEC=(-H "authorization: Bearer $SEC_TOKEN")
+check "yangi sessiya ochildi" "$([ -n "$SEC_TOKEN" ] && echo 1)" ""
+
+# Sessiyalar ro'yxati
+SESS=$(curl -s "${SEC[@]}" "$API/web/sessions" | jqv '.length')
+check "ochiq sessiyalar ko'rinadi" "$([ -n "$SESS" ] && [ "$SESS" -ge 1 ] && echo 1)" "$SESS"
+
+# 2FA sozlashni boshlash
+OTP=$(curl -s "${SEC[@]}" "${JSON[@]}" -X POST "$API/web/totp/start" -d '{}' | jqv '.otpauth')
+check "2FA sozlash boshlandi" "$(echo "$OTP" | grep -q '^otpauth://totp/' && echo 1)" "$OTP"
+
+# Noto'g'ri kod rad etiladi
+code=$(status "${SEC[@]}" "${JSON[@]}" -X POST "$API/web/totp/confirm" -d '{"code":"000000"}')
+check "noto'g'ri kod rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+# Sessiyasiz kirib bo'lmaydi
+code=$(status "${JSON[@]}" -X POST "$API/web/totp/start" -d '{}')
+check "sessiyasiz 2FA sozlab bo'lmaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+# Yaroqsiz token ham 401
+code=$(status -H "authorization: Bearer yaroqsiz-token" "${JSON[@]}" -X POST "$API/web/totp/start" -d '{}')
+check "yaroqsiz token rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+# Parol: joriy parolsiz almashtirilmaydi
+code=$(status "${SEC[@]}" "${JSON[@]}" -X POST "$API/web/password" \
+  -d '{"currentPassword":"butunlay-boshqa","newPassword":"yangi-parol-2026"}')
+check "joriy parolsiz almashtirilmaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+
+# Qisqa parol rad etiladi
+code=$(status "${SEC[@]}" "${JSON[@]}" -X POST "$API/web/password" \
+  -d "{\"currentPassword\":\"$PWD_NEW\",\"newPassword\":\"qisqa\"}")
+check "qisqa parol rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# Bemor bu marshrutlarga umuman kira olmaydi
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/web/totp/start" -d '{}')
+check "bemor 2FA marshrutiga kirmaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
 # ── Tozalash ──
 # Test yaratgan arizalar kunlik IP chegarasini yeb qo'ymasligi uchun

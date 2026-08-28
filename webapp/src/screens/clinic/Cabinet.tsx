@@ -46,6 +46,7 @@ import {
 } from '@/ui';
 import { Async, ClinicTabBar, Meter, NavRow, StatTile, useResource } from './shell';
 import type { Lang, NotificationPrefs as Prefs } from '@shared/types';
+import { Security } from '@/screens/web/Security';
 
 /* ═════════════════  5-ekran: dashboard  ═════════════════ */
 
@@ -290,6 +291,12 @@ export function ClinicSettings() {
           ))}
         </div>
       </Section>
+
+      {/*
+        Xavfsizlik klinika uchun ham kerak: kabinetda bemorlarning
+        tibbiy ma'lumoti va bitim tarixi bor.
+      */}
+      <Security />
 
       <Section title={t('cs.faq')}>
         <Card className="stack" style={{ gap: 2 }}>

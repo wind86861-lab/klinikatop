@@ -12,11 +12,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { rateLimit } from '../middleware/rateLimit';
-import { requireWeb, resolveWebUser } from '../middleware/auth';
-import { unauthorized } from '../lib/errors';
+import { resolveWebUser } from '../middleware/auth';
+import { forbidden, unauthorized } from '../lib/errors';
 import {
+  changePassword,
   completeSetup,
   confirmTotp,
+  disableTotp,
+  listSessions,
   login,
   loginByVerifiedPhone,
   logout,
@@ -35,15 +38,55 @@ const bearer = (req: { header(name: string): string | undefined }) => {
   return h.slice(7).trim();
 };
 
+/**
+ * Bu marshrutlardagi sessiyani O'ZIMIZ aniqlaymiz.
+ *
+ * `requireWeb` bu yerda ishlamaydi: u `req.web` ga tayanadi, uni esa
+ * `authenticate` to'ldiradi — va u `/web` dan KEYIN ishga tushadi
+ * (routes/index.ts). Bu marshrutlar ataylab autentifikatsiyadan oldin
+ * turadi, chunki kirish sahifasining o'zi ham shu yerda.
+ *
+ * Natijada `requireWeb` har doim 403 qaytarardi va 2FA ni yoqib
+ * bo'lmasdi. Shuning uchun sessiya shu yerda, ochiq holda olinadi.
+ */
+function session(req: { header(name: string): string | undefined }) {
+  const token = bearer(req);
+  const found = resolveSession(token);
+  if (!found) throw unauthorized();
+  return { token, user: found.user, mfaPassed: found.mfaPassed };
+}
+
+/**
+ * To'liq sessiya — 2FA o'tilgan bo'lishi shart.
+ *
+ * Parol o'g'irlangan bo'lsa, uni bilgan odam 2FA ni o'chirib yoki
+ * parolni almashtirib qo'ya olmasligi kerak.
+ */
+function fullSession(req: { header(name: string): string | undefined }) {
+  const s = session(req);
+  if (!s.mfaPassed) throw forbidden('Ikki bosqichli tasdiqni yakunlang');
+  return s;
+}
+
 const loginSchema = z.object({
   /** Telefon raqami. Eski hisoblar uchun email ham qabul qilinadi. */
   login: z.string().trim().min(4).max(160),
   password: z.string().min(1).max(200),
 });
 
+/*
+ * IP bo'yicha cheklov — toshqinga qarshi ikkinchi qatlam, asosiysi
+ * emas. Parol tanlashdan asosiy himoya HISOB darajasida: 5 ta xato
+ * urinishdan keyin hisob 15 daqiqaga qulflanadi (webAuth.ts).
+ *
+ * Shuning uchun bu yerdagi son keng: butun klinika ofisi bitta NAT
+ * ortida bo'lishi mumkin va ertalab bir necha xodim ketma-ket kirsa,
+ * tor chegara ularni o'z kabinetidan qamab qo'yardi. Hujumchi uchun
+ * esa baribir foydasiz — u qulflangan hisobga urinaveradi.
+ */
 webAuthRouter.post(
   '/login',
-  rateLimit({ name: 'web-login', windowSec: 300, max: 20 }),
+  rateLimit({ name: 'web-login', windowSec: 300, max: 60 }),
   (req, res) => {
     const body = loginSchema.parse(req.body);
     const result = login(body.login, body.password, req.ip ?? null, req.header('user-agent') ?? null);
@@ -58,12 +101,11 @@ webAuthRouter.post('/logout', (req, res) => {
 
 /** Joriy sessiya — sahifa yangilanganda kim kirganini bilish uchun. */
 webAuthRouter.get('/me', (req, res) => {
-  const session = resolveSession(bearer(req));
-  if (!session) throw unauthorized();
+  const current = session(req);
   const person = resolveWebUser(req);
   res.json({
-    account: session.user,
-    mfaPassed: session.mfaPassed,
+    account: current.user,
+    mfaPassed: current.mfaPassed,
     // Klinika kabineti va admin paneli shu shaxs nomidan ish ko'radi
     person: person?.user ?? null,
   });
@@ -143,13 +185,49 @@ webAuthRouter.post(
 );
 
 /** 2FA sozlash — allaqachon kirgan hisob uchun. */
-webAuthRouter.post('/totp/start', requireWeb, (req, res) => {
-  res.json(startTotpSetup(req.web!.id));
+webAuthRouter.post('/totp/start', (req, res) => {
+  res.json(startTotpSetup(fullSession(req).user.id));
 });
 
+/*
+ * Tasdiqlash `fullSession` talab QILMAYDI: 2FA hali yoqilmagan, ya'ni
+ * o'tadigan ikkinchi bosqich ham yo'q. Aks holda uni hech qachon
+ * yoqib bo'lmasdi.
+ */
 webAuthRouter.post('/totp/confirm', (req, res) => {
-  const session = resolveSession(bearer(req));
-  if (!session) throw unauthorized();
-  confirmTotp(session.user.id, codeSchema.parse(req.body).code);
+  confirmTotp(session(req).user.id, codeSchema.parse(req.body).code);
   res.json({ ok: true });
+});
+
+/** 2FA ni o'chirish — parol bilan tasdiqlanadi. */
+webAuthRouter.post('/totp/disable', (req, res) => {
+  const body = z.object({ password: z.string().min(1).max(200) }).parse(req.body);
+  disableTotp(fullSession(req).user.id, body.password);
+  res.json({ ok: true });
+});
+
+/* ── Parol va sessiyalar ── */
+
+webAuthRouter.post(
+  '/password',
+  rateLimit({ name: 'web-password', windowSec: 300, max: 10 }),
+  (req, res) => {
+    const body = z
+      .object({
+        currentPassword: z.string().min(1).max(200),
+        newPassword: z.string().min(1).max(200),
+      })
+      .parse(req.body);
+
+    const s = fullSession(req);
+    // Joriy sessiya saqlanadi, qolganlari yopiladi
+    changePassword(s.user.id, body.currentPassword, body.newPassword, s.token);
+    res.json({ ok: true });
+  },
+);
+
+/** Ochiq sessiyalar — qayerdan kirilgani ko'rinsin. */
+webAuthRouter.get('/sessions', (req, res) => {
+  const s = fullSession(req);
+  res.json(listSessions(s.user.id, s.token));
 });

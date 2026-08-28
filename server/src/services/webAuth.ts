@@ -379,6 +379,77 @@ export function purgeExpiredSessions(): number {
   return db.prepare(`DELETE FROM admin_sessions WHERE expires_at <= datetime('now')`).run().changes;
 }
 
+/**
+ * Parolni almashtirish.
+ *
+ * Joriy parol so'raladi — sessiya bor bo'lsa ham. Sabab: ochiq qolgan
+ * kompyuter yonidan o'tgan odam parolni almashtirib, egasini o'z
+ * hisobidan chiqarib yubora olmasligi kerak.
+ *
+ * Almashtirilgach BOSHQA hamma sessiya yopiladi. Odam odatda aynan
+ * shu sababdan parolni almashtiradi — kimdir kirgan deb o'ylaydi —
+ * va eski sessiyalar ochiq qolsa bu harakat ma'nosiz bo'lardi.
+ */
+export function changePassword(
+  webUserId: number,
+  currentPassword: string,
+  newPassword: string,
+  keepToken: string,
+): void {
+  const row = db.prepare(`SELECT * FROM admin_users WHERE id = ?`).get(webUserId) as any;
+  if (!row) throw unauthorized();
+
+  if (!row.password_hash || !passwordMatches(currentPassword, row.password_salt, row.password_hash)) {
+    throw unauthorized('Joriy parol noto‘g‘ri');
+  }
+
+  assertPasswordStrong(newPassword);
+
+  const salt = crypto.randomBytes(16).toString('hex');
+  db.prepare(`UPDATE admin_users SET password_salt = ?, password_hash = ? WHERE id = ?`).run(
+    salt,
+    hashPassword(newPassword, salt),
+    webUserId,
+  );
+
+  db.prepare(`DELETE FROM admin_sessions WHERE admin_id = ? AND token <> ?`).run(
+    webUserId,
+    tokenHash(keepToken),
+  );
+}
+
+/** Ochiq sessiyalar — qayerdan va qachon kirilgani. */
+export interface SessionRow {
+  current: boolean;
+  ip: string | null;
+  userAgent: string | null;
+  expiresAt: string;
+}
+
+export function listSessions(webUserId: number, currentToken: string): SessionRow[] {
+  const hash = tokenHash(currentToken);
+  return (
+    db
+      .prepare(`SELECT token, ip, user_agent, expires_at FROM admin_sessions WHERE admin_id = ? ORDER BY expires_at DESC`)
+      .all(webUserId) as any[]
+  ).map((r) => ({
+    current: r.token === hash,
+    ip: r.ip,
+    userAgent: r.user_agent,
+    expiresAt: iso(r.expires_at)!,
+  }));
+}
+
+/** 2FA ni o'chirish — joriy parol bilan tasdiqlanadi. */
+export function disableTotp(webUserId: number, password: string): void {
+  const row = db.prepare(`SELECT * FROM admin_users WHERE id = ?`).get(webUserId) as any;
+  if (!row) throw unauthorized();
+  if (!passwordMatches(password, row.password_salt, row.password_hash)) {
+    throw unauthorized('Parol noto‘g‘ri');
+  }
+  db.prepare(`UPDATE admin_users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?`).run(webUserId);
+}
+
 /* ─────────────────────────  2FA (TOTP)  ───────────────────────── */
 
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';

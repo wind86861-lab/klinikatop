@@ -23,9 +23,27 @@ export function upsertUser(tg: TelegramUser): User {
   const existing = db.prepare(`SELECT * FROM users WHERE telegram_id = ?`).get(tg.id);
 
   if (existing) {
+    /*
+     * Telegram FAQAT o'zi egalik qiladigan maydonlarni yangilaydi.
+     *
+     * Ilgari bu yerda ism va familiya ham har so'rovda qayta
+     * yozilardi. Bemor profilida familiyasini kiritsa, keyingi
+     * so'rovda u Telegramdagi qiymat bilan almashardi — Telegramda
+     * familiya yo'q bo'lsa esa BO'SHAB qolardi. Natijada profil
+     * "to'liq emas" bo'lib, odam ro'yxatdan o'tish ekraniga qaytaverar
+     * va nima uchun ekanini tushunmasdi.
+     *
+     * Endi ism va familiya faqat BO'SH bo'lsa to'ldiriladi: birinchi
+     * kirishda qulaylik beradi, keyin esa odamning tanloviga tegmaydi.
+     */
     db.prepare(
-      `UPDATE users SET username = ?, first_name = ?, last_name = ?, photo_url = ? WHERE telegram_id = ?`,
-    ).run(tg.username ?? null, tg.first_name ?? '', tg.last_name ?? null, tg.photo_url ?? null, tg.id);
+      `UPDATE users
+          SET username   = ?,
+              photo_url  = ?,
+              first_name = CASE WHEN first_name IS NULL OR first_name = '' THEN ? ELSE first_name END,
+              last_name  = CASE WHEN last_name IS NULL OR last_name = ''  THEN ? ELSE last_name  END
+        WHERE telegram_id = ?`,
+    ).run(tg.username ?? null, tg.photo_url ?? null, tg.first_name ?? '', tg.last_name ?? null, tg.id);
     return mapUser(db.prepare(`SELECT * FROM users WHERE telegram_id = ?`).get(tg.id));
   }
 
@@ -98,6 +116,24 @@ export function resolveWebUser(req: Request): { user: User; web: NonNullable<Req
  * "bir bosishda rol almashish" muammosi shu yerda yopiladi.
  */
 export function authenticate(req: Request, _res: Response, next: NextFunction) {
+  /*
+   * Ikkala belgi bir so'rovda kelishi NOANIQLIK.
+   *
+   * Qonuniy holatda bunday bo'lmaydi: bemor ilovasi faqat imzo,
+   * kabinet faqat sessiya yuboradi. Ikkovi birga kelsa — yo mijozda
+   * xato, yo kimdir ataylab sinab ko'ryapti. Birontasini "ustun" deb
+   * tanlash o'rniga rad etamiz: tanlash qoidasi vaqt o'tib esdan
+   * chiqadi va aynan shu joyda rollar aralashadi.
+   */
+  const hasWeb = (req.header('authorization') ?? '').toLowerCase().startsWith('bearer ');
+  const hasTelegram = Boolean((req.header('x-init-data') ?? '').trim());
+
+  if (hasWeb && hasTelegram) {
+    return next(
+      forbidden('Bir so‘rovda ikki xil kirish belgisi yuborilgan'),
+    );
+  }
+
   const web = resolveWebUser(req);
   if (web) {
     if (web.user.blockedAt) return next(forbidden('Hisobingiz bloklangan'));

@@ -35,10 +35,19 @@ import { FileThumb } from '@/components/wizard/FileThumb';
 import { AdminShell, type AdminSection } from './AdminShell';
 import { Applications } from './Applications';
 import { CatalogSync } from './CatalogSync';
+import { Security } from '../web/Security';
 import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
 import type { AdminMetrics, ChatMessage, Clinic, ClinicDocument, Deal, DealDetail } from '@shared/types';
 
-type Tab = 'applications' | 'verifications' | 'clinics' | 'disputes' | 'metrics' | 'catalog' | 'settings';
+type Tab =
+  | 'applications'
+  | 'verifications'
+  | 'clinics'
+  | 'disputes'
+  | 'metrics'
+  | 'catalog'
+  | 'settings'
+  | 'security';
 
 export function AdminHome() {
   const { t, toast, user } = useApp();
@@ -133,6 +142,11 @@ export function AdminHome() {
     { id: 'metrics', label: t('admin.metrics'), render: () => <MetricsPanel metrics={metrics} /> },
     { id: 'catalog', label: 'Katalog', render: () => <CatalogSync /> },
     { id: 'settings', label: t('admin.tabSettings'), render: () => <PlatformSettingsScreen /> },
+    /*
+     * Xavfsizlik oxirida, lekin ko'rinadigan joyda. Bu hisob butun
+     * platformani boshqaradi va 2FA aynan shu yerdan yoqiladi.
+     */
+    { id: 'security', label: 'Xavfsizlik', render: () => <Security /> },
   ];
 
   return (

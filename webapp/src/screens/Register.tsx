@@ -21,6 +21,7 @@ import { spring } from '@/lib/motion';
 import { cityName } from '@/i18n';
 import { Button, Chip, Field, Input, Notice, Screen, Select } from '@/ui';
 import { GENDERS, ageFromBirthYear, type Gender } from '@shared/types';
+import { safePath } from '@/lib/safePath';
 
 /** Tanlash uchun yillar: bugundan 120 yil orqaga. */
 const CURRENT_YEAR = new Date().getFullYear();
@@ -71,7 +72,7 @@ export function Register() {
       await refreshSession();
       haptic.success();
       const next = (location.state as { next?: string } | null)?.next ?? '/';
-      navigate(next, { replace: true });
+      navigate(safePath(next), { replace: true });
     } catch (err: any) {
       haptic.error();
       toast(err?.message ?? t('common.error'), 'error');
