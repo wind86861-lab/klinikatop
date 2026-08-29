@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
@@ -66,7 +66,7 @@ export function Onboarding() {
 
       <div className="onb__slide">
         <AnimatePresence mode="wait" custom={direction}>
-          <motion.div
+          <m.div
             key={index}
             custom={direction}
             className="stack"
@@ -84,33 +84,33 @@ export function Onboarding() {
             }}
           >
             {/* Parallaks: rasm matndan tezroq suriladi */}
-            <motion.div
+            <m.div
               className="onb__art"
               initial={{ opacity: 0, scale: 0.7, x: direction * 110 }}
               animate={{ opacity: 1, scale: 1, x: 0 }}
               transition={spring}
             >
               <Icon size={54} />
-            </motion.div>
+            </m.div>
 
-            <motion.h1
+            <m.h1
               className="onb__title"
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ ...spring, delay: 0.06 }}
             >
               {t(`onb.${SLIDES[index].key}.title` as TranslationKey)}
-            </motion.h1>
+            </m.h1>
 
-            <motion.p
+            <m.p
               className="onb__text"
               initial={{ opacity: 0, y: 22 }}
               animate={{ opacity: 0.88, y: 0 }}
               transition={{ ...spring, delay: 0.1 }}
             >
               {t(`onb.${SLIDES[index].key}.text` as TranslationKey)}
-            </motion.p>
-          </motion.div>
+            </m.p>
+          </m.div>
         </AnimatePresence>
       </div>
 
@@ -139,7 +139,7 @@ export function Onboarding() {
           ))}
         </div>
 
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 26 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ ...spring, delay: 0.16 }}
@@ -152,7 +152,7 @@ export function Onboarding() {
           >
             {isLast ? t('onb.start') : t('common.next')}
           </Button>
-        </motion.div>
+        </m.div>
 
         {!isLast && (
           <button className="btn btn--ghost" style={{ color: 'rgba(255,255,255,.75)' }} onClick={finish}>

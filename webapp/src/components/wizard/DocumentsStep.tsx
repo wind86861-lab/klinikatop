@@ -6,7 +6,7 @@
  * qo'shimcha kutubxona kerak emas.
  */
 import { useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
@@ -118,7 +118,7 @@ export function DocumentsStep({
       {/* "Boshqa" tanlansa — nomi so'raladi, aks holda hujjat nomsiz qoladi */}
       <AnimatePresence initial={false}>
         {needsLabel && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -133,7 +133,7 @@ export function DocumentsStep({
                 onChange={(e) => setLabel(e.target.value)}
               />
             </Field>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
@@ -170,7 +170,7 @@ export function DocumentsStep({
 
       <AnimatePresence initial={false}>
         {draft.files.map((file) => (
-          <motion.div
+          <m.div
             key={file.id}
             layout
             initial={{ opacity: 0, y: 10 }}
@@ -192,7 +192,7 @@ export function DocumentsStep({
             <button className="doc-row__remove" onClick={() => remove(file.id)} aria-label={t('common.cancel')}>
               ×
             </button>
-          </motion.div>
+          </m.div>
         ))}
       </AnimatePresence>
 

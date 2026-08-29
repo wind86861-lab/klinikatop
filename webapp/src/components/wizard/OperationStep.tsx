@@ -7,7 +7,7 @@
  * shundan aniqlaydi.
  */
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
@@ -99,7 +99,7 @@ export function OperationStep({
       </div>
 
       <AnimatePresence mode="wait">
-        <motion.div
+        <m.div
           key={mode}
           className="stack"
           initial={{ opacity: 0, y: 10 }}
@@ -112,7 +112,7 @@ export function OperationStep({
           ) : (
             <AiChatStep onDone={onChatDone} onSwitchToCatalog={() => setMode('catalog')} />
           )}
-        </motion.div>
+        </m.div>
       </AnimatePresence>
     </>
   );
@@ -132,7 +132,7 @@ function PathCard({
   onClick: () => void;
 }) {
   return (
-    <motion.button
+    <m.button
       className="wz-path"
       whileTap={{ scale: disabled ? 1 : 0.99 }}
       transition={spring}
@@ -148,7 +148,7 @@ function PathCard({
         {hint && <span className="wz-path__hint">{hint}</span>}
       </span>
       <span className="wz-path__chevron">›</span>
-    </motion.button>
+    </m.button>
   );
 }
 

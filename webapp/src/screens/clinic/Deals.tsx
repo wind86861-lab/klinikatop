@@ -10,7 +10,7 @@
  * ajralib qolmaydi.
  */
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
@@ -63,7 +63,7 @@ export function DealsBoard() {
                   <div className="kanban__body">
                     <AnimatePresence initial={false}>
                       {items.map((deal) => (
-                        <motion.button
+                        <m.button
                           key={deal.id}
                           layout
                           type="button"
@@ -83,7 +83,7 @@ export function DealsBoard() {
                           {deal.scheduledAt && (
                             <span className="tiny">{formatDate(deal.scheduledAt, lang)}</span>
                           )}
-                        </motion.button>
+                        </m.button>
                       ))}
                     </AnimatePresence>
 
@@ -319,7 +319,7 @@ export function ClinicChat() {
 
         <AnimatePresence initial={false}>
           {messages.map((message) => (
-            <motion.div
+            <m.div
               key={message.id}
               className={`ai-bubble ai-bubble--${message.senderId === user?.id ? 'mine' : 'ai'}`}
               initial={{ opacity: 0, y: 8, scale: 0.98 }}
@@ -327,7 +327,7 @@ export function ClinicChat() {
               transition={spring}
             >
               {message.body}
-            </motion.div>
+            </m.div>
           ))}
         </AnimatePresence>
       </div>

@@ -3,7 +3,7 @@
  * WebSocket orqali jonli yangilanadi.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
@@ -199,7 +199,7 @@ export function RequestDetail() {
     >
       {/* Kutish holati: radar + jonli hisoblagichlar */}
       {waiting && (
-        <motion.div variants={popVariants} initial="initial" animate="animate" className="stack">
+        <m.div variants={popVariants} initial="initial" animate="animate" className="stack">
           <Card className="stack" style={{ alignItems: 'center', textAlign: 'center' }}>
             <Radar
               clinics={Array.from({ length: request.broadcastCount }, (_, i) => ({
@@ -225,7 +225,7 @@ export function RequestDetail() {
           </Card>
 
           <Notice tone="info">{t('wait.hint')}</Notice>
-        </motion.div>
+        </m.div>
       )}
 
       {/* Takliflar oqimi */}
@@ -247,10 +247,10 @@ export function RequestDetail() {
           {compareIds.length < 2 && <p className="tiny">{t('compare.hint')}</p>}
 
           {/* FLIP: saralanganda kartalar o'rin almashadi */}
-          <motion.div className="stack" layout>
+          <m.div className="stack" layout>
             <AnimatePresence initial={false}>
               {sorted.map((offer) => (
-                <motion.div
+                <m.div
                   key={offer.id}
                   layout
                   variants={incomingVariants}
@@ -267,10 +267,10 @@ export function RequestDetail() {
                     onToggleSelect={() => toggleCompare(offer.id)}
                     onChoose={closed ? undefined : () => setChoosing(offer)}
                   />
-                </motion.div>
+                </m.div>
               ))}
             </AnimatePresence>
-          </motion.div>
+          </m.div>
         </>
       )}
 
@@ -398,7 +398,7 @@ function CompareTable({
       <div className="scroll-x">
         <div className="compare">
           {offers.map((offer, index) => (
-            <motion.div
+            <m.div
               className="compare__col"
               key={offer.id}
               initial={{ opacity: 0, x: -24 }}
@@ -438,7 +438,7 @@ function CompareTable({
                   {t('offers.choose')}
                 </Button>
               </Card>
-            </motion.div>
+            </m.div>
           ))}
         </div>
       </div>
@@ -458,7 +458,7 @@ function CompareRow({
   children: React.ReactNode;
 }) {
   return (
-    <motion.div
+    <m.div
       className={`compare__row ${best ? 'compare__row--best' : ''}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -466,6 +466,6 @@ function CompareRow({
     >
       <div className="compare__rowlabel">{label}</div>
       <div style={{ fontSize: 'var(--t-sm)', fontWeight: best ? 700 : 500 }}>{children}</div>
-    </motion.div>
+    </m.div>
   );
 }

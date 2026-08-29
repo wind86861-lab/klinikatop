@@ -6,7 +6,7 @@
  * eslab qolish uchun sabab yo'q edi. Endi bitta daraja.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
 import { formatDate, groupDigits, money } from '@/lib/format';
@@ -274,7 +274,7 @@ function MetricCard({
 }) {
   const { lang } = useApp();
   return (
-    <motion.div className="kpi" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
+    <m.div className="kpi" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
       <div className="kpi__label">{label}</div>
       <div className="kpi__value">
         {isMoney ? (
@@ -286,7 +286,7 @@ function MetricCard({
           </>
         )}
       </div>
-    </motion.div>
+    </m.div>
   );
 }
 

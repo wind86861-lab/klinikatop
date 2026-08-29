@@ -852,13 +852,22 @@ check "ism uzatilmaydi" "$(echo "$PCASE" | jqv '.patientCase' | grep -qv 'irstNa
 # Budjetdan yuqori narx: sababsiz rad, sabab bilan qabul
 
 code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
-  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":7000000,\"includes\":[\"Operatsiya\"],\"advantages\":[],\"leadTimeDays\":5}")
+  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":5800000,\"includes\":[\"Operatsiya\"],\"advantages\":[],\"leadTimeDays\":5}")
 check "budjetdan yuqori narx sababsiz rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# ±20% chegarasi: undan chetga chiqib bo'lmaydi
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
+  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":9000000,\"includes\":[\"Operatsiya\"],\"advantages\":[],\"leadTimeDays\":5,\"aboveBudgetReason\":\"Sabab bor lekin chegaradan chiqib boLmaydi\"}")
+check "20% dan ortiq yuqori narx rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
+  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":3000000,\"includes\":[\"Operatsiya\"],\"advantages\":[],\"leadTimeDays\":5}")
+check "20% dan ortiq past narx rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
 TOMORROW=$(date -d '+3 days' +%Y-%m-%d)
 OVER_OFFER=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
-  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":7000000,\"includes\":[\"Operatsiya\",\"Ozim yozgan xizmat\"],\"advantages\":[\"Oliy toifali jarroh\"],\"leadTimeDays\":5,\"proposedDates\":[\"$TOMORROW\"],\"aboveBudgetReason\":\"Robot yordamida operatsiya va bir kecha yotoq narxga kiradi\"}")
-check "sabab bilan qabul qilindi" "$(echo "$OVER_OFFER" | jqv '.priceUzs' | grep -q '7000000' && echo 1)" ""
+  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":5800000,\"includes\":[\"Operatsiya\",\"Ozim yozgan xizmat\"],\"advantages\":[\"Oliy toifali jarroh\"],\"leadTimeDays\":5,\"proposedDates\":[\"$TOMORROW\"],\"aboveBudgetReason\":\"Robot yordamida operatsiya va bir kecha yotoq narxga kiradi\"}")
+check "sabab bilan qabul qilindi" "$(echo "$OVER_OFFER" | jqv '.priceUzs' | grep -q '5800000' && echo 1)" ""
 check "erkin matnli band saqlandi" "$(echo "$OVER_OFFER" | grep -q 'Ozim yozgan xizmat' && echo 1)" ""
 check "taklif qilingan sana saqlandi" "$(echo "$OVER_OFFER" | grep -q "$TOMORROW" && echo 1)" ""
 

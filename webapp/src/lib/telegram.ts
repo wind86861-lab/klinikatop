@@ -53,17 +53,15 @@ export function initTelegram() {
   if (!tg) return;
   tg.ready();
   tg.expand();
-  applyTheme();
-  tg.onEvent('themeChanged', applyTheme);
+  /*
+   * Mavzu bu yerda QO'YILMAYDI.
+   *
+   * Ilgari u shu yerda ham, sozlamalar ekranida ham qo'yilardi va
+   * ikkovi kelishmay qolardi: ilova yorug', Telegram ramkasi qorong'i.
+   * Endi qaror bitta joyda — `lib/theme.ts`.
+   */
 }
 
-function applyTheme() {
-  const scheme = tg?.colorScheme ?? 'light';
-  document.documentElement.setAttribute('data-theme', scheme);
-  const bg = scheme === 'dark' ? '#0c1817' : '#eaf0ee';
-  tg?.setBackgroundColor(bg);
-  tg?.setHeaderColor(bg);
-}
 
 export function currentScheme(): 'light' | 'dark' {
   if (tg) return tg.colorScheme;

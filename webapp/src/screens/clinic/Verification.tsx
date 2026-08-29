@@ -9,7 +9,7 @@
  * so'rov olishga tayyormi? Tayyor bo'lmasa boshqa ekranlarning ma'nosi yo'q.
  */
 import { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
@@ -52,7 +52,7 @@ export function VerificationStatus() {
 
           return (
             <>
-              <motion.div variants={popVariants} initial="initial" animate="animate">
+              <m.div variants={popVariants} initial="initial" animate="animate">
                 <Card className={`ver-hero ver-hero--${tone}`}>
                   <span className="ver-hero__icon">
                     <Icon size={30} />
@@ -60,7 +60,7 @@ export function VerificationStatus() {
                   <strong className="ver-hero__title">{t(`ver.status.${data.status}` as any)}</strong>
                   <p className="ver-hero__text">{t(`ver.${data.status}Text` as any)}</p>
                 </Card>
-              </motion.div>
+              </m.div>
 
               {/* Rad etilgan bo'lsa sabab eng muhim ma'lumot */}
               {data.note && <Notice tone="danger">{data.note}</Notice>}
@@ -148,7 +148,7 @@ export function VerificationDocs() {
 
       <AnimatePresence initial={false}>
         {needsLabel && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -158,7 +158,7 @@ export function VerificationDocs() {
             <Field label={t('ver.docName')}>
               <Input value={label} maxLength={120} onChange={(e) => setLabel(e.target.value)} />
             </Field>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
@@ -176,7 +176,7 @@ export function VerificationDocs() {
         {(data) => (
           <AnimatePresence initial={false}>
             {data.documents.map((doc) => (
-              <motion.div
+              <m.div
                 key={doc.id}
                 layout
                 initial={{ opacity: 0, y: 10 }}
@@ -199,7 +199,7 @@ export function VerificationDocs() {
                     ×
                   </button>
                 )}
-              </motion.div>
+              </m.div>
             ))}
           </AnimatePresence>
         )}

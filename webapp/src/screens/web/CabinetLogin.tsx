@@ -7,7 +7,7 @@
  * biladi.
  */
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { setWebToken } from '@/lib/session';
 import { EASE } from '@/lib/motion';
@@ -77,7 +77,7 @@ export function CabinetLogin() {
 
   return (
     <div className="wa">
-      <motion.div
+      <m.div
         className="wa__box"
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
@@ -158,7 +158,7 @@ export function CabinetLogin() {
             </form>
           </>
         )}
-      </motion.div>
+      </m.div>
     </div>
   );
 }

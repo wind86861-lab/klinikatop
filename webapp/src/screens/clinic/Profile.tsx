@@ -7,7 +7,7 @@
  *   Team           — kim klinika nomidan ishlay oladi
  */
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api, clinicApi, type ClinicProfileBody } from '@/lib/api';
@@ -181,7 +181,7 @@ export function ClinicProfile() {
                 <div className="stack" style={{ gap: 6 }}>
                   <AnimatePresence initial={false}>
                     {equipment.map((item, i) => (
-                      <motion.div
+                      <m.div
                         key={i}
                         layout
                         className="row"
@@ -203,7 +203,7 @@ export function ClinicProfile() {
                         >
                           ×
                         </button>
-                      </motion.div>
+                      </m.div>
                     ))}
                   </AnimatePresence>
                   <Button
@@ -224,7 +224,7 @@ export function ClinicProfile() {
                     <div className="photo-grid">
                       <AnimatePresence initial={false}>
                         {photos.map((fileId) => (
-                          <motion.div
+                          <m.div
                             key={fileId}
                             layout
                             className="photo-tile"
@@ -241,7 +241,7 @@ export function ClinicProfile() {
                             >
                               ×
                             </button>
-                          </motion.div>
+                          </m.div>
                         ))}
                       </AnimatePresence>
                     </div>
@@ -314,7 +314,7 @@ export function Doctors() {
         {(list) => (
           <AnimatePresence initial={false}>
             {list.map((doctor) => (
-              <motion.div key={doctor.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} transition={spring}>
+              <m.div key={doctor.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} transition={spring}>
                 <Card className="stack" style={{ gap: 8 }}>
                   <div className="row" style={{ gap: 12 }}>
                     {doctor.photoFileId ? (
@@ -358,7 +358,7 @@ export function Doctors() {
                     </Button>
                   </div>
                 </Card>
-              </motion.div>
+              </m.div>
             ))}
           </AnimatePresence>
         )}
@@ -569,7 +569,7 @@ export function ClinicReviews() {
         {(list) => (
           <AnimatePresence initial={false}>
             {list.map((review) => (
-              <motion.div key={review.id} layout variants={popVariants} initial="initial" animate="animate">
+              <m.div key={review.id} layout variants={popVariants} initial="initial" animate="animate">
                 <Card className="stack" style={{ gap: 8 }}>
                   <div className="between">
                     <span className="row" style={{ gap: 8 }}>
@@ -600,7 +600,7 @@ export function ClinicReviews() {
                     </Button>
                   )}
                 </Card>
-              </motion.div>
+              </m.div>
             ))}
           </AnimatePresence>
         )}

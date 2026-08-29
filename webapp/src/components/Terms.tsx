@@ -3,7 +3,7 @@
  * Bemor har so'rov yuborishda qabul qiladi — versiya serverda yoziladi.
  */
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
@@ -34,13 +34,13 @@ export function TermsCheckbox({
         }}
         aria-pressed={accepted}
       >
-        <motion.span
+        <m.span
           className="terms-check__box"
           animate={{ scale: accepted ? [1, 1.15, 1] : 1 }}
           transition={spring}
         >
           <IconCheck size={14} />
-        </motion.span>
+        </m.span>
         <span className="terms-check__text">{t('terms.accept')}</span>
       </button>
 

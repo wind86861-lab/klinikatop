@@ -6,7 +6,7 @@
  * yozishmada qolgan bo'lardi va o'zgartirilmay yillab ishlatilardi.
  */
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { EASE } from '@/lib/motion';
 import { Button, Field, Input, Notice } from '@/ui';
@@ -60,7 +60,7 @@ export function SetPassword() {
 
   return (
     <div className="wa">
-      <motion.div
+      <m.div
         className="wa__box"
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
@@ -116,7 +116,7 @@ export function SetPassword() {
             </form>
           </>
         )}
-      </motion.div>
+      </m.div>
     </div>
   );
 }

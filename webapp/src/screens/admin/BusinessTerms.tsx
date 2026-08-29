@@ -11,7 +11,7 @@
  * qanday.
  */
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
@@ -93,7 +93,7 @@ export function AdminClinics() {
               const onTrial = clinic.trialUntil && new Date(clinic.trialUntil) > new Date();
 
               return (
-                <motion.div key={clinic.id} layout variants={popVariants} initial="initial" animate="animate">
+                <m.div key={clinic.id} layout variants={popVariants} initial="initial" animate="animate">
                   <Card className="stack" style={{ gap: 8 }}>
                     <div className="between">
                       <strong className="truncate">{clinic.name}</strong>
@@ -154,7 +154,7 @@ export function AdminClinics() {
                       </Button>
                     </div>
                   </Card>
-                </motion.div>
+                </m.div>
               );
             })}
           </AnimatePresence>

@@ -1,5 +1,5 @@
 /** Ma'lumotni ko'rsatuvchi vizual komponentlar: radar, narx taqsimoti, ustunli grafik. */
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { DUR, EASE, spring } from '@/lib/motion';
 import { money } from '@/lib/format';
 import { Avatar, IconStethoscope } from '@/ui';
@@ -32,7 +32,7 @@ export function Radar({
         const angle = (i / shown.length) * Math.PI * 2 - Math.PI / 2;
         const seen = viewedIds.has(clinic.id);
         return (
-          <motion.div
+          <m.div
             key={clinic.id}
             className="radar__satellite"
             initial={{ opacity: 0, scale: 0.4 }}
@@ -45,7 +45,7 @@ export function Radar({
             transition={{ ...spring, delay: 0.1 + i * 0.06 }}
           >
             {/* Ko'rgan klinika kulrangdan rangliga "yonadi" */}
-            <motion.div
+            <m.div
               animate={{
                 filter: seen ? 'grayscale(0)' : 'grayscale(1)',
                 opacity: seen ? 1 : 0.5,
@@ -53,8 +53,8 @@ export function Radar({
               transition={{ duration: DUR.base, ease: EASE }}
             >
               <Avatar name={clinic.name} size="sm" />
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         );
       })}
     </div>
@@ -76,6 +76,27 @@ export function PriceChart({
 }) {
   if (!stats.histogram.length || stats.min == null || stats.max == null) return null;
 
+  /*
+   * Barcha bitimlar bir xil narxda bo'lsa grafik ma'nosini yo'qotadi:
+   * ustunlar bir xil balandlikda turadi va o'qning ikki uchida bir xil
+   * son yoziladi — odam bo'sh quti ko'radi.
+   *
+   * Bunday holatda raqamning o'zi ko'proq narsa aytadi.
+   */
+  if (stats.max - stats.min < 1) {
+    return (
+      <div className="pricechart__single">
+        <span className="tiny">Bozorda kuzatilgan narx</span>
+        <strong className="num">{money(stats.min, lang)}</strong>
+        {budget != null && (
+          <span className="tiny">
+            {yourLabel}: {money(budget, lang)}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   const maxCount = Math.max(...stats.histogram.map((b) => b.count), 1);
   const span = Math.max(1, stats.max - stats.min);
 
@@ -89,7 +110,7 @@ export function PriceChart({
         {stats.histogram.map((bucket, i) => {
           const inBudget = budget != null && budget >= bucket.from;
           return (
-            <motion.div
+            <m.div
               key={i}
               className={`pricechart__bar ${inBudget ? 'pricechart__bar--in' : ''}`}
               initial={{ scaleY: 0 }}
@@ -108,7 +129,7 @@ export function PriceChart({
 
       {markerPercent != null && (
         <div className="pricechart__marker">
-          <motion.div
+          <m.div
             className="pricechart__pin"
             initial={false}
             animate={{ left: `${markerPercent}%` }}
@@ -116,7 +137,7 @@ export function PriceChart({
           >
             <span>▲</span>
             <span>{yourLabel}</span>
-          </motion.div>
+          </m.div>
         </div>
       )}
     </div>
@@ -144,7 +165,7 @@ export function WeeklyBars({
                 ['requests', 'var(--primary-soft)'],
               ] as const
             ).map(([key, color]) => (
-              <motion.div
+              <m.div
                 key={key}
                 className="bars__seg"
                 style={{ background: color, height: `${(day[key] / max) * 100}%` }}

@@ -16,7 +16,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
-import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { AnimatePresence, m, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { EASE, DUR, ease, itemVariants, listVariants, popVariants, scrimVariants, sheetVariants, spring } from '@/lib/motion';
 import { haptic } from '@/lib/telegram';
 
@@ -58,7 +58,7 @@ export function Button({
   };
 
   return (
-    <motion.button
+    <m.button
       whileTap={{ scale: disabled || loading ? 1 : 0.97 }}
       transition={spring}
       className={`btn btn--${variant} ${size === 'sm' ? 'btn--sm' : ''} ${block ? 'btn--block' : ''} ${className}`}
@@ -67,7 +67,7 @@ export function Button({
       {...(rest as any)}
     >
       {ripples.map((r) => (
-        <motion.span
+        <m.span
           key={r.id}
           className="btn__ripple"
           style={{ left: r.x, top: r.y }}
@@ -78,7 +78,7 @@ export function Button({
       ))}
       {loading ? <span className="btn__spinner" aria-hidden /> : icon}
       {children}
-    </motion.button>
+    </m.button>
   );
 }
 
@@ -150,7 +150,7 @@ export function Chip({
   size?: 'sm';
 }) {
   return (
-    <motion.button
+    <m.button
       type="button"
       whileTap={{ scale: 0.95 }}
       transition={spring}
@@ -162,7 +162,7 @@ export function Chip({
       aria-pressed={active}
     >
       {children}
-    </motion.button>
+    </m.button>
   );
 }
 
@@ -248,7 +248,7 @@ export function Segment<T extends string>({
   return (
     <div className="segment" role="tablist" ref={containerRef}>
       {pill && (
-        <motion.div
+        <m.div
           className="segment__pill"
           initial={false}
           animate={{ left: pill.left, width: pill.width }}
@@ -338,7 +338,7 @@ export function Sheet({
     <AnimatePresence>
       {open && (
         <>
-          <motion.div
+          <m.div
             className="scrim"
             variants={scrimVariants}
             initial="initial"
@@ -346,7 +346,7 @@ export function Sheet({
             exit="exit"
             onClick={onClose}
           />
-          <motion.div
+          <m.div
             className="sheet"
             variants={sheetVariants}
             initial="initial"
@@ -372,7 +372,7 @@ export function Sheet({
               </div>
             )}
             <div className="sheet__body">{children}</div>
-          </motion.div>
+          </m.div>
         </>
       )}
     </AnimatePresence>
@@ -388,7 +388,7 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
         <div className="stepper__step" key={label}>
           {i < steps.length - 1 && (
             <div className="stepper__line">
-              <motion.div
+              <m.div
                 className="stepper__line-fill"
                 initial={{ scaleX: 0 }}
                 animate={{ scaleX: i < current ? 1 : 0 }}
@@ -396,7 +396,7 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
               />
             </div>
           )}
-          <motion.div
+          <m.div
             className={`stepper__dot ${i < current ? 'stepper__dot--done' : ''} ${
               i === current ? 'stepper__dot--current' : ''
             }`}
@@ -405,7 +405,7 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
             transition={spring}
           >
             {i < current ? <IconCheck size={13} /> : i + 1}
-          </motion.div>
+          </m.div>
           <span className={`stepper__label ${i <= current ? 'stepper__label--active' : ''}`}>{label}</span>
         </div>
       ))}
@@ -433,7 +433,7 @@ export function CountUp({
     motionValue.set(value);
   }, [value, motionValue]);
 
-  return <motion.span className={className}>{text}</motion.span>;
+  return <m.span className={className}>{text}</m.span>;
 }
 
 /* ─────────────────────────  Holatlar  ───────────────────────── */
@@ -450,12 +450,12 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <motion.div className="state" variants={popVariants} initial="initial" animate="animate">
+    <m.div className="state" variants={popVariants} initial="initial" animate="animate">
       {icon && <div className="state__art">{icon}</div>}
       <div className="state__title">{title}</div>
       {text && <p className="state__text">{text}</p>}
       {action}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -501,7 +501,7 @@ export function Stars({
   return (
     <div className={`stars ${size === 'lg' ? 'stars--lg' : ''}`} role={readOnly ? 'img' : 'radiogroup'} aria-label={`${value} / 5`}>
       {[1, 2, 3, 4, 5].map((n) => (
-        <motion.button
+        <m.button
           key={n}
           type="button"
           disabled={readOnly}
@@ -517,7 +517,7 @@ export function Stars({
           aria-label={String(n)}
         >
           <IconStar size={size === 'lg' ? 34 : 16} filled={n <= value} />
-        </motion.button>
+        </m.button>
       ))}
     </div>
   );
@@ -540,9 +540,9 @@ export function Notice({ tone = 'info', children }: { tone?: 'info' | 'warning' 
 
 export function AnimatedList({ children, className = 'stack' }: { children: ReactNode; className?: string }) {
   return (
-    <motion.div className={className} variants={listVariants} initial="initial" animate="animate">
+    <m.div className={className} variants={listVariants} initial="initial" animate="animate">
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -556,9 +556,9 @@ export function AnimatedItem({
   className?: string;
 }) {
   return (
-    <motion.div layout layoutId={layoutId} variants={itemVariants} exit="exit" className={className}>
+    <m.div layout layoutId={layoutId} variants={itemVariants} exit="exit" className={className}>
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -569,7 +569,7 @@ export function Toaster({ toasts, onDismiss }: { toasts: { id: number; message: 
     <div className="toaster" role="status" aria-live="polite">
       <AnimatePresence initial={false}>
         {toasts.map((t) => (
-          <motion.div
+          <m.div
             key={t.id}
             className={`toast toast--${t.tone}`}
             initial={{ opacity: 0, y: -24, scale: 0.96 }}
@@ -580,7 +580,7 @@ export function Toaster({ toasts, onDismiss }: { toasts: { id: number; message: 
           >
             <span className="toast__dot" />
             <span>{t.message}</span>
-          </motion.div>
+          </m.div>
         ))}
       </AnimatePresence>
     </div>
@@ -614,7 +614,7 @@ export function Screen({
 
   return (
     <ScreenCtx.Provider value={{ scrollRef }}>
-      <motion.div
+      <m.div
         // Yopishqoq panel bor bo'lsa kontentga qo'shimcha pastki bo'shliq kerak,
         // aks holda oxirgi element panel ortida qolib ketadi
         className={`screen ${footer ? 'screen--with-footer' : ''} ${tabBar ? 'screen--tabbed' : ''}`}
@@ -643,7 +643,7 @@ export function Screen({
         </div>
         {footer && <div className="action-bar">{footer}</div>}
         {tabBar}
-      </motion.div>
+      </m.div>
     </ScreenCtx.Provider>
   );
 }

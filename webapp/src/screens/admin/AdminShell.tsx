@@ -12,7 +12,7 @@
  * ketadi. Rejim tanlovi bemor ilovasida qoladi.
  */
 import { useState, type ReactNode } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { EASE, spring } from '@/lib/motion';
 import { setWebToken } from '@/lib/session';
 
@@ -61,7 +61,7 @@ export function AdminShell({
               onClick={() => pick(s.id)}
             >
               {s.id === active && (
-                <motion.span layoutId="admin-nav-marker" className="admin__navMark" transition={spring} />
+                <m.span layoutId="admin-nav-marker" className="admin__navMark" transition={spring} />
               )}
               <span className="admin__navLabel">{s.label}</span>
               {s.badge ? <span className="admin__navBadge num">{s.badge}</span> : null}
@@ -105,7 +105,7 @@ export function AdminShell({
 
         <div className="admin__body">
           <AnimatePresence mode="wait">
-            <motion.div
+            <m.div
               key={active}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -114,7 +114,7 @@ export function AdminShell({
               className="admin__panel"
             >
               {current?.render()}
-            </motion.div>
+            </m.div>
           </AnimatePresence>
         </div>
       </main>

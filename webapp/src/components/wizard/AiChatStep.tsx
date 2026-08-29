@@ -11,7 +11,7 @@
  * O'Z SO'ZLARI sifatida. Klinika AI xulosasiga emas, bemor yozganiga qaraydi.
  */
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
@@ -113,7 +113,7 @@ export function AiChatStep({
       {started && (
         <div className="ai-chat" ref={scrollRef}>
           {turns.map((turn, i) => (
-            <motion.div
+            <m.div
               key={i}
               className={`ai-bubble ai-bubble--${turn.role === 'user' ? 'mine' : 'ai'}`}
               initial={{ opacity: 0, y: 10, scale: 0.98 }}
@@ -126,17 +126,17 @@ export function AiChatStep({
                 </span>
               )}
               {turn.content}
-            </motion.div>
+            </m.div>
           ))}
 
           {thinking && (
-            <motion.div className="ai-bubble ai-bubble--ai" variants={popVariants} initial="initial" animate="animate">
+            <m.div className="ai-bubble ai-bubble--ai" variants={popVariants} initial="initial" animate="animate">
               <span className="typing" aria-label={t('need.thinking')}>
                 <span />
                 <span />
                 <span />
               </span>
-            </motion.div>
+            </m.div>
           )}
         </div>
       )}
@@ -144,16 +144,16 @@ export function AiChatStep({
       {/* Shoshilinch xavf — hamma narsadan ustun turadi */}
       <AnimatePresence>
         {result?.urgentWarning && (
-          <motion.div variants={popVariants} initial="initial" animate="animate" exit="exit">
+          <m.div variants={popVariants} initial="initial" animate="animate" exit="exit">
             <Notice tone="danger">{result.urgentWarning}</Notice>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
       {/* Aniqlangan yo'nalishlar */}
       <AnimatePresence>
         {result && !result.needsMoreInfo && result.suggestions.length > 0 && (
-          <motion.div variants={popVariants} initial="initial" animate="animate" exit="exit" className="stack">
+          <m.div variants={popVariants} initial="initial" animate="animate" exit="exit" className="stack">
             <div className="between">
               <h2 className="section-title">{t('need.aiTitle')}</h2>
               <span className="tiny">{t('need.confirmQuestion')}</span>
@@ -163,7 +163,7 @@ export function AiChatStep({
               const op = operations.get(s.operationId);
               if (!op) return null;
               return (
-                <motion.div
+                <m.div
                   key={s.operationId}
                   initial={{ opacity: 0, y: 14, scale: 0.97 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -182,7 +182,7 @@ export function AiChatStep({
                       {t('ai.continueWith')}
                     </Button>
                   </Card>
-                </motion.div>
+                </m.div>
               );
             })}
 
@@ -192,19 +192,19 @@ export function AiChatStep({
                 {t('ai.notThis')}
               </Button>
             )}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
       {/* Aniqlab bo'lmadi — o'sha suhbat "klinika aytsin" bo'lib davom etadi */}
       <AnimatePresence>
         {result?.fallbackToClinic && unknownOp && (
-          <motion.div variants={popVariants} initial="initial" animate="animate" exit="exit" className="stack">
+          <m.div variants={popVariants} initial="initial" animate="animate" exit="exit" className="stack">
             <Notice tone="info">{t('ai.clinicWillDecide')}</Notice>
             <Button block icon={<IconCheck size={16} />} onClick={() => finish(unknownOp)}>
               {t('ai.continueUnknown')}
             </Button>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
@@ -266,7 +266,7 @@ function Confidence({ value, label }: { value: number; label: string }) {
   return (
     <div className="row" style={{ gap: 6 }}>
       <div style={{ width: 46, height: 5, borderRadius: 100, background: 'var(--line)', overflow: 'hidden' }}>
-        <motion.div
+        <m.div
           style={{ height: '100%', background: tone, transformOrigin: 'left' }}
           initial={{ scaleX: 0 }}
           animate={{ scaleX: value }}

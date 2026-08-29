@@ -10,7 +10,7 @@
  * hali ishlaydigan imkoniyat emas.
  */
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import QRCode from 'qrcode';
 import { popVariants } from '@/lib/motion';
 import { useApp } from '@/store/app';
@@ -196,7 +196,7 @@ function TwoFactor({ account, onChange }: { account: Account; onChange: () => vo
         ) : (
           <AnimatePresence mode="wait">
             {setup ? (
-              <motion.div key="setup" className="stack" variants={popVariants} initial="initial" animate="animate">
+              <m.div key="setup" className="stack" variants={popVariants} initial="initial" animate="animate">
                 <ol className="sec__steps">
                   <li>
                     Telefoningizga autentifikatsiya ilovasini o‘rnating — Google Authenticator,
@@ -232,7 +232,7 @@ function TwoFactor({ account, onChange }: { account: Account; onChange: () => vo
                     Bekor qilish
                   </Button>
                 </div>
-              </motion.div>
+              </m.div>
             ) : (
               <Button key="start" loading={busy} onClick={start}>
                 Yoqish

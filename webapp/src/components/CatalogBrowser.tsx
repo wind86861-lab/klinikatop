@@ -12,7 +12,7 @@
  *   `mode="multi"`  — klinika o'z yo'nalishlarini yoqadi
  */
 import { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { EASE } from '@/lib/motion';
 import { categoryName, opAlias, opName } from '@/i18n';
 import { Chip, IconCheck, IconSearch, Input } from '@/ui';
@@ -139,7 +139,7 @@ export function CatalogBrowser({
 
                 <AnimatePresence initial={false}>
                   {open && (
-                    <motion.div
+                    <m.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
@@ -179,7 +179,7 @@ export function CatalogBrowser({
                           </div>
                         )}
                       </div>
-                    </motion.div>
+                    </m.div>
                   )}
                 </AnimatePresence>
               </div>

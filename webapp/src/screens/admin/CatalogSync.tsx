@@ -7,7 +7,7 @@
  * qo'llaydi. Bir bosishda 105 ta yozuvni almashtirish yo'li yo'q.
  */
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api, type SyncChange, type SyncPlan } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
@@ -95,7 +95,7 @@ export function CatalogSync() {
           {/* ── Reja ── */}
           <AnimatePresence>
             {plan && (
-              <motion.div variants={popVariants} initial="initial" animate="animate" exit="exit">
+              <m.div variants={popVariants} initial="initial" animate="animate" exit="exit">
                 <Section title="Nima o‘zgaradi">
                   <div className="sync-sum">
                     <SumCell n={plan.operations.filter((c) => c.kind === 'add').length} label="yangi" tone="is-add" />
@@ -146,7 +146,7 @@ export function CatalogSync() {
                     </>
                   )}
                 </Section>
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
 
@@ -177,10 +177,10 @@ export function CatalogSync() {
 
 function SumCell({ n, label, tone }: { n: number; label: string; tone: string }) {
   return (
-    <motion.div className={`sync-cell ${tone}`} layout transition={spring}>
+    <m.div className={`sync-cell ${tone}`} layout transition={spring}>
       <strong className="num">{n}</strong>
       <span className="tiny">{label}</span>
-    </motion.div>
+    </m.div>
   );
 }
 

@@ -3,7 +3,7 @@
  * Bosqichli stepper + chat + kontekstga bog'liq amallar (sana, bajarildi, tasdiqlash, sharh).
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
@@ -267,13 +267,13 @@ export function DealScreen() {
         </AnimatePresence>
 
         {peerTyping && (
-          <motion.div variants={popVariants} initial="initial" animate="animate" exit="exit" className="bubble bubble--theirs">
+          <m.div variants={popVariants} initial="initial" animate="animate" exit="exit" className="bubble bubble--theirs">
             <span className="typing" aria-label={t('chat.typing')}>
               <span />
               <span />
               <span />
             </span>
-          </motion.div>
+          </m.div>
         )}
       </div>
 
@@ -429,14 +429,14 @@ function Bubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
 
   if (message.kind === 'system') {
     return (
-      <motion.div className="bubble bubble--system" variants={popVariants} initial="initial" animate="animate">
+      <m.div className="bubble bubble--system" variants={popVariants} initial="initial" animate="animate">
         {message.body}
-      </motion.div>
+      </m.div>
     );
   }
 
   return (
-    <motion.div
+    <m.div
       className={`bubble ${mine ? 'bubble--mine' : 'bubble--theirs'}`}
       initial={{ opacity: 0, y: 12, scale: 0.97, x: mine ? 12 : -12 }}
       animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
@@ -449,7 +449,7 @@ function Bubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
         {clockTime(message.createdAt)}
         {mine && message.readAt && <IconCheck size={11} />}
       </div>
-    </motion.div>
+    </m.div>
   );
 }
 

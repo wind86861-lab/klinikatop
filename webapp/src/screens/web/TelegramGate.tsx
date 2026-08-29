@@ -14,7 +14,7 @@
  *   tayyor             → kabinet ochiladi
  */
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { setWebToken } from '@/lib/session';
 import { tg } from '@/lib/telegram';
 import { EASE } from '@/lib/motion';
@@ -74,13 +74,13 @@ export function TelegramGate({ onReady }: { onReady: () => void }) {
   if (!standing) {
     return (
       <Shell>
-        <motion.span
+        <m.span
           className="tg-gate__dots"
           animate={{ opacity: [0.35, 1, 0.35] }}
           transition={{ duration: 1.2, repeat: Infinity }}
         >
           Tekshirilmoqda…
-        </motion.span>
+        </m.span>
       </Shell>
     );
   }
@@ -155,7 +155,7 @@ export function TelegramGate({ onReady }: { onReady: () => void }) {
 function Shell({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <div className="tg-gate">
-      <motion.div
+      <m.div
         className="tg-gate__box"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -164,7 +164,7 @@ function Shell({ title, children }: { title?: string; children: React.ReactNode 
         <span className="tg-gate__mark">KlinikaTop</span>
         {title && <h1 className="tg-gate__title">{title}</h1>}
         {children}
-      </motion.div>
+      </m.div>
     </div>
   );
 }

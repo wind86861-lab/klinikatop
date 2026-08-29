@@ -2,7 +2,7 @@
  * Pastki navigatsiya — har rol o'z bo'limlarini oladi.
  * Foydalanuvchi har doim qayerdaligini va yana qayerga bora olishini ko'radi.
  */
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { haptic } from '@/lib/telegram';
@@ -95,7 +95,7 @@ export function TabBar({ role }: { role: TabRole }) {
             }}
           >
             {active && (
-              <motion.span layoutId={`tab-${role}`} className="tabbar__marker" transition={spring} />
+              <m.span layoutId={`tab-${role}`} className="tabbar__marker" transition={spring} />
             )}
             {tab.icon}
             <span className="tabbar__label">{t(tab.labelKey)}</span>

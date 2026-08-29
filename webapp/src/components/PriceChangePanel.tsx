@@ -9,7 +9,7 @@
  * Endi: taklif → ikkinchi tomon javobi → yozib qo'yiladi.
  */
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
@@ -106,7 +106,7 @@ export function PriceChangePanel({
 
       <AnimatePresence mode="wait">
         {pending ? (
-          <motion.div key="pending" className="stack" variants={popVariants} initial="initial" animate="animate">
+          <m.div key="pending" className="stack" variants={popVariants} initial="initial" animate="animate">
             <div className="pchange">
               <div className="pchange__row">
                 <span className="num pchange__old">{money(pending.fromUzs, lang)}</span>
@@ -133,9 +133,9 @@ export function PriceChangePanel({
                 </div>
               </>
             )}
-          </motion.div>
+          </m.div>
         ) : editable ? (
-          <motion.div key="idle" variants={popVariants} initial="initial" animate="animate">
+          <m.div key="idle" variants={popVariants} initial="initial" animate="animate">
             {open ? (
               <div className="stack">
                 <Field label="Yangi narx">
@@ -168,7 +168,7 @@ export function PriceChangePanel({
                 Narxni o‘zgartirishni taklif qilish
               </Button>
             )}
-          </motion.div>
+          </m.div>
         ) : null}
       </AnimatePresence>
 

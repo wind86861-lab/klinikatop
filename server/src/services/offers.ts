@@ -30,6 +30,15 @@ export interface CreateOfferInput {
   note: string | null;
 }
 
+/**
+ * Narx bemor budjetidan qancha chetga chiqishi mumkin.
+ *
+ * Ikki tomonga ham: pastga tushirish ham cheklanadi. Juda arzon
+ * taklif ham shubhali — u odatda "nimadir narxga kirmagan" degani
+ * va bemor buni keyin, klinikaga kelganda bilib qoladi.
+ */
+export const PRICE_TOLERANCE = 0.2;
+
 /** Ro'yxatdagi bandlar: erkin matn ham qabul qilinadi. */
 const MAX_LIST_ITEMS = 12;
 const MAX_ITEM_LEN = 80;
@@ -174,23 +183,45 @@ function validateOfferBody(
   }
 
   /*
-   * Budjetdan YUQORI narx ruxsat etiladi.
+   * Narx bemor budjetidan ±20% dan chetga chiqmaydi.
    *
-   * Bemor ko'rsatgan summa — mo'ljal, narx chegarasi emas. Klinika
-   * yaxshiroq shart bilan qimmatroq taklif bera olishi kerak: aks
-   * holda platforma faqat eng arzon variantni ko'rsatadigan joyga
-   * aylanadi va sifat raqobati yo'qoladi.
+   * Ilgari yuqori chegara yo'q edi: klinika 8 mln so'ragan bemorga 30
+   * mln taklif qila olardi. Bu ikki tomonga ham zarar — bemor bunday
+   * taklifni o'qimaydi ham, klinika esa bekorga vaqt sarflaydi va
+   * ro'yxatni to'ldirib qo'yadi.
    *
-   * Lekin SABABSIZ emas. Bemor nima uchun qimmatroq ekanini bilmasa,
-   * u shunchaki eng arzonini tanlaydi va tafovutni tushunmaydi.
+   * ±20% — kelishuv oynasi. Uning ichida klinika yaxshiroq shart bilan
+   * qimmatroq (yoki soddaroq bilan arzonroq) taklif bera oladi, lekin
+   * bemorning mo'ljalidan uzoqlashib ketmaydi.
+   *
+   * Budjetdan yuqori bo'lsa SABAB majburiy: bemor nima uchun
+   * qimmatroq ekanini bilmasa, u shunchaki eng arzonini tanlaydi.
    */
-  if (budgetUzs && input.priceUzs > budgetUzs) {
-    const reason = (input.aboveBudgetReason ?? '').trim();
-    if (reason.length < 10) {
+  if (budgetUzs) {
+    const max = Math.round(budgetUzs * (1 + PRICE_TOLERANCE));
+    const min = Math.round(budgetUzs * (1 - PRICE_TOLERANCE));
+
+    if (input.priceUzs > max) {
       throw badRequest(
-        'above_budget_reason_required',
-        'Narx bemor budjetidan yuqori — nima uchun ekanini tushuntiring',
+        'price_too_high',
+        `Narx bemor budjetidan ${Math.round(PRICE_TOLERANCE * 100)}% dan ortiq yuqori bo‘lmasin`,
       );
+    }
+    if (input.priceUzs < min) {
+      throw badRequest(
+        'price_too_low',
+        `Narx bemor budjetidan ${Math.round(PRICE_TOLERANCE * 100)}% dan ortiq past bo‘lmasin`,
+      );
+    }
+
+    if (input.priceUzs > budgetUzs) {
+      const reason = (input.aboveBudgetReason ?? '').trim();
+      if (reason.length < 10) {
+        throw badRequest(
+          'above_budget_reason_required',
+          'Narx bemor budjetidan yuqori — nima uchun ekanini tushuntiring',
+        );
+      }
     }
   }
 }

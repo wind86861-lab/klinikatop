@@ -10,7 +10,7 @@
  * ular bir joyda turadi va bitta uslubga bo'ysunadi.
  */
 import { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
@@ -115,7 +115,7 @@ export function RequestsFeed() {
         {() => (
           <AnimatePresence initial={false}>
             {visible.map((request, i) => (
-              <motion.div
+              <m.div
                 key={request.id}
                 layout
                 initial={{ opacity: 0, y: 14 }}
@@ -150,7 +150,7 @@ export function RequestsFeed() {
                     )}
                   </div>
                 </Card>
-              </motion.div>
+              </m.div>
             ))}
           </AnimatePresence>
         )}
@@ -285,9 +285,9 @@ export function OfferBuilder() {
 
               <AnimatePresence>
                 {tooHigh && (
-                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                  <m.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                     <Notice tone="warning">{t('ob.tooHigh')}</Notice>
-                  </motion.div>
+                  </m.div>
                 )}
               </AnimatePresence>
 
@@ -387,7 +387,7 @@ function LineEditor({
       <div className="stack" style={{ gap: 6 }}>
         <AnimatePresence initial={false}>
           {lines.map((line, i) => (
-            <motion.div
+            <m.div
               key={i}
               layout
               className="row"
@@ -403,7 +403,7 @@ function LineEditor({
                   ×
                 </button>
               )}
-            </motion.div>
+            </m.div>
           ))}
         </AnimatePresence>
         <Button variant="ghost" size="sm" icon={<IconPlus size={14} />} onClick={() => onChange([...lines, ''])}>
@@ -457,7 +457,7 @@ export function Templates() {
             {list.map((tpl) => {
               const op = opsRes.data?.find((o: Operation) => o.id === tpl.operationId);
               return (
-                <motion.div key={tpl.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} transition={spring}>
+                <m.div key={tpl.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} transition={spring}>
                   <Card className="stack" style={{ gap: 6 }}>
                     <div className="between">
                       <strong>{tpl.title}</strong>
@@ -477,7 +477,7 @@ export function Templates() {
                       </div>
                     </div>
                   </Card>
-                </motion.div>
+                </m.div>
               );
             })}
           </AnimatePresence>
@@ -649,7 +649,7 @@ export function MyOffers() {
         {() => (
           <AnimatePresence initial={false}>
             {visible.map((offer) => (
-              <motion.div key={offer.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} transition={spring}>
+              <m.div key={offer.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} transition={spring}>
                 <Card className="stack" style={{ gap: 6 }}>
                   <div className="between">
                     <strong>{offer.operationName}</strong>
@@ -674,7 +674,7 @@ export function MyOffers() {
                     )}
                   </div>
                 </Card>
-              </motion.div>
+              </m.div>
             ))}
           </AnimatePresence>
         )}

@@ -10,7 +10,7 @@
  * shundan qancha qoladi.
  */
 import { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
@@ -130,7 +130,7 @@ export function Calendar() {
                 const full = slot ? slot.booked >= slot.capacity : false;
 
                 return (
-                  <motion.button
+                  <m.button
                     key={date}
                     type="button"
                     className={`cal-day ${slot ? (full ? 'is-full' : 'is-open') : ''}`}
@@ -144,7 +144,7 @@ export function Calendar() {
                         {slot.booked}/{slot.capacity}
                       </span>
                     )}
-                  </motion.button>
+                  </m.button>
                 );
               })}
             </div>
@@ -319,7 +319,7 @@ export function Subscription() {
           const s = dash.subscription;
           return (
             <>
-              <motion.div variants={popVariants} initial="initial" animate="animate">
+              <m.div variants={popVariants} initial="initial" animate="animate">
                 <Card className="stack">
                   <div className="between">
                     <span className="tiny">{t('sub.current')}</span>
@@ -347,7 +347,7 @@ export function Subscription() {
                     </>
                   )}
                 </Card>
-              </motion.div>
+              </m.div>
 
               <Section title={t('sub.choose')}>
                 {(['basic', 'pro'] as SubscriptionPlan[]).map((plan) => {
@@ -443,7 +443,7 @@ export function Revenue() {
       >
         {(rev) => (
           <>
-            <motion.div variants={popVariants} initial="initial" animate="animate">
+            <m.div variants={popVariants} initial="initial" animate="animate">
               <Card className="stack" style={{ textAlign: 'center' }}>
                 <span className="tiny">{t('rev.net')}</span>
                 <div className="num" style={{ fontSize: 'var(--t-3xl)' }}>
@@ -451,7 +451,7 @@ export function Revenue() {
                 </div>
                 <span className="tiny">{t('rev.deals', { n: rev.totals.confirmedDeals })}</span>
               </Card>
-            </motion.div>
+            </m.div>
 
             <div className="tile-grid">
               <StatTile label={t('rev.gross')} value={money(rev.totals.grossUzs, lang)} />
@@ -551,18 +551,18 @@ export function Revenue() {
             <Section title={t('rev.byMonth')}>
               <Card className="stack" style={{ gap: 2 }}>
                 <AnimatePresence initial={false}>
-                  {rev.months.map((m) => (
-                    <motion.div
-                      key={m.month}
+                  {rev.months.map((row) => (
+                    <m.div
+                      key={row.month}
                       className="month-row"
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={spring}
                     >
-                      <span className="month-row__label">{m.month}</span>
-                      <span className="tiny">{t('rev.deals', { n: m.deals })}</span>
-                      <span className="num">{money(m.netUzs, lang)}</span>
-                    </motion.div>
+                      <span className="month-row__label">{row.month}</span>
+                      <span className="tiny">{t('rev.deals', { n: row.deals })}</span>
+                      <span className="num">{money(row.netUzs, lang)}</span>
+                    </m.div>
                   ))}
                 </AnimatePresence>
               </Card>

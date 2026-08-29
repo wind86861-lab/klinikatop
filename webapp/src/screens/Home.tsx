@@ -6,7 +6,7 @@
  * tasdiqlangan bitimlardan quriladi — o'ylab topilgan raqam yo'q.
  */
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api, type Highlights } from '@/lib/api';
@@ -88,7 +88,7 @@ export function Home() {
         </div>
 
         {/* ── Asosiy harakat ── */}
-        <motion.button
+        <m.button
           className="home-cta"
           whileTap={{ scale: 0.985 }}
           transition={spring}
@@ -108,7 +108,7 @@ export function Home() {
           <span className="home-cta__plus">
             <IconPlus size={22} />
           </span>
-        </motion.button>
+        </m.button>
 
         {/* ── Narx pulsi: shu hafta nima to'landi ── */}
         <PulseStrip highlights={highlights} />
@@ -228,7 +228,7 @@ function PulseStrip({ highlights }: { highlights: Highlights | null }) {
   const range = `${money(pulse.minUzs, lang)} – ${money(pulse.maxUzs, lang)}`;
 
   return (
-    <motion.button
+    <m.button
       className="pulse"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -250,7 +250,7 @@ function PulseStrip({ highlights }: { highlights: Highlights | null }) {
           [pulse.source === 'deals' ? pulse.operationName.toLowerCase() : pulse.operationName, range],
         )}
       </span>
-    </motion.button>
+    </m.button>
   );
 }
 
@@ -271,7 +271,7 @@ function ActiveRequestCard({
   const ratio = Math.max(0, Math.min(1, left.ms / totalMs));
 
   return (
-    <motion.button
+    <m.button
       className="req-card"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -312,7 +312,7 @@ function ActiveRequestCard({
             <span>{left.text}</span>
           </span>
           <span className="track" style={{ display: 'block' }}>
-            <motion.span
+            <m.span
               className="track__fill"
               style={{ display: 'block' }}
               initial={{ scaleX: 0 }}
@@ -322,7 +322,7 @@ function ActiveRequestCard({
           </span>
         </span>
       )}
-    </motion.button>
+    </m.button>
   );
 }
 
@@ -348,7 +348,7 @@ function Testimonials({ highlights }: { highlights: Highlights | null }) {
 
       <div className="fb-row">
         {highlights.testimonials.map((item, i) => (
-          <motion.article
+          <m.article
             className="fb"
             key={item.id}
             initial={{ opacity: 0, x: 16 }}
@@ -384,7 +384,7 @@ function Testimonials({ highlights }: { highlights: Highlights | null }) {
               <IconCheck size={13} />
               <b>{money(item.paidUzs, lang)}</b> {t('home.paid')}
             </div>
-          </motion.article>
+          </m.article>
         ))}
       </div>
     </>

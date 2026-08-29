@@ -315,12 +315,13 @@
 }
 
 .input,
-.textarea {
+.textarea,
+.select {
   width: 100%;
   padding: 13px var(--s-4);
   border-radius: var(--r-sm);
   background: var(--card);
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   color: var(--ink);
   transition: border-color var(--d-base) var(--ease), box-shadow var(--d-base) var(--ease);
 }
@@ -3757,9 +3758,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
-  width: 52px;
-  padding: var(--s-2) 0;
+  gap: 0;
+  width: 54px;
+  padding: 6px 0 var(--s-2);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background: var(--card);
@@ -3767,22 +3768,38 @@
   scroll-snap-align: start;
   transition: border-color var(--d-micro) var(--ease), background var(--d-micro) var(--ease);
 }
-.dp__wd { font-size: var(--t-xs); color: var(--muted); }
+
+/*
+ * Oy nomi kun raqamidan YUQORIDA.
+ *
+ * Faqat "30 31 1 2" ko'rinsa qaysi oy ekani noma'lum bo'ladi va oy
+ * chegarasida odam adashadi. Nom faqat oy o'zgarganda yoziladi;
+ * qolgan kunlarda joy bo'sh qoladi — shunda ustunlar tekis turadi.
+ */
+.dp__month {
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  min-height: 12px;
+}
+.dp__wd { font-size: var(--t-xs); color: var(--muted); line-height: 1.2; }
 .dp__num {
   font-size: var(--t-lg);
   font-weight: 600;
   color: var(--ink);
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
-
-/* Bemor so'ragan oraliq — chegara bilan ajratiladi */
-.dp__day.is-preferred { border-color: var(--primary); }
 
 .dp__day.is-picked {
   background: var(--primary);
   border-color: var(--primary);
 }
 .dp__day.is-picked .dp__wd,
+.dp__day.is-picked .dp__month,
 .dp__day.is-picked .dp__num { color: #fff; }
 
 /* Taklifdagi "nega qimmatroq" izohi — narxning yonida turadi */
@@ -4058,4 +4075,20 @@
 .crash__link {
   font-size: var(--t-sm);
   color: var(--muted);
+}
+
+
+/* Bozorda bitta narx kuzatilgan — grafik o'rniga raqam */
+.pricechart__single {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-4);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+.pricechart__single strong {
+  font-size: var(--t-xl);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }

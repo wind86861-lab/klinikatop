@@ -12,7 +12,7 @@
  * Qo'shimcha aloqa uchun alohida, ixtiyoriy maydon bor.
  */
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
@@ -92,7 +92,7 @@ export function Register() {
         </Button>
       }
     >
-      <motion.div
+      <m.div
         className="stack"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -171,7 +171,7 @@ export function Register() {
         </Field>
 
         <Notice tone="info">{t('reg.privacy')}</Notice>
-      </motion.div>
+      </m.div>
     </Screen>
   );
 }

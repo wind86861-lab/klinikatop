@@ -12,7 +12,7 @@
  * egallab olardi. Moderator uni darhol klinikaning pochtasiga yuboradi.
  */
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api, type ClinicApplication } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
@@ -102,7 +102,7 @@ export function Applications() {
         {(list) => (
           <AnimatePresence initial={false}>
             {list.map((app) => (
-              <motion.div key={app.id} layout variants={popVariants} initial="initial" animate="animate">
+              <m.div key={app.id} layout variants={popVariants} initial="initial" animate="animate">
                 <Card className="stack" style={{ gap: 8 }}>
                   <div className="between">
                     <strong>{app.name}</strong>
@@ -167,7 +167,7 @@ export function Applications() {
                     </Notice>
                   )}
                 </Card>
-              </motion.div>
+              </m.div>
             ))}
           </AnimatePresence>
         )}

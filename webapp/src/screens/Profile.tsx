@@ -1,6 +1,6 @@
 /** Profil bo'limi — shaxsiy ma'lumot, statistika va rol almashtirish. */
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
@@ -73,7 +73,7 @@ export function Profile() {
   return (
     <Screen title={t('profile.title')} tabBar={<TabBar role="patient" />}>
       {/* Shaxsiy kartochka */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
+      <m.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
         <Card className="row" style={{ gap: 'var(--s-4)' }}>
           <Avatar name={`${user.firstName} ${user.lastName ?? ''}`} url={user.photoUrl} size="lg" />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -86,7 +86,7 @@ export function Profile() {
             </div>
           </div>
         </Card>
-      </motion.div>
+      </m.div>
 
       {/* Bonus va tejash */}
       <div className="kpi-grid">
@@ -122,7 +122,7 @@ export function Profile() {
         shuning uchun u alohida, yumshoqroq ohangda ko'rsatiladi.
       */}
       {!medicalFilled && (
-        <motion.div variants={popVariants} initial="initial" animate="animate">
+        <m.div variants={popVariants} initial="initial" animate="animate">
           <Card className="stack" style={{ gap: 8 }}>
             <div className="between">
               <strong>{t('profile.completeness')}</strong>
@@ -134,7 +134,7 @@ export function Profile() {
               {t('profile.completeNow')}
             </Button>
           </Card>
-        </motion.div>
+        </m.div>
       )}
 
       {/* Menyu */}

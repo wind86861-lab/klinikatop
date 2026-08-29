@@ -13,7 +13,7 @@
  * safar 3-4 ta savol bo'ladi va oxirigacha yetib borish oson.
  */
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { EASE, popVariants, spring } from '@/lib/motion';
 import { Button, Chip, Field, IconCheck, Input, Notice, Select, Textarea } from '@/ui';
 import type { City, Operation } from '@shared/types';
@@ -115,15 +115,15 @@ export function ClinicSignup() {
     return (
       <div className="cs">
         <div className="cs__shell cs__shell--narrow">
-          <motion.div className="cs__card cs__success" variants={popVariants} initial="initial" animate="animate">
-            <motion.div
+          <m.div className="cs__card cs__success" variants={popVariants} initial="initial" animate="animate">
+            <m.div
               className="cs__successMark"
               initial={{ scale: 0.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ ...spring, delay: 0.1 }}
             >
               <IconCheck size={30} />
-            </motion.div>
+            </m.div>
 
             <h1 className="cs__h1">Arizangiz qabul qilindi</h1>
             <p className="cs__lede">
@@ -147,7 +147,7 @@ export function ClinicSignup() {
                 <span>Parolingizni qo‘yasiz va kabinetga kirasiz — Telegramda ham, brauzerda ham</span>
               </li>
             </ol>
-          </motion.div>
+          </m.div>
         </div>
       </div>
     );
@@ -167,7 +167,7 @@ export function ClinicSignup() {
 
       <div className="cs__shell cs__grid">
         {/* ── Chap: nima uchun ── */}
-        <motion.aside
+        <m.aside
           className="cs__pitch"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -200,10 +200,10 @@ export function ClinicSignup() {
             Kirish uchun <strong>telefon raqamingiz</strong> yetarli. Kabinet Telegramda ham,
             brauzerda ham ochiladi.
           </div>
-        </motion.aside>
+        </m.aside>
 
         {/* ── O'ng: forma ── */}
-        <motion.section
+        <m.section
           className="cs__card"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -212,7 +212,7 @@ export function ClinicSignup() {
           {/* Qadam ko'rsatkichi */}
           <div className="cs__steps" aria-hidden>
             {STEPS.map((s, i) => (
-              <motion.span
+              <m.span
                 key={s}
                 className={`cs__stepBar ${i <= index ? 'is-done' : ''}`}
                 animate={{ flex: i === index ? 1.5 : 1 }}
@@ -234,7 +234,7 @@ export function ClinicSignup() {
           {!ref && !loadError && (
             <div className="cs__skeleton">
               {[0, 1, 2].map((i) => (
-                <motion.span
+                <m.span
                   key={i}
                   animate={{ opacity: [0.35, 0.8, 0.35] }}
                   transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.15 }}
@@ -246,7 +246,7 @@ export function ClinicSignup() {
           {ref && (
             <>
               <AnimatePresence mode="wait" custom={direction}>
-                <motion.div
+                <m.div
                   key={step}
                   className="cs__fields"
                   initial={{ opacity: 0, x: direction * 24 }}
@@ -383,14 +383,14 @@ export function ClinicSignup() {
                       </div>
                     </>
                   )}
-                </motion.div>
+                </m.div>
               </AnimatePresence>
 
               <AnimatePresence>
                 {error && (
-                  <motion.div variants={popVariants} initial="initial" animate="animate" exit="exit">
+                  <m.div variants={popVariants} initial="initial" animate="animate" exit="exit">
                     <Notice tone="danger">{error}</Notice>
-                  </motion.div>
+                  </m.div>
                 )}
               </AnimatePresence>
 
@@ -417,7 +417,7 @@ export function ClinicSignup() {
               )}
             </>
           )}
-        </motion.section>
+        </m.section>
       </div>
     </div>
   );

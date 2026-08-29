@@ -21,6 +21,14 @@
   --body: #516361;
   --muted: #859895;
   --line: rgba(11, 42, 34, 0.09);
+  /*
+   * Kiritish maydonining chegarasi kartanikidan KUCHLIROQ.
+   *
+   * Karta chegarasi sezilmasa ham bo'ladi — u shunchaki guruhlaydi.
+   * Maydon esa "bu yerga yozish mumkin" deb turishi kerak, va
+   * qorong'i rejimda 9% chiziq umuman ko'rinmay qolardi.
+   */
+  --field-line: rgba(11, 42, 34, 0.16);
 
   /* ── Glass qatlam ── */
   --glass: rgba(255, 255, 255, 0.72);
@@ -80,6 +88,7 @@
     --body: #9db2ae;
     --muted: #6d817e;
     --line: rgba(234, 243, 240, 0.1);
+    --field-line: rgba(234, 243, 240, 0.22);
     --primary-soft: #12332f;
     --accent-pale: #3a2a12;
     --accent-ink: #edb56a;
@@ -101,6 +110,7 @@
   --body: #9db2ae;
   --muted: #6d817e;
   --line: rgba(234, 243, 240, 0.1);
+  --field-line: rgba(234, 243, 240, 0.22);
   --primary-soft: #12332f;
   --accent-pale: #3a2a12;
   --accent-ink: #edb56a;

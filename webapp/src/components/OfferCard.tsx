@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { formatDate, money, responseSpeed } from '@/lib/format';
 import { spring } from '@/lib/motion';
 import { Avatar, Badge, Button, Card, IconCheck, IconClock, IconShield } from '@/ui';
@@ -46,7 +46,7 @@ export function OfferCard({
         </div>
 
         {selectable && (
-          <motion.button
+          <m.button
             whileTap={{ scale: 0.9 }}
             transition={spring}
             onClick={onToggleSelect}
@@ -64,7 +64,7 @@ export function OfferCard({
             }}
           >
             {selected && <IconCheck size={15} />}
-          </motion.button>
+          </m.button>
         )}
       </div>
 

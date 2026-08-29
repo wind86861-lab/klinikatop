@@ -369,7 +369,8 @@ async function main() {
       offers.createOffer({
         requestId: 1,
         clinicId: clinic.id,
-        priceUzs: 9_000_000,
+        // Byudjet chegarasi ichida — tekshirilayotgani takror, narx emas
+        priceUzs: 11_000_000,
         includes: ['Operatsiya'],
         advantages: [],
         leadTimeDays: 3,
@@ -1523,6 +1524,55 @@ async function main() {
   );
 
   /* ── Budjetdan yuqori narx ── */
+
+  /*
+   * Narx bemor budjetidan ±20% dan chetga chiqmaydi. Ilgari yuqori
+   * chegara yo'q edi: 8 mln so'ragan bemorga 30 mln taklif qilsa
+   * bo'lardi va bunday taklifni hech kim o'qimasdi.
+   */
+  throws(
+    'budjetdan 20% dan ortiq yuqori narx rad etiladi',
+    () =>
+      offers.createOffer({
+        requestId: caseReq.id,
+        clinicId: clinic.id,
+        priceUzs: 12_000_000, // 8 mln dan 50% yuqori
+        includes: ['Operatsiya'],
+        advantages: [],
+        leadTimeDays: 5,
+        aboveBudgetReason: 'Sabab yozilgan bo‘lsa ham chegaradan chiqib bo‘lmaydi',
+        note: null,
+      }),
+    'price_too_high',
+  );
+
+  throws(
+    'budjetdan 20% dan ortiq past narx ham rad etiladi',
+    () =>
+      offers.createOffer({
+        requestId: caseReq.id,
+        clinicId: clinic.id,
+        priceUzs: 5_000_000, // 8 mln dan 37% past
+        includes: ['Operatsiya'],
+        advantages: [],
+        leadTimeDays: 5,
+        note: null,
+      }),
+    'price_too_low',
+  );
+
+  // Chegaraning aynan chetlari qabul qilinadi
+  const edge = offers.createOffer({
+    requestId: relativeReq.id,
+    clinicId: clinic.id,
+    priceUzs: 9_600_000, // 8 mln + 20%
+    includes: ['Operatsiya'],
+    advantages: [],
+    leadTimeDays: 5,
+    aboveBudgetReason: 'Robot yordamida operatsiya va bir kecha yotoq narxga kiradi',
+    note: null,
+  });
+  check('chegaraning aynan cheti qabul qilindi', edge.priceUzs === 9_600_000);
 
   throws(
     'budjetdan yuqori narx sababsiz rad etiladi',

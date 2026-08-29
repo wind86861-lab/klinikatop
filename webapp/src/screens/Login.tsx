@@ -14,7 +14,7 @@
  * osonlashtirardi, lekin platformani ochib qo'yish xavfini ham saqlab
  * turardi. Endi kirishning yagona yo'li — Telegram.
  */
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { popVariants } from '@/lib/motion';
 import { Button, Card, Notice } from '@/ui';
@@ -26,7 +26,7 @@ export function Login() {
 
   return (
     <div className="login">
-      <motion.div className="login__box" variants={popVariants} initial="initial" animate="animate">
+      <m.div className="login__box" variants={popVariants} initial="initial" animate="animate">
         <div className="login__mark">KlinikaTop</div>
         <h1 className="login__title">{t('login.title')}</h1>
         <p className="login__sub">{t('login.sub')}</p>
@@ -40,7 +40,7 @@ export function Login() {
           <Notice tone="info">{t('login.noBot')}</Notice>
         )}
 
-      </motion.div>
+      </m.div>
 
       <Card className="login__note">
         <p className="tiny">{t('login.privacy')}</p>

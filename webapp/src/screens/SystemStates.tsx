@@ -2,7 +2,7 @@
  * Tizim holatlari — xato yuz berganda foydalanuvchi bo'sh ekran ko'rmasin.
  */
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { spring } from '@/lib/motion';
@@ -75,7 +75,7 @@ export function OfflineBanner() {
   if (!offline) return null;
 
   return (
-    <motion.div
+    <m.div
       initial={{ y: -40 }}
       animate={{ y: 0 }}
       exit={{ y: -40 }}
@@ -96,7 +96,7 @@ export function OfflineBanner() {
       }}
     >
       {t('sys.offline')}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -114,7 +114,7 @@ export function Splash() {
       }}
     >
       <div style={{ textAlign: 'center', display: 'grid', gap: 'var(--s-4)', justifyItems: 'center' }}>
-        <motion.div
+        <m.div
           initial={{ scale: 0.7, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={spring}
@@ -132,18 +132,18 @@ export function Splash() {
             <path d="M8 13.7V16a5 5 0 0010 0v-1" />
             <circle cx="20" cy="11" r="2" />
           </svg>
-        </motion.div>
+        </m.div>
 
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ ...spring, delay: 0.08 }}
           style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--t-2xl)', letterSpacing: '-0.02em' }}
         >
           {t('appName')}
-        </motion.div>
+        </m.div>
 
-        <motion.div
+        <m.div
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
           transition={{ duration: 1.1, ease: 'easeInOut', repeat: Infinity }}

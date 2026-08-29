@@ -10,7 +10,7 @@
  * o'qilmay qoladi.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { spring } from '@/lib/motion';
@@ -171,7 +171,7 @@ export function NavRow({
   };
 
   return (
-    <motion.button
+    <m.button
       type="button"
       className={`nav-row ${tone === 'danger' ? 'nav-row--danger' : ''}`}
       onClick={go}
@@ -184,7 +184,7 @@ export function NavRow({
         {hint && <span className="nav-row__hint">{hint}</span>}
       </span>
       {right ?? <span className="nav-row__go"><IconChevron size={17} /></span>}
-    </motion.button>
+    </m.button>
   );
 }
 
@@ -215,7 +215,7 @@ export function Meter({ value, tone = 'primary' }: { value: number; tone?: 'prim
   const pct = Math.max(0, Math.min(1, value));
   return (
     <div className="meter" role="presentation">
-      <motion.span
+      <m.span
         className={`meter__fill meter__fill--${tone}`}
         initial={{ scaleX: 0 }}
         animate={{ scaleX: pct }}

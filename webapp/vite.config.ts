@@ -24,7 +24,13 @@ export default defineConfig({
       output: {
         // Telegram Web App tez ochilishi uchun — og'ir kutubxonalar alohida chunk
         manualChunks: {
-          motion: ['framer-motion'],
+          /*
+           * `framer-motion` ataylab bu yerda YO'Q.
+           *
+           * U `LazyMotion` orqali birinchi bo'yoqdan keyin yuklanadi
+           * va alohida bo'lakka o'zi ajraladi. Bu yerga qo'yilsa
+           * majburan asosiy yo'lga qaytardi.
+           */
           router: ['react-router-dom'],
         },
       },

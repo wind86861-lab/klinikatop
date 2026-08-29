@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
@@ -9,14 +9,35 @@ import { Home } from '@/screens/Home';
 import { MyRequests } from '@/screens/MyRequests';
 import { MyDeals } from '@/screens/MyDeals';
 import { Profile } from '@/screens/Profile';
-import { MedicalProfileScreen } from '@/screens/MedicalProfile';
-import { Settings } from '@/screens/Settings';
-import { NewRequest } from '@/screens/NewRequest';
-import { RequestDetail } from '@/screens/RequestDetail';
-import { DealScreen } from '@/screens/DealScreen';
-import { Notifications } from '@/screens/Notifications';
 import { Blocked, NotFound, OfflineBanner, Splash } from '@/screens/SystemStates';
 import { Login } from '@/screens/Login';
+
+/*
+ * ── Chuqur ekranlar alohida yuklanadi ──
+ *
+ * Yuqoridagilar — birinchi ekran va pastki menyu manzillari: ular
+ * darhol kerak va kechikish sezilsa menyu "yopishqoq" bo'lib qoladi.
+ *
+ * Quyidagilar esa ataylab kiriladigan ekranlar. Sehrgar bir o'zi 833
+ * qator, bitim ekrani 615 — bularning hammasi ilova ochilishida
+ * yuklanardi, garchi odam ularga kirmasligi ham mumkin edi.
+ *
+ * Kechikish sezilmasligi uchun ular bo'sh vaqtda oldindan yuklab
+ * qo'yiladi (pastdagi `useEffect` ga qarang) — ya'ni bosilganda
+ * odatda allaqachon tayyor turadi.
+ */
+const NewRequest = lazy(() => import('@/screens/NewRequest').then((mod) => ({ default: mod.NewRequest })));
+const RequestDetail = lazy(() =>
+  import('@/screens/RequestDetail').then((mod) => ({ default: mod.RequestDetail })),
+);
+const DealScreen = lazy(() => import('@/screens/DealScreen').then((mod) => ({ default: mod.DealScreen })));
+const Notifications = lazy(() =>
+  import('@/screens/Notifications').then((mod) => ({ default: mod.Notifications })),
+);
+const MedicalProfileScreen = lazy(() =>
+  import('@/screens/MedicalProfile').then((mod) => ({ default: mod.MedicalProfileScreen })),
+);
+const Settings = lazy(() => import('@/screens/Settings').then((mod) => ({ default: mod.Settings })));
 
 /**
  * Bemor ilovasi — Telegram Mini App.
@@ -32,6 +53,40 @@ export function App() {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  /*
+   * Chuqur ekranlarni BO'SH VAQTDA oldindan yuklaymiz.
+   *
+   * Kodni bo'lakka ajratish yuklanishni tezlashtiradi, lekin bosilgan
+   * paytda kutish paydo qiladi — bu almashtirish, yutuq emas. Shuning
+   * uchun brauzer bo'shashi bilan bo'laklar fonda olib qo'yiladi: ilova
+   * yengil ochiladi VA tugma bosilganda ekran darhol chiqadi.
+   *
+   * `requestIdleCallback` — brauzer haqiqatan bo'sh bo'lgandagina
+   * ishlaydi va asosiy ishga xalaqit bermaydi. Safari'da u yo'q,
+   * shuning uchun oddiy kechikish bilan zaxira yo'l.
+   */
+  useEffect(() => {
+    if (!ready || !user) return;
+
+    const warm = () => {
+      void import('@/screens/NewRequest');
+      void import('@/screens/RequestDetail');
+      void import('@/screens/DealScreen');
+    };
+
+    const idle = (window as any).requestIdleCallback as
+      | ((cb: () => void, opts?: { timeout: number }) => number)
+      | undefined;
+
+    if (idle) {
+      const handle = idle(warm, { timeout: 4000 });
+      return () => (window as any).cancelIdleCallback?.(handle);
+    }
+
+    const timer = window.setTimeout(warm, 1500);
+    return () => window.clearTimeout(timer);
+  }, [ready, user]);
 
   /**
    * Kirish oqimi: onboarding → bemor profili → ilova.
@@ -74,27 +129,29 @@ export function App() {
       <OfflineBanner />
 
       <AnimatePresence mode="wait" initial={false}>
-        <Routes location={location} key={location.pathname}>
+        <Suspense fallback={<Splash />}>
+          <Routes location={location} key={location.pathname}>
           {/* Kirish */}
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/register" element={<Register />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/register" element={<Register />} />
 
-          {/* Bemor bo'limlari */}
-          <Route path="/" element={<Home />} />
-          <Route path="/requests" element={<MyRequests />} />
-          <Route path="/deals" element={<MyDeals />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/profile/medical" element={<MedicalProfileScreen />} />
-          <Route path="/settings" element={<Settings />} />
+            {/* Bemor bo'limlari */}
+            <Route path="/" element={<Home />} />
+            <Route path="/requests" element={<MyRequests />} />
+            <Route path="/deals" element={<MyDeals />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/profile/medical" element={<MedicalProfileScreen />} />
+            <Route path="/settings" element={<Settings />} />
 
-          {/* Bemor oqimlari */}
-          <Route path="/new" element={<NewRequest />} />
-          <Route path="/request/:id" element={<RequestDetail />} />
-          <Route path="/deal/:id" element={<DealScreen />} />
-          <Route path="/notifications" element={<Notifications />} />
+            {/* Bemor oqimlari */}
+            <Route path="/new" element={<NewRequest />} />
+            <Route path="/request/:id" element={<RequestDetail />} />
+            <Route path="/deal/:id" element={<DealScreen />} />
+            <Route path="/notifications" element={<Notifications />} />
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </AnimatePresence>
 
       <Toaster toasts={toasts} onDismiss={dismissToast} />

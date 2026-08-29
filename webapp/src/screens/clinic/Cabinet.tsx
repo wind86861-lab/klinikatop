@@ -10,7 +10,7 @@
  * "Boshqa" shu farqni yopadi: guruhlangan ro'yxat, har biri bitta tegish.
  */
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
@@ -82,11 +82,11 @@ export function Dashboard() {
             <>
               {/* Obuna yoki verifikatsiya to'siq bo'lsa — eng tepada */}
               {blocked && (
-                <motion.div variants={popVariants} initial="initial" animate="animate">
+                <m.div variants={popVariants} initial="initial" animate="animate">
                   <Notice tone="warning">
                     {t(`sub.status.${s.status}` as any)} — {t('sub.sub')}
                   </Notice>
-                </motion.div>
+                </m.div>
               )}
 
               <div className="tile-grid">
@@ -314,7 +314,7 @@ export function ClinicSettings() {
                 <span>{t(q)}</span>
                 <span className={`faq__mark ${open === q ? 'is-open' : ''}`}>+</span>
               </button>
-              <motion.div
+              <m.div
                 className="faq__a"
                 initial={false}
                 animate={{ height: open === q ? 'auto' : 0, opacity: open === q ? 1 : 0 }}
@@ -322,7 +322,7 @@ export function ClinicSettings() {
                 style={{ overflow: 'hidden' }}
               >
                 <p className="tiny">{t(a)}</p>
-              </motion.div>
+              </m.div>
             </div>
           ))}
         </Card>

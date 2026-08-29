@@ -3,7 +3,7 @@
  * Klinika bu yerda bemor byudjetini va bozor narxini yonma-yon ko'radi.
  */
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
@@ -152,13 +152,28 @@ export function ClinicRequest() {
    * Lekin sababsiz emas — bemor nima uchun qimmatroq ekanini bilmasa,
    * u shunchaki eng arzonini tanlaydi.
    */
-  const aboveBudget = Boolean(request.budgetUzs && price > request.budgetUzs);
-  const overBy = aboveBudget && request.budgetUzs ? price - request.budgetUzs : 0;
+  /*
+   * Narx bemor budjetidan ±20% dan chetga chiqmaydi.
+   *
+   * Chegara EKRANDA ko'rsatiladi, server javobida emas: klinika
+   * narxni yozib, tugmani bosib, keyin xato olishi kerak emas —
+   * u chegarani yozayotganda bilishi kerak.
+   */
+  const budget = request.budgetUzs;
+  const maxPrice = budget ? Math.round(budget * 1.2) : null;
+  const minPrice = budget ? Math.round(budget * 0.8) : null;
+
+  const tooHighForBudget = Boolean(maxPrice && price > maxPrice);
+  const tooLowForBudget = Boolean(minPrice && price > 0 && price < minPrice);
+  const aboveBudget = Boolean(budget && price > budget && !tooHighForBudget);
+  const overBy = aboveBudget && budget ? price - budget : 0;
 
   // Shaffoflik siyosati: "nima kiradi" bo'sh bo'lsa taklif yuborilmaydi
   const valid =
     price >= 100_000 &&
     includes.length > 0 &&
+    !tooHighForBudget &&
+    !tooLowForBudget &&
     (!aboveBudget || aboveReason.trim().length >= 10) &&
     !sent;
 
@@ -254,7 +269,17 @@ export function ClinicRequest() {
       )}
 
       {/* Taklif formasi */}
-      <Field label={t('clinic.price')}>
+      <Field
+        label={t('clinic.price')}
+        hint={
+          budget
+            ? `Bemor budjeti ${money(budget, lang)} · ruxsat etilgan oraliq ${money(
+                minPrice!,
+                lang,
+              )} – ${money(maxPrice!, lang)}`
+            : undefined
+        }
+      >
         <Input
           className="input--money"
           inputMode="numeric"
@@ -264,13 +289,26 @@ export function ClinicRequest() {
         />
       </Field>
 
+      {/* Chegaradan chiqsa — darhol, tugmani bosishdan oldin */}
+      <AnimatePresence>
+        {(tooHighForBudget || tooLowForBudget) && (
+          <m.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            <Notice tone="danger">
+              {tooHighForBudget
+                ? `Narx bemor budjetidan 20% dan ortiq yuqori. Eng ko‘pi ${money(maxPrice!, lang)}.`
+                : `Narx bemor budjetidan 20% dan ortiq past. Eng kami ${money(minPrice!, lang)}.`}
+            </Notice>
+          </m.div>
+        )}
+      </AnimatePresence>
+
       {/*
         Budjetdan yuqori narx — to'siq emas, tushuntirish talab qiladi.
         Klinika yaxshiroq shart bilan qimmatroq taklif bera olishi kerak.
       */}
       <AnimatePresence>
         {aboveBudget && (
-          <motion.div
+          <m.div
             className="stack"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -287,7 +325,7 @@ export function ClinicRequest() {
               placeholder="Masalan: robot yordamida operatsiya va bir kecha yotoq narxga kiradi"
               onChange={(e) => setAboveReason(e.target.value)}
             />
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
@@ -328,20 +366,20 @@ export function ClinicRequest() {
         ko'rsatgan oraliq bo'lsa, u birinchi ko'rinadi.
       */}
       <Field
-        label="Qulay kunlar · ixtiyoriy"
+        label="Operatsiya uchun qulay kunlar · ixtiyoriy"
         hint={
           request.dateFrom
             ? `Bemor ${formatDate(request.dateFrom, lang)}${
                 request.dateTo ? ` – ${formatDate(request.dateTo, lang)}` : ''
-              } oralig‘ini ko‘rsatgan`
-            : 'Bemor sana ko‘rsatmagan — o‘zingiz taklif qiling'
+              } oralig‘ini so‘ragan`
+            : 'Bemor sana ko‘rsatmagan'
         }
       >
         <DatePicker
           value={dates}
           onChange={setDates}
-          preferFrom={request.dateFrom}
-          preferTo={request.dateTo}
+          windowFrom={request.dateFrom}
+          windowTo={request.dateTo}
           lang={lang}
         />
       </Field>
@@ -363,8 +401,8 @@ export function ClinicRequest() {
       <Notice tone="info">{t('clinic.includesHint')}</Notice>
 
       {sent && (
-        <motion.div variants={popVariants} initial="initial" animate="animate" style={{ textAlign: 'center' }}>
-          <motion.div
+        <m.div variants={popVariants} initial="initial" animate="animate" style={{ textAlign: 'center' }}>
+          <m.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={spring}
@@ -380,9 +418,9 @@ export function ClinicRequest() {
             }}
           >
             <IconCheck size={30} />
-          </motion.div>
+          </m.div>
           <p style={{ marginTop: 'var(--s-2)' }}>{t('clinic.offerSent')}</p>
-        </motion.div>
+        </m.div>
       )}
     </Screen>
   );

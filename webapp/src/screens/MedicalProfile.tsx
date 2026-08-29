@@ -9,7 +9,7 @@
  * ohangida tuzilgan va istalgan paytda yopib ketish mumkin.
  */
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
@@ -186,7 +186,7 @@ function ListField({
       <div className="stack" style={{ gap: 6 }}>
         <AnimatePresence initial={false}>
           {items.map((item, i) => (
-            <motion.div
+            <m.div
               key={i}
               layout
               className="row"
@@ -208,7 +208,7 @@ function ListField({
               >
                 ×
               </button>
-            </motion.div>
+            </m.div>
           ))}
         </AnimatePresence>
 

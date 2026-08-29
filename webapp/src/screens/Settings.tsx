@@ -5,23 +5,14 @@ import { useApp } from '@/store/app';
 import { haptic } from '@/lib/telegram';
 import { Card, Chip, Notice, Screen, Segment } from '@/ui';
 import type { Lang } from '@shared/types';
+import { savedTheme, setTheme, type Theme } from '@/lib/theme';
 
-type Theme = 'auto' | 'light' | 'dark';
 
 /** Tema tanlovi hujjat ildiziga yoziladi — CSS tokenlari shunga qarab almashadi. */
-function applyTheme(theme: Theme) {
-  const root = document.documentElement;
-  if (theme === 'auto') root.removeAttribute('data-theme');
-  else root.setAttribute('data-theme', theme);
-  localStorage.setItem('klinikatop.theme', theme);
-}
-
 export function Settings() {
   const { t, lang, setLang } = useApp();
   const navigate = useNavigate();
-  const [theme, setTheme] = useState<Theme>(
-    (localStorage.getItem('klinikatop.theme') as Theme | null) ?? 'auto',
-  );
+  const [theme, setThemeState] = useState<Theme>(savedTheme());
 
   return (
     <Screen title={t('settings.title')} onBack={() => navigate(-1)}>
@@ -42,8 +33,8 @@ export function Settings() {
           value={theme}
           onChange={(v) => {
             haptic.select();
+            setThemeState(v);
             setTheme(v);
-            applyTheme(v);
           }}
           options={[
             { value: 'auto', label: t('settings.theme.auto') },
@@ -62,8 +53,3 @@ export function Settings() {
   );
 }
 
-/** Ilova ochilishida saqlangan temani tiklaydi. */
-export function restoreTheme() {
-  const saved = localStorage.getItem('klinikatop.theme') as Theme | null;
-  if (saved && saved !== 'auto') document.documentElement.setAttribute('data-theme', saved);
-}

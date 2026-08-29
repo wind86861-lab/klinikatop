@@ -8,7 +8,7 @@
  * Orqaga qaytish hech narsani yo'qotmaydi.
  */
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
@@ -203,7 +203,7 @@ export function NewRequest() {
     >
       <div className="wz-progress" aria-hidden>
         {STEPS.map((s, i) => (
-          <motion.span
+          <m.span
             key={s}
             className="wz-progress__seg"
             animate={{
@@ -216,7 +216,7 @@ export function NewRequest() {
       </div>
 
       <AnimatePresence mode="wait" custom={direction}>
-        <motion.div
+        <m.div
           key={step}
           className="stack"
           initial={{ opacity: 0, x: direction * 28 }}
@@ -267,7 +267,7 @@ export function NewRequest() {
               onEdit={jumpTo}
             />
           )}
-        </motion.div>
+        </m.div>
       </AnimatePresence>
     </Screen>
   );
@@ -464,9 +464,9 @@ function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
 
       <AnimatePresence>
         {belowRange && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+          <m.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <Notice tone="warning">{t('budget.belowRange')}</Notice>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </>
@@ -524,7 +524,7 @@ function DateStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) =
 
       <AnimatePresence initial={false}>
         {!draft.dateFlexible && (
-          <motion.div
+          <m.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -558,7 +558,7 @@ function DateStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) =
                 />
               </Field>
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </>
@@ -724,7 +724,7 @@ export function ToggleRow({
         {hint && <span className="toggle-row__hint">{hint}</span>}
       </span>
       <span className="toggle-row__switch" aria-hidden>
-        <motion.span className="toggle-row__knob" animate={{ x: on ? 18 : 0 }} transition={spring} />
+        <m.span className="toggle-row__knob" animate={{ x: on ? 18 : 0 }} transition={spring} />
       </span>
     </button>
   );
@@ -778,11 +778,11 @@ function WhoStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) =>
 
       <AnimatePresence mode="wait">
         {draft.forSelf ? (
-          <motion.div key="self" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <m.div key="self" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <Notice tone="info">{t('wz.who.usingProfile', { v: profileSummary })}</Notice>
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div
+          <m.div
             key="other"
             className="stack"
             initial={{ opacity: 0, y: 10 }}
@@ -825,7 +825,7 @@ function WhoStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) =>
                 ))}
               </div>
             </Field>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </>
