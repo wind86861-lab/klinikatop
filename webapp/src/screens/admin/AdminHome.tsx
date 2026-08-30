@@ -43,6 +43,7 @@ import { Applications } from './Applications';
 import { CatalogSync } from './CatalogSync';
 import { RequestStepsScreen } from './RequestSteps';
 import { CommissionPayments } from './CommissionPayments';
+import { AdminUsers } from './Users';
 import { Empty, Kpi, PageHeader } from './ui';
 import { Security } from '../web/Security';
 import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
@@ -162,6 +163,23 @@ export function AdminHome() {
      * platformani boshqaradi va 2FA aynan shu yerdan yoqiladi.
      */
     { id: 'security', label: 'Xavfsizlik', group: 'Sozlash', icon: <IconShield size={17} />, render: () => <Security /> },
+    /*
+     * Foydalanuvchilar va huquqlar — faqat `admin` roli. Server ham
+     * shu marshrutlarni `requireRole('admin')` bilan qo'riqlaydi;
+     * bu yerdagi tekshiruv shunchaki ishlamaydigan bo'limni
+     * ko'rsatmaslik uchun.
+     */
+    ...(user?.roles.includes('admin')
+      ? [
+          {
+            id: 'users',
+            label: 'Foydalanuvchilar',
+            group: 'Sozlash',
+            icon: <IconShield size={17} />,
+            render: () => <AdminUsers />,
+          },
+        ]
+      : []),
   ];
 
   return (

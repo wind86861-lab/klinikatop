@@ -626,6 +626,12 @@ export interface ClinicDashboard {
   };
 }
 
+/** Super-admin foydalanuvchilar ro'yxatidagi qator. */
+export interface AdminUserRow extends User {
+  /** Klinika xodimi bo'lsa — klinikasi nomi */
+  clinicName: string | null;
+}
+
 export interface AdminMetrics {
   users: number;
   patients: number;

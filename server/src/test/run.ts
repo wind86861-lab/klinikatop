@@ -2413,6 +2413,44 @@ async function main() {
     void d2;
   }
 
+  /* ══════════════  Super-admin  ══════════════ */
+
+  section('Super-admin');
+
+  {
+    const adm = require('../services/admin');
+
+    /*
+     * O'zini qulflab qo'yish — qaytarib bo'lmaydigan xato: panelga
+     * faqat admin kiradi, ya'ni tiklash uchun boshqa admin yoki
+     * bazaga qo'lda kirish kerak bo'lardi.
+     */
+    throws('admin o‘zidan admin rolini ola olmaydi', () =>
+      adm.setUserRoles(moderator.id, ['patient'], moderator.id),
+    );
+    throws('admin o‘zini bloklay olmaydi', () =>
+      adm.setUserBlocked(moderator.id, true, moderator.id, ''),
+    );
+
+    // Boshqa odamga esa ruxsat
+    const victim = upsertUser({ id: 779001, first_name: 'Oddiy', language_code: 'uz' });
+    const promoted = adm.setUserRoles(victim.id, ['patient', 'admin'], moderator.id);
+    check('boshqa odamga rol berildi', promoted.roles.includes('admin'));
+    const blocked = adm.setUserBlocked(victim.id, true, moderator.id, 'sinov');
+    check('boshqa odam bloklandi', blocked.blockedAt !== null);
+    check('blokdan chiqarildi', adm.setUserBlocked(victim.id, false, moderator.id, '').blockedAt === null);
+
+    // O'ziga rolni SAQLAB qo'shimcha berish mumkin
+    const keep = adm.setUserRoles(moderator.id, ['admin', 'patient'], moderator.id);
+    check('o‘ziga admin saqlangan holda rol qo‘shsa bo‘ladi', keep.roles.includes('admin'));
+
+    /* Qidiruv: ilgari qat'iy 100 ta chegara bor edi va qidiruv yo'q edi */
+    const found = adm.listUsers({ search: 'Oddiy' });
+    check('ism bo‘yicha topildi', found.length >= 1 && found.some((u: any) => u.id === victim.id));
+    check('mos kelmagani chiqmaydi', adm.listUsers({ search: 'zzzyyyxxx' }).length === 0);
+    check('klinika nomi qatorga qo‘shiladi', 'clinicName' in adm.listUsers()[0]);
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

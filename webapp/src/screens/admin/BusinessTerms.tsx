@@ -43,7 +43,7 @@ import {
 /* ═════════════════  Klinikalar boshqaruvi  ═════════════════ */
 
 export function AdminClinics() {
-  const { t, lang, cities, toast } = useApp();
+  const { t, lang, cities, toast, user } = useApp();
   const [filter, setFilter] = useState<AdminClinicFilter>('all');
   const res = useResource(() => api.adminClinics(filter), [filter]);
 
@@ -54,6 +54,25 @@ export function AdminClinics() {
     setEditing(clinic);
     setMode(which);
     haptic.press();
+  };
+
+  /*
+   * Obunani to'xtatish — server tomonida `requireRole('admin')`.
+   * Shuning uchun tugma ham faqat adminga ko'rsatiladi: moderator
+   * bosib, keyin 403 olishi kerak emas.
+   */
+  const isSuperAdmin = user?.roles.includes('admin') ?? false;
+
+  const suspend = async (clinic: AdminClinicRow) => {
+    try {
+      await api.suspendClinic(clinic.id, 'Admin tomonidan to‘xtatildi');
+      haptic.success();
+      toast(t('ac.saved'), 'success');
+      res.reload();
+    } catch (err: any) {
+      haptic.error();
+      toast(err?.message ?? t('common.error'), 'error');
+    }
   };
 
   const decide = async (clinic: AdminClinicRow) => {
@@ -178,6 +197,9 @@ export function AdminClinics() {
                 items={[
                   { label: t('ac.setCommission'), onClick: () => open(row, 'commission') },
                   { label: t('ac.grantTrial'), onClick: () => open(row, 'trial') },
+                  ...(isSuperAdmin
+                    ? [{ label: t('ac.suspend'), onClick: () => suspend(row), danger: true }]
+                    : []),
                 ]}
               />
             </div>

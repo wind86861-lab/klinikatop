@@ -51,6 +51,8 @@ import type {
   WizardStep,
   PaymentMethod,
   PendingCommissionPayment,
+  AdminUserRow,
+  Role,
   RequestStep,
   StepOption,
   StepKind,
@@ -439,6 +441,14 @@ export const api = {
   pendingCommissionPayments: () => get<PendingCommissionPayment[]>('/admin/commission-payments'),
   reviewCommissionPayment: (id: number, decision: 'confirmed' | 'rejected', note: string | null) =>
     post<PendingCommissionPayment[]>(`/admin/commission-payments/${id}`, { decision, note }),
+
+  /* ── Super-admin: faqat `admin` roli ── */
+  adminUsers: (search = '') => get<AdminUserRow[]>(`/admin/users?q=${encodeURIComponent(search)}`),
+  setUserRoles: (userId: number, roles: Role[]) => post<User>(`/admin/users/${userId}/roles`, { roles }),
+  setUserBlocked: (userId: number, blocked: boolean, note = '') =>
+    post<User>(`/admin/users/${userId}/block`, { blocked, note }),
+  suspendClinic: (clinicId: number, note = '') =>
+    post<{ ok: true }>(`/admin/clinics/${clinicId}/suspend`, { note }),
 
   adminRequestSteps: () => get<RequestStep[]>('/admin/request-steps'),
   saveRequestSteps: (steps: StepDraft[]) => put<RequestStep[]>('/admin/request-steps', { steps }),

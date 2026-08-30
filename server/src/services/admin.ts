@@ -1,8 +1,8 @@
 /** Admin va moderator amallari (12, 14-bo'limlar). */
 import { db, toJson } from '../db';
-import { notFound } from '../lib/errors';
+import { badRequest, notFound } from '../lib/errors';
 import { mapDeal, mapUser } from '../lib/mappers';
-import type { AdminMetrics, Deal, Role, User } from '../../../shared/types';
+import type { AdminMetrics, AdminUserRow, Deal, Role, User } from '../../../shared/types';
 import { recomputeClinicRating } from './reviews';
 import { listSettings } from './terms.business';
 import type { AdminClinicFilter, AdminClinicRow } from '../../../shared/types';
@@ -76,11 +76,43 @@ export function resolveDispute(
   return mapDeal(db.prepare(`SELECT * FROM deals WHERE id = ?`).get(dealId));
 }
 
-export function listUsers(limit = 100): User[] {
-  return (db.prepare(`SELECT * FROM users ORDER BY id DESC LIMIT ?`).all(limit) as any[]).map(mapUser);
+/**
+ * Foydalanuvchilar ro'yxati.
+ *
+ * Ilgari qat'iy `LIMIT 100` turardi va qidiruv yo'q edi: 193 ta
+ * foydalanuvchidan 93 tasi panelda umuman ko'rinmasdi va ularni
+ * topishning hech qanday yo'li yo'q edi.
+ */
+export function listUsers(opts: { search?: string; limit?: number } = {}): AdminUserRow[] {
+  const limit = Math.min(Math.max(opts.limit ?? 500, 1), 2000);
+  const q = (opts.search ?? '').trim().toLowerCase();
+
+  const rows = db
+    .prepare(
+      `SELECT u.*, c.name AS clinic_name
+         FROM users u
+         LEFT JOIN clinics c ON c.id = u.clinic_id
+        WHERE (? = '' OR lower(u.first_name) LIKE ? OR lower(COALESCE(u.last_name, '')) LIKE ?
+               OR COALESCE(u.phone, '') LIKE ? OR lower(COALESCE(u.username, '')) LIKE ?)
+        ORDER BY u.id DESC
+        LIMIT ?`,
+    )
+    .all(q, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, limit) as any[];
+
+  return rows.map((r) => ({ ...mapUser(r), clinicName: r.clinic_name ?? null }));
 }
 
 export function setUserRoles(userId: number, roles: Role[], moderatorId: number): User {
+  /*
+   * Admin o'zidan admin rolini ola olmaydi.
+   *
+   * Panelga faqat admin kiradi, ya'ni bu bir bosishda o'zini
+   * tashqarida qoldirish degani — qaytarish uchun boshqa admin yoki
+   * bazaga qo'lda kirish kerak bo'lardi.
+   */
+  if (userId === moderatorId && !roles.includes('admin')) {
+    throw badRequest('cannot_demote_self', 'O‘zingizdan admin huquqini ola olmaysiz');
+  }
   db.prepare(`UPDATE users SET roles = ? WHERE id = ?`).run(toJson(roles), userId);
   db.prepare(`INSERT INTO moderation_log (moderator_id, entity, entity_id, action, note) VALUES (?, 'user', ?, 'roles', ?)`).run(
     moderatorId,
@@ -93,6 +125,10 @@ export function setUserRoles(userId: number, roles: Role[], moderatorId: number)
 }
 
 export function setUserBlocked(userId: number, blocked: boolean, moderatorId: number, note: string): User {
+  // Xuddi shu sabab: o'zini bloklash ham qaytarib bo'lmaydigan xato
+  if (userId === moderatorId && blocked) {
+    throw badRequest('cannot_block_self', 'O‘zingizni bloklay olmaysiz');
+  }
   db.prepare(`UPDATE users SET blocked_at = ${blocked ? `datetime('now')` : 'NULL'} WHERE id = ?`).run(userId);
   db.prepare(`INSERT INTO moderation_log (moderator_id, entity, entity_id, action, note) VALUES (?, 'user', ?, ?, ?)`).run(
     moderatorId,

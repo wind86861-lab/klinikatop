@@ -108,7 +108,10 @@ adminRouter.post('/reviews/:id', (req, res) => {
 
 /* ── Foydalanuvchilar (faqat admin) ── */
 
-adminRouter.get('/users', requireRole('admin'), (_req, res) => res.json(listUsers()));
+adminRouter.get('/users', requireRole('admin'), (req, res) => {
+  const search = typeof req.query.q === 'string' ? req.query.q : '';
+  res.json(listUsers({ search }));
+});
 
 adminRouter.post('/users/:id/roles', requireRole('admin'), (req, res) => {
   const body = z
