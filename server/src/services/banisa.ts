@@ -33,6 +33,8 @@ export interface BanisaCategory {
   slug: string | null;
   parentId: string | null;
   sortOrder: number | null;
+  /** Daraxtdagi chuqurlik: 0 — xizmat turi, 1 — soha, 2 — bo'lim */
+  level: number;
 }
 
 export interface BanisaOperation {

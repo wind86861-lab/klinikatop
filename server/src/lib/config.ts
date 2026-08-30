@@ -81,18 +81,6 @@ export const config = {
   },
 
   /**
-   * Tashqi katalog manbasi — operatsiyalar ro'yxati shu yerdan olinadi.
-   *
-   * Bo'sh bo'lsa sinxronizatsiya o'chiq va katalog qo'lda yuritiladi.
-   * Ulanish satri faqat O'QISH huquqiga ega rol bilan bo'lishi kerak;
-   * buni baza darajasida ta'minlash lozim, kod bunga tayanmaydi
-   * (deploy/setup-catalog-source.sh ga qarang).
-   */
-  catalogSource: {
-    url: process.env.CATALOG_SOURCE_URL ?? '',
-  },
-
-  /**
    * banisa.uz bilan ulanish.
    *
    * `partnerKey` — katalog va klinika ma'lumotlarini o'qish uchun.

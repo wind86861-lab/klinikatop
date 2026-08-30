@@ -14,23 +14,26 @@
  * Shuning uchun katalog KlinikaTop'ning O'Z jadvaliga ko'chiriladi.
  * banisa manba bo'lib qoladi, ishlash nuqtasi emas.
  *
- * ═══ Xavfsizlik ═══
+ * ═══ Manba: Partner API ═══
  *
- * Ulanish shu qoidalar bilan chegaralangan:
+ * Ilgari bu yerda banisa'ning Postgres'i to'g'ridan-to'g'ri o'qilardi.
+ * U uchta narsani talab qilardi: bazaga kirish huquqi, ikkala
+ * xizmatning bir mashinada turishi, va banisa sxemasi
+ * o'zgarmasligiga umid.
  *
- *   • Alohida Postgres roli, FAQAT SELECT — va faqat ikkita jadvalga.
- *     Yozish huquqi kod intizomi bilan emas, bazaning o'zi bilan
- *     taqiqlanadi. Bu yerda xato qilsak ham banisa'ga zarar yetmaydi.
- *   • Ulanish faqat localhost orqali — ikkala xizmat bitta mashinada.
- *   • So'rovga vaqt chegarasi: og'ir so'rov banisa'ni sekinlashtirmaydi.
+ * Endi banisa bergan HTTP shartnomasi ishlatiladi. Uchala talab ham
+ * yo'qoldi va tasma kategoriya daraxtini to'liq beradi — soha ham,
+ * bo'lim ham.
+ *
+ * ═══ Qoidalar ═══
+ *
  *   • Import HECH QACHON o'chirmaydi. Manbadan yo'qolgan operatsiya
  *     deaktivatsiya qilinadi: klinikalar uni allaqachon tanlagan
  *     bo'lishi mumkin va o'chirish ularning sozlamasini yo'q qilardi.
  *   • Har yugurish jurnalga yoziladi.
  */
-import { Client } from 'pg';
 import { db } from '../db';
-import { config } from '../lib/config';
+import { banisaConfigured, fetchCatalog } from './banisa';
 import { badRequest } from '../lib/errors';
 import { normalize, slugify } from '../lib/format';
 
@@ -74,53 +77,41 @@ interface SourceOperation {
 /**
  * banisa katalogini o'qish.
  *
- * So'rovlar qat'iy: aniq jadval, aniq ustunlar. `SELECT *` ishlatilmaydi —
- * manbada yangi ustun paydo bo'lsa u bizga sezdirmay oqib kirmasin.
+ * Tarmoq bilan bog'liq hamma narsa `services/banisa.ts` da — bu fayl
+ * faqat solishtirish va yozish bilan shug'ullanadi.
  */
 async function fetchSource(): Promise<{ categories: SourceCategory[]; operations: SourceOperation[] }> {
-  const url = config.catalogSource.url;
-  if (!url) {
-    throw badRequest('no_source', 'Manba ulanishi sozlanmagan (CATALOG_SOURCE_URL)');
+  if (!banisaConfigured()) {
+    throw badRequest('no_source', 'banisa ulanishi sozlanmagan (BANISA_URL, BANISA_PARTNER_KEY)');
   }
 
-  const client = new Client({
-    connectionString: url,
-    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
-    statement_timeout: STATEMENT_TIMEOUT_MS,
-    // Ulanish localhost orqali; TLS kerak emas va sertifikat ham yo'q
-    ssl: false,
-    application_name: 'klinikatop-catalog-sync',
-  });
+  const data = await fetchCatalog();
 
-  await client.connect();
-  try {
-    /*
-     * Butun o'qish BITTA tranzaksiyada va READ ONLY rejimida.
-     *
-     * READ ONLY — ikkinchi qatlam himoya: rolda yozish huquqi yo'q, lekin
-     * tranzaksiya ham buni taqiqlaydi. Bir tranzaksiya bo'lgani uchun
-     * kategoriyalar va operatsiyalar bir xil paytdagi holatni ko'radi:
-     * o'rtada yangi kategoriya qo'shilsa, ota-onasiz operatsiya kelmaydi.
-     */
-    await client.query('BEGIN TRANSACTION READ ONLY');
-
-    const categories = await client.query<SourceCategory>(
-      `SELECT id, "nameUz", "nameRu", slug, icon, "sortOrder", "parentId", level
-         FROM "ServiceCategory"
-        ORDER BY "sortOrder" NULLS LAST, "nameUz"`,
-    );
-
-    const operations = await client.query<SourceOperation>(
-      `SELECT id, "nameUz", "nameRu", "categoryId", "shortDescription", "isActive"
-         FROM "SurgicalService"
-        ORDER BY "nameUz"`,
-    );
-
-    await client.query('COMMIT');
-    return { categories: categories.rows, operations: operations.rows };
-  } finally {
-    await client.end();
-  }
+  return {
+    categories: data.categories.map((c) => ({
+      id: c.id,
+      nameUz: c.nameUz,
+      nameRu: c.nameRu ?? '',
+      slug: c.slug,
+      icon: null,
+      sortOrder: c.sortOrder,
+      parentId: c.parentId,
+      /*
+       * `level` manbadan keladi. Ilgari tasma faqat barg
+       * kategoriyalarni qaytarardi va daraja hisoblab bo'lmasdi —
+       * endi butun daraxt keladi.
+       */
+      level: c.level ?? 0,
+    })),
+    operations: data.operations.map((o) => ({
+      id: o.id,
+      nameUz: o.nameUz,
+      nameRu: o.nameRu ?? '',
+      categoryId: o.categoryId,
+      shortDescription: null,
+      isActive: o.isActive,
+    })),
+  };
 }
 
 /* ─────────────────────────  Farqni hisoblash  ───────────────────────── */
@@ -740,5 +731,5 @@ export function listSyncLog(limit = 20): SyncLogRow[] {
 
 /** Manba sozlanganmi — admin panelida ko'rsatish uchun. */
 export function sourceConfigured(): boolean {
-  return Boolean(config.catalogSource.url);
+  return banisaConfigured();
 }
