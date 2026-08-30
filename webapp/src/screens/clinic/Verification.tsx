@@ -9,18 +9,17 @@
  * so'rov olishga tayyormi? Tayyor bo'lmasa boshqa ekranlarning ma'nosi yo'q.
  */
 import { useMemo, useState } from 'react';
-import { AnimatePresence, m } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
-import { popVariants, spring } from '@/lib/motion';
+import { popVariants } from '@/lib/motion';
 import { formatDate } from '@/lib/format';
 import { FileOpenButton, FileThumb } from '@/components/wizard/FileThumb';
 import {
   Button,
   Card,
-  Chip,
   Field,
   IconAlert,
   IconCheck,
@@ -28,11 +27,18 @@ import {
   IconShield,
   Input,
   Notice,
+  Section,
   Screen,
   Skeleton,
 } from '@/ui';
 import { Async, useResource } from './shell';
-import { CLINIC_DOC_KINDS, type ClinicDocKind, type StoredFile } from '@shared/types';
+import {
+  CLINIC_DOC_KINDS,
+  REQUIRED_DOC_KINDS,
+  type ClinicDocKind,
+  type ClinicDocument,
+  type StoredFile,
+} from '@shared/types';
 import { CatalogBrowser } from '@/components/CatalogBrowser';
 
 /* ═════════════════  3-ekran: verifikatsiya holati  ═════════════════ */
@@ -97,17 +103,17 @@ export function VerificationDocs() {
   const navigate = useNavigate();
   const res = useResource(() => clinicApi.verification());
 
-  const [kind, setKind] = useState<ClinicDocKind>('license');
   const [label, setLabel] = useState('');
   const [busy, setBusy] = useState(false);
+  /** Qaysi tur yuklanayotgani — faqat o'sha qatorda "Yuklanmoqda" ko'rsatish uchun */
+  const [kind, setKind] = useState<ClinicDocKind | null>(null);
 
-  const needsLabel = kind === 'other';
-
-  const upload = async (file: File) => {
+  const upload = async (file: File, docKind: ClinicDocKind, docLabel: string | null) => {
     setBusy(true);
+    setKind(docKind);
     try {
       const stored = await uploadAsBase64(file);
-      await clinicApi.addDocument({ kind, label: needsLabel ? label.trim() : null, fileId: stored.id });
+      await clinicApi.addDocument({ kind: docKind, label: docLabel, fileId: stored.id });
       haptic.success();
       toast(t('ver.docAdded'), 'success');
       setLabel('');
@@ -117,6 +123,7 @@ export function VerificationDocs() {
       toast(err?.message ?? t('common.error'), 'error');
     } finally {
       setBusy(false);
+      setKind(null);
     }
   };
 
@@ -130,83 +137,203 @@ export function VerificationDocs() {
     }
   };
 
+  /*
+   * Ikkita hujjat MAJBURIY, qolgani ixtiyoriy. Ilgari beshala turi bir
+   * xil tugma bo'lib turardi va qaysi biri kerakligi faqat sarlavha
+   * ostidagi kichkina matndan bilinardi — klinika nima yuklashini
+   * o'ylab qolardi.
+   *
+   * Endi ekran savolga javob beradi: "menda nima yetishmayapti?"
+   */
+  const uploaded = res.data?.documents ?? [];
+  const has = (k: ClinicDocKind) => uploaded.some((d) => d.kind === k && d.status !== 'rejected');
+  const doneRequired = REQUIRED_DOC_KINDS.filter(has).length;
+
   return (
     <Screen
       onBack={() => navigate('/clinic/verification')}
       title={t('ver.docsTitle')}
-      subtitle={t('ver.docsSub')}
+      subtitle={t('ver.docsProgress', { n: doneRequired, total: REQUIRED_DOC_KINDS.length })}
     >
-      <Field label={t('wz.docs.label')}>
-        <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-          {CLINIC_DOC_KINDS.map((k) => (
-            <Chip key={k} size="sm" active={kind === k} onClick={() => setKind(k)}>
-              {t(`ver.kind.${k}` as any)}
-            </Chip>
-          ))}
-        </div>
-      </Field>
+      <Async resource={res} skeleton={<Skeleton h={220} />}>
+        {(data) => {
+          const docsOf = (k: ClinicDocKind) => data.documents.filter((d) => d.kind === k);
 
-      <AnimatePresence initial={false}>
-        {needsLabel && (
-          <m.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={spring}
-            style={{ overflow: 'hidden' }}
-          >
-            <Field label={t('ver.docName')}>
-              <Input value={label} maxLength={120} onChange={(e) => setLabel(e.target.value)} />
-            </Field>
-          </m.div>
-        )}
-      </AnimatePresence>
+          return (
+            <>
+              {/* ── Majburiy hujjatlar ── */}
+              <Section title={t('ver.required')}>
+                <div className="stack stack--tight">
+                  {REQUIRED_DOC_KINDS.map((k) => (
+                    <DocSlot
+                      key={k}
+                      kind={k}
+                      docs={docsOf(k)}
+                      busy={busy && kind === k}
+                      onPick={(file) => upload(file, k, null)}
+                      onRemove={remove}
+                    />
+                  ))}
+                </div>
+              </Section>
 
-      <FilePickerButton
-        label={busy ? t('wz.docs.uploading') : t('ver.addDoc')}
-        disabled={busy || (needsLabel && label.trim().length < 2)}
-        onPick={upload}
-      />
+              {/* ── Ixtiyoriy ── */}
+              <Section title={t('ver.optional')} action={<span className="tiny">{t('ver.optionalHint')}</span>}>
+                <div className="stack stack--tight">
+                  {CLINIC_DOC_KINDS.filter((k) => !REQUIRED_DOC_KINDS.includes(k) && k !== 'other').map((k) => (
+                    <DocSlot
+                      key={k}
+                      kind={k}
+                      docs={docsOf(k)}
+                      busy={busy && kind === k}
+                      onPick={(file) => upload(file, k, null)}
+                      onRemove={remove}
+                    />
+                  ))}
+                </div>
+              </Section>
 
-      <Async
-        resource={res}
-        isEmpty={(d) => d.documents.length === 0}
-        empty={{ title: t('ver.noDocs'), text: t('ver.docsSub') }}
-      >
-        {(data) => (
-          <AnimatePresence initial={false}>
-            {data.documents.map((doc) => (
-              <m.div
-                key={doc.id}
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.97 }}
-                transition={spring}
-                className="doc-row"
-              >
-                <FileThumb file={{ id: doc.fileId, name: doc.fileName, mimeType: doc.fileMimeType, sizeBytes: 0, kind: 'other', label: null, createdAt: doc.createdAt }} />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span className="doc-row__name truncate">
-                    {doc.label || t(`ver.kind.${doc.kind}` as any)}
-                  </span>
-                  <span className="doc-row__meta">
-                    {doc.fileName} · {t(`ver.status.${doc.status}` as any)}
-                  </span>
-                </span>
-                {doc.status !== 'approved' && (
-                  <button className="doc-row__remove" onClick={() => remove(doc.id)} aria-label={t('common.cancel')}>
-                    ×
-                  </button>
-                )}
-              </m.div>
-            ))}
-          </AnimatePresence>
-        )}
+              {/* ── Boshqa: nomi kerak, shuning uchun alohida ── */}
+              <Section title={t('ver.kind.other')}>
+                <div className="stack stack--tight">
+                  {docsOf('other').map((doc) => (
+                    <DocRow key={doc.id} doc={doc} onRemove={remove} />
+                  ))}
+                  <Field label={t('ver.docName')}>
+                    <Input
+                      value={label}
+                      maxLength={120}
+                      placeholder={t('ver.docNamePh')}
+                      onChange={(e) => setLabel(e.target.value)}
+                    />
+                  </Field>
+                  <FilePickerButton
+                    label={busy && kind === 'other' ? t('wz.docs.uploading') : t('ver.addDoc')}
+                    disabled={busy || label.trim().length < 2}
+                    onPick={(file) => upload(file, 'other', label.trim())}
+                  />
+                </div>
+              </Section>
+
+              <p className="tiny">{t('ver.fileLimit')}</p>
+              {/*
+                Bu yerda ilgari BEMOR matni turardi ("hujjat so'rovingizni
+                olgan klinikalarga ko'rinadi") — klinika o'z litsenziyasini
+                yuklayotganda bu ma'nosiz edi.
+              */}
+              <Notice tone="info">{t('ver.docsPrivacy')}</Notice>
+            </>
+          );
+        }}
       </Async>
-
-      <Notice tone="info">{t('wz.docs.privacy')}</Notice>
     </Screen>
+  );
+}
+
+/* ─────────────────────────  Bitta hujjat turi  ───────────────────────── */
+
+/**
+ * Bitta hujjat turi uchun qator: nomi, holati va amal.
+ *
+ * Yuklangan bo'lsa holati ko'rinadi, yo'q bo'lsa yuklash tugmasi —
+ * ya'ni klinika ro'yxatga bir marta qarab nima qolganini biladi.
+ */
+function DocSlot({
+  kind,
+  docs,
+  busy,
+  onPick,
+  onRemove,
+}: {
+  kind: ClinicDocKind;
+  docs: ClinicDocument[];
+  busy: boolean;
+  onPick: (file: File) => void;
+  onRemove: (id: number) => void;
+}) {
+  const { t } = useApp();
+  const live = docs.filter((d) => d.status !== 'rejected');
+  const rejected = docs.filter((d) => d.status === 'rejected');
+
+  /*
+   * Bitta tur ostida FAQAT amaldagi hujjat ko'rsatiladi.
+   *
+   * Klinika litsenziyani tuzatib qayta yuklasa, eskisi ham ro'yxatda
+   * qolardi va vaqt o'tib bitta tur ostida o'nlab bir xil qator
+   * yig'ilardi. Amalda kerak bo'lgani bitta: hozir kuchda turgani.
+   *
+   * Rad etilganlar esa KO'RSATILADI — ular ish talab qiladi, sababini
+   * o'qib qayta yuborish kerak.
+   */
+  const current = live[0] ?? null;
+  const older = live.length - 1;
+
+  return (
+    <Card className="stack" style={{ gap: 8 }}>
+      <div className="between">
+        <strong>{t(`ver.kind.${kind}` as any)}</strong>
+        {current ? (
+          <span className={`badge badge--${current.status === 'approved' ? 'success' : 'accent'}`}>
+            {t(`ver.status.${current.status}` as any)}
+          </span>
+        ) : (
+          <span className="badge badge--muted">{t('ver.missing')}</span>
+        )}
+      </div>
+
+      {current && <DocRow doc={current} onRemove={onRemove} />}
+      {older > 0 && <span className="tiny">{t('ver.olderVersions', { n: older })}</span>}
+
+      {rejected.map((doc) => (
+        <div key={doc.id} className="stack" style={{ gap: 4 }}>
+          <DocRow doc={doc} onRemove={onRemove} />
+          {doc.note && <Notice tone="warning">{doc.note}</Notice>}
+        </div>
+      ))}
+
+      {!current && (
+        <FilePickerButton label={busy ? t('wz.docs.uploading') : t('ver.addDoc')} disabled={busy} onPick={onPick} />
+      )}
+    </Card>
+  );
+}
+
+function DocRow({ doc, onRemove }: { doc: ClinicDocument; onRemove: (id: number) => void }) {
+  const { t, lang } = useApp();
+  /*
+   * Nom uch bosqichda: klinika yozgani → fayl nomi → sana.
+   * Ba'zi fayllarda nom bo'sh keladi, o'shanda qator nomsiz qolib
+   * ketardi — sana hech bo'lmasa qaysi hujjat ekanini ajratadi.
+   */
+  const named = doc.label || doc.fileName;
+  const name = named || formatDate(doc.createdAt, lang);
+  return (
+    <div className="doc-row">
+      <FileThumb
+        file={{
+          id: doc.fileId,
+          name: doc.fileName,
+          mimeType: doc.fileMimeType,
+          sizeBytes: 0,
+          kind: 'other',
+          label: null,
+          createdAt: doc.createdAt,
+        }}
+      />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span className="doc-row__name truncate">{name}</span>
+        <span className="doc-row__meta">
+          {t(`ver.status.${doc.status}` as any)}
+          {/* Nom sanadan olingan bo'lsa uni ikkinchi marta yozmaymiz */}
+          {named && ` · ${formatDate(doc.createdAt, lang)}`}
+        </span>
+      </span>
+      {doc.status !== 'approved' && (
+        <button className="doc-row__remove" onClick={() => onRemove(doc.id)} aria-label={t('common.cancel')}>
+          ×
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -218,7 +345,12 @@ export function ClinicOperations() {
 
   const res = useResource(async () => {
     const [me, tree] = await Promise.all([api.clinic(), api.catalogTree()]);
-    return { clinic: me.clinic, operationIds: me.operationIds, tree };
+    return {
+      clinic: me.clinic,
+      operationIds: me.operationIds,
+      externalOperationIds: me.externalOperationIds ?? [],
+      tree,
+    };
   });
 
   const [selected, setSelected] = useState<Set<number> | null>(null);
@@ -275,66 +407,50 @@ export function ClinicOperations() {
       title={t('ops.title')}
       subtitle={t('ops.sub')}
       footer={
-        res.data?.clinic.externalId ? undefined : (
-          <Button block loading={saving} disabled={current.size === 0} onClick={save}>
-            {t('ops.saveOps')} · {t('ops.selected', { n: current.size })}
-          </Button>
-        )
+        <Button block loading={saving} disabled={current.size === 0} onClick={save}>
+          {t('ops.saveOps')} · {t('ops.selected', { n: current.size })}
+        </Button>
       }
     >
       <Async resource={res} skeleton={<Skeleton h={320} />}>
         {(data) => {
           /*
-           * banisa'dan ulangan klinika yo'nalishlarini BU YERDA
-           * tahrirlamaydi.
+           * banisa'dan kelgan yo'nalishlar QULFLANGAN, lekin ekran
+           * emas.
            *
-           * Ular banisa'da boshqariladi va bu yerga avtomatik
-           * ko'chiriladi. Ikki joyda ham tahrirlash mumkin bo'lsa,
-           * har o'zgarishda "qaysi biri to'g'ri" degan savol chiqadi
-           * va uni ishonchli hal qilishning yo'li yo'q.
+           * Ilgari ulangan klinikaga butun sahifa yopilardi. Bu esa
+           * imkoniyatni tortib olardi: KlinikaTop katalogi banisa
+           * katalogidan kengroq va klinika bu yerda faqat shu yerda
+           * bor yo'nalishni ham qo'sha olishi kerak. Server ham
+           * shunga moslandi — saqlash faqat `manual` qatorlarni
+           * almashtiradi, banisa'nikiga tegmaydi.
            */
-          const linked = Boolean(data.clinic.externalId);
-
-          if (linked) {
-            return (
-              <>
-                <Notice tone="info">
-                  Yo‘nalishlaringiz banisa.uz’dan keladi va avtomatik yangilanadi.
-                  O‘zgartirish uchun o‘sha yerdagi «Xizmatlar» bo‘limiga o‘ting.
-                </Notice>
-
-                <CatalogBrowser
-                  tree={data.tree}
-                  lang={lang}
-                  mode="multi"
-                  selected={[...current]}
-                  onSelect={() => {}}
-                  emptyText={t('ops.noMatch')}
-                />
-              </>
-            );
-          }
+          const external = data.externalOperationIds;
 
           return (
-          <>
-            {current.size > 0 && <Notice tone="info">{t('ops.matchHint', { n: current.size })}</Notice>}
+            <>
+              {external.length > 0 && (
+                <Notice tone="info">{t('ops.fromBanisa', { n: external.length })}</Notice>
+              )}
+              {current.size > 0 && <Notice tone="info">{t('ops.matchHint', { n: current.size })}</Notice>}
 
-            {/*
-              Bemor bilan BIR XIL ko'rinish: u "Katarakta" bo'limidan
-              tanlaydi, klinika esa o'sha bo'limni yoqadi. Ikki xil
-              tuzilma bo'lsa, nima uchun so'rov kelmayotgani
-              tushunarsiz bo'lardi.
-            */}
-            <CatalogBrowser
-              tree={data.tree}
-              lang={lang}
-              mode="multi"
-              selected={[...current]}
-              onSelect={(op) => toggle(op.id)}
-              onToggleMany={toggleMany}
-              emptyText={t('ops.noMatch')}
-            />
-          </>
+              {/*
+                Bemor bilan BIR XIL ko'rinish: u "Katarakta" bo'limidan
+                tanlaydi, klinika esa o'sha bo'limni yoqadi. Ikki xil
+                tuzilma bo'lsa, nima uchun so'rov kelmayotgani
+                tushunarsiz bo'lardi.
+              */}
+              <CatalogBrowser
+                tree={data.tree}
+                lang={lang}
+                mode="multi"
+                selected={[...current]}
+                lockedIds={external}
+                onSelect={(op) => toggle(op.id)}
+                onToggleMany={toggleMany}
+                emptyText={t('ops.noMatch')}
+              />
+            </>
           );
         }}
       </Async>

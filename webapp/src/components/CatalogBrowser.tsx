@@ -38,6 +38,15 @@ export function CatalogBrowser({
   onSelect,
   /** `multi` rejimda: butun bo'limni bir tegishda yoqish */
   onToggleMany,
+  /**
+   * Tanlangan, lekin O'ZGARTIRIB bo'lmaydigan yozuvlar.
+   *
+   * banisa'dan ulangan klinikada yo'nalishlarning bir qismi o'sha
+   * yerda boshqariladi. Ular ko'rinadi va tanlangan turadi, lekin
+   * bosilmaydi — aks holda saqlash ularni o'chirib, keyingi
+   * sinxronizatsiya qaytarardi.
+   */
+  lockedIds,
   emptyText,
 }: {
   tree: CatalogBranch[];
@@ -46,6 +55,7 @@ export function CatalogBrowser({
   selected: number[];
   onSelect: (operation: Operation) => void;
   onToggleMany?: (operations: Operation[]) => void;
+  lockedIds?: number[];
   emptyText?: string;
 }) {
   const [query, setQuery] = useState('');
@@ -53,6 +63,12 @@ export function CatalogBrowser({
 
   const q = query.trim().toLowerCase();
   const chosen = useMemo(() => new Set(selected), [selected]);
+  const locked = useMemo(() => new Set(lockedIds ?? []), [lockedIds]);
+  /** Qulflanganini bosib bo'lmaydi — chaqiruv shu yerda to'xtaydi */
+  const pick = (op: Operation) => {
+    if (locked.has(op.id)) return;
+    onSelect(op);
+  };
 
   /*
    * Qidiruvda daraxt YOYILADI.
@@ -108,7 +124,8 @@ export function CatalogBrowser({
                 lang={lang}
                 path={path}
                 active={chosen.has(op.id)}
-                onClick={() => onSelect(op)}
+                locked={locked.has(op.id)}
+                onClick={() => pick(op)}
               />
             ))}
             {matches.length > 40 && (
@@ -154,7 +171,8 @@ export function CatalogBrowser({
                             lang={lang}
                             mode={mode}
                             chosen={chosen}
-                            onSelect={onSelect}
+                            locked={locked}
+                            onSelect={pick}
                             onToggleMany={onToggleMany}
                           />
                         ))}
@@ -172,7 +190,8 @@ export function CatalogBrowser({
                                   op={op}
                                   lang={lang}
                                   active={chosen.has(op.id)}
-                                  onClick={() => onSelect(op)}
+                                  locked={locked.has(op.id)}
+                                  onClick={() => pick(op)}
                                 />
                               ))}
                             </div>
@@ -196,6 +215,7 @@ function Section({
   lang,
   mode,
   chosen,
+  locked,
   onSelect,
   onToggleMany,
 }: {
@@ -203,10 +223,13 @@ function Section({
   lang: Lang;
   mode: 'single' | 'multi';
   chosen: Set<number>;
+  locked?: Set<number>;
   onSelect: (op: Operation) => void;
   onToggleMany?: (ops: Operation[]) => void;
 }) {
-  const allOn = section.operations.every((op) => chosen.has(op.id));
+  // Qulflanganlar hisobga olinmaydi: ularni yoqib ham, o'chirib ham bo'lmaydi
+  const editable = section.operations.filter((op) => !locked?.has(op.id));
+  const allOn = editable.length > 0 && editable.every((op) => chosen.has(op.id));
 
   return (
     <div className="cat__section">
@@ -218,7 +241,7 @@ function Section({
           bittalab bosishi kerak emas.
         */}
         {mode === 'multi' && onToggleMany && (
-          <button type="button" className="cat__all" onClick={() => onToggleMany(section.operations)}>
+          <button type="button" className="cat__all" onClick={() => onToggleMany(editable)}>
             {allOn ? 'Bo‘shatish' : 'Barchasi'}
           </button>
         )}
@@ -231,6 +254,7 @@ function Section({
             op={op}
             lang={lang}
             active={chosen.has(op.id)}
+            locked={locked?.has(op.id)}
             onClick={() => onSelect(op)}
           />
         ))}
@@ -244,6 +268,7 @@ function OperationRow({
   lang,
   path,
   active,
+  locked,
   onClick,
 }: {
   op: Operation;
@@ -251,12 +276,14 @@ function OperationRow({
   /** Qidiruv natijasida: qaysi soha va bo'limda ekani */
   path?: string;
   active: boolean;
+  /** banisa'dan kelgan — ko'rinadi, lekin o'zgartirilmaydi */
+  locked?: boolean;
   onClick: () => void;
 }) {
   const alias = opAlias(op, lang);
 
   return (
-    <Chip size="sm" active={active} onClick={onClick}>
+    <Chip size="sm" active={active} locked={locked} onClick={onClick} className={locked ? 'is-locked' : undefined}>
       {active && <IconCheck size={11} />}
       <span className="cat__opName">
         {opName(op, lang)}

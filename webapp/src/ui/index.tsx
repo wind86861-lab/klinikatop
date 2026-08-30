@@ -143,23 +143,30 @@ export function Chip({
   onClick,
   children,
   size,
+  className,
+  /** Ko'rinadi va tanlangan, lekin o'zgartirib bo'lmaydi */
+  locked,
 }: {
   active?: boolean;
   onClick?: () => void;
   children: ReactNode;
   size?: 'sm';
+  className?: string;
+  locked?: boolean;
 }) {
   return (
     <m.button
       type="button"
-      whileTap={{ scale: 0.95 }}
+      whileTap={locked ? undefined : { scale: 0.95 }}
       transition={spring}
-      className={`chip ${active ? 'chip--active' : ''} ${size === 'sm' ? 'chip--sm' : ''}`}
+      className={`chip ${active ? 'chip--active' : ''} ${size === 'sm' ? 'chip--sm' : ''} ${className ?? ''}`}
       onClick={() => {
+        if (locked) return;
         haptic.select();
         onClick?.();
       }}
       aria-pressed={active}
+      aria-disabled={locked || undefined}
     >
       {children}
     </m.button>

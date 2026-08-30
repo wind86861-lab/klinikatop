@@ -6,6 +6,7 @@ import {
   getClinic,
   getClinicOperations,
   getDashboard,
+  externalOperationIds,
   updateClinicOperations,
   updateClinicProfile,
 } from '../services/clinics';
@@ -65,7 +66,12 @@ export const clinicRouter = Router();
 
 clinicRouter.get('/', (req, res) => {
   const clinicId = requireClinic(req);
-  res.json({ clinic: getClinic(clinicId), operationIds: getClinicOperations(clinicId) });
+  res.json({
+    clinic: getClinic(clinicId),
+    operationIds: getClinicOperations(clinicId),
+    // banisa'dan kelganlari — ilova ularni qulflangan qilib ko'rsatadi
+    externalOperationIds: externalOperationIds(clinicId),
+  });
 });
 
 clinicRouter.patch('/', (req, res) => {

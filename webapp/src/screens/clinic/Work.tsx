@@ -41,76 +41,78 @@ import type { OfferTemplate, Operation, RequestWithMeta } from '@shared/types';
 
 /* ═════════════════  6-ekran: so'rovlar oqimi  ═════════════════ */
 
-type Sort = 'new' | 'budget' | 'expiry';
+/*
+ * Ilgari bu ekranda OLTITA boshqaruv turardi: uchta filtr belgisi
+ * (javob berilmaganlar / byudjetli / hujjatli) va uchta saralash
+ * (yangi / byudjet / muddat). Ular bir-birini takrorlardi ham —
+ * "byudjet ko'rsatilganlar" filtri va "byudjet" saralashi bitta
+ * narsa haqida edi. So'rov yo'q bo'lganda ham hammasi ekranni
+ * egallab turardi.
+ *
+ * Klinikaning haqiqiy savoli bitta: "endi nimaga javob beray?"
+ * Shuning uchun uchta KO'RINISH qoldi va har birining o'z tartibi
+ * bor — alohida saralash kerak emas.
+ */
+type View = 'todo' | 'urgent' | 'all';
 
 export function RequestsFeed() {
   const { t, lang } = useApp();
   const navigate = useNavigate();
 
-  const [onlyUnanswered, setOnlyUnanswered] = useState(false);
-  const [withBudget, setWithBudget] = useState(false);
-  const [withDocs, setWithDocs] = useState(false);
-  const [sort, setSort] = useState<Sort>('new');
+  const [view, setView] = useState<View>('todo');
 
   const res = useResource(() => api.clinicRequests(false));
   // Obuna holati — so'rovlar ko'rinadi, lekin taklif yuborish to'silgan bo'lishi mumkin
   const dash = useResource(() => api.dashboard());
   const canOffer = dash.data ? dash.data.subscription.status === 'active' : true;
 
-  const visible = useMemo(() => {
-    const list = [...(res.data ?? [])];
-    const filtered = list.filter((r) => {
-      if (onlyUnanswered && r.offersCount > 0) return false;
-      if (withBudget && r.budgetUzs == null) return false;
-      if (withDocs && (r.files?.length ?? 0) === 0) return false;
-      return true;
-    });
+  const all = res.data ?? [];
+  const todo = useMemo(() => all.filter((r) => r.offersCount === 0), [all]);
 
-    filtered.sort((a, b) => {
-      if (sort === 'budget') return (b.budgetUzs ?? 0) - (a.budgetUzs ?? 0);
-      if (sort === 'expiry') return (a.expiresAt ?? '').localeCompare(b.expiresAt ?? '');
-      return (b.createdAt ?? '').localeCompare(a.createdAt ?? '');
-    });
-    return filtered;
-  }, [res.data, onlyUnanswered, withBudget, withDocs, sort]);
+  const visible = useMemo(() => {
+    const list = view === 'todo' ? [...todo] : [...all];
+    if (view === 'urgent') {
+      // Muddati yaqinlari oldinda; muddatsizlari oxirida
+      list.sort((a, b) => (a.expiresAt ?? '9999').localeCompare(b.expiresAt ?? '9999'));
+    } else {
+      list.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+    }
+    return list;
+  }, [all, todo, view]);
 
   return (
     <Screen title={t('feed.title')} subtitle={t('feed.sub')} tabBar={<ClinicTabBar />}>
-      {/* Filtrlar so'rovlardan oldin — klinika kuniga o'nlab so'rov ko'radi */}
-      <div className="scroll-x">
-        <div className="row" style={{ gap: 6 }}>
-          <Chip size="sm" active={onlyUnanswered} onClick={() => setOnlyUnanswered((v) => !v)}>
-            {t('feed.onlyUnanswered')}
-          </Chip>
-          <Chip size="sm" active={withBudget} onClick={() => setWithBudget((v) => !v)}>
-            {t('feed.withBudget')}
-          </Chip>
-          <Chip size="sm" active={withDocs} onClick={() => setWithDocs((v) => !v)}>
-            {t('feed.withDocs')}
-          </Chip>
-        </div>
-      </div>
+      {!canOffer && <Notice tone="warning">{t('feed.noSub')}</Notice>}
 
-      {!canOffer && (
-        <Notice tone="warning">
-          {t('feed.noSub')}
-        </Notice>
+      {/*
+        So'rov umuman bo'lmasa boshqaruv ham ko'rsatilmaydi: bo'sh
+        ro'yxat ustida filtr turishining ma'nosi yo'q.
+      */}
+      {all.length > 0 && (
+        <Segment
+          value={view}
+          onChange={(v) => setView(v as View)}
+          options={[
+            { value: 'todo', label: `${t('feed.viewTodo')}${todo.length ? ` · ${todo.length}` : ''}` },
+            { value: 'urgent', label: t('feed.viewUrgent') },
+            { value: 'all', label: `${t('feed.viewAll')} · ${all.length}` },
+          ]}
+        />
       )}
-
-      <Segment
-        value={sort}
-        onChange={(v) => setSort(v as Sort)}
-        options={[
-          { value: 'new', label: t('feed.sortNew') },
-          { value: 'budget', label: t('feed.sortBudget') },
-          { value: 'expiry', label: t('feed.sortExpiry') },
-        ]}
-      />
 
       <Async
         resource={res}
         isEmpty={() => visible.length === 0}
-        empty={{ title: t('feed.empty'), text: t('feed.emptyText') }}
+        /*
+          Bo'shlikning ikki sababi bor va ular boshqacha: umuman so'rov
+          yo'q, yoki hammasiga javob berilgan. Ikkinchisi — yaxshi
+          xabar, uni "so'rov yo'q" deb ko'rsatish noto'g'ri bo'lardi.
+        */
+        empty={
+          view === 'todo' && all.length > 0
+            ? { title: t('feed.emptyTodo'), text: t('feed.emptyTodoText') }
+            : { title: t('feed.empty'), text: t('feed.emptyText') }
+        }
       >
         {() => (
           <AnimatePresence initial={false}>

@@ -4853,3 +4853,20 @@
     max-height: 320px;
   }
 }
+
+/*
+ * Qulflangan yo'nalish — banisa'dan kelgan.
+ * Tanlangani ko'rinib turadi, lekin bosilmasligi ham bilinishi kerak:
+ * o'chib turgan bo'lsa "nega ishlamayapti" degan savol chiqardi.
+ */
+.chip.is-locked {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.chip.is-locked::after {
+  content: '🔒';
+  font-size: 9px;
+  margin-left: 4px;
+  opacity: 0.7;
+}

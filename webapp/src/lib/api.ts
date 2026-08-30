@@ -393,7 +393,8 @@ export const api = {
     }>('/admin/catalog/sync', {}),
 
   /* ── Klinika ── */
-  clinic: () => get<{ clinic: Clinic; operationIds: number[] }>('/clinic'),
+  clinic: () =>
+    get<{ clinic: Clinic; operationIds: number[]; externalOperationIds?: number[] }>('/clinic'),
   updateClinic: (body: Partial<ClinicProfileBody>) => patch<Clinic>('/clinic', body),
   dashboard: () => get<ClinicDashboard>('/clinic/dashboard'),
   clinicReviews: () => get<Review[]>('/clinic/reviews'),

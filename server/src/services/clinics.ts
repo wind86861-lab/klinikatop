@@ -78,12 +78,37 @@ export function registerClinic(input: RegisterClinicInput): Clinic {
   return getClinic(clinicId);
 }
 
+/**
+ * Klinikaning yo'nalishlari.
+ *
+ * Yozuv MANBAGA qarab ishlaydi va bu muhim: banisa'dan kelgan
+ * yo'nalishlar o'sha yerda boshqariladi, bu yerdan tahrirlanmaydi.
+ * Ilgari bu funksiya hamma qatorni o'chirib qayta yozardi — ya'ni
+ * saqlash banisa ulanishini buzar va keyingi sinxronizatsiya uni
+ * qaytarardi. Shu sababli ulangan klinikaga ekran butunlay yopilgandi.
+ *
+ * Endi faqat `manual` qatorlar almashtiriladi. Natijada ulangan
+ * klinika ham banisa'da yo'q yo'nalishni O'ZI qo'sha oladi —
+ * KlinikaTop katalogi kengroq va ulanish uni yopib qo'ymasligi kerak.
+ */
 export function updateClinicOperations(clinicId: number, operationIds: number[]) {
   tx(() => {
-    db.prepare(`DELETE FROM clinic_operations WHERE clinic_id = ?`).run(clinicId);
-    const ins = db.prepare(`INSERT OR IGNORE INTO clinic_operations (clinic_id, operation_id) VALUES (?, ?)`);
+    db.prepare(`DELETE FROM clinic_operations WHERE clinic_id = ? AND source = 'manual'`).run(clinicId);
+    const ins = db.prepare(
+      `INSERT OR IGNORE INTO clinic_operations (clinic_id, operation_id, source) VALUES (?, ?, 'manual')`,
+    );
+    // banisa'niki allaqachon bor bo'lsa `OR IGNORE` uni tegmasdan o'tkazadi
     for (const id of operationIds) ins.run(clinicId, id);
   });
+}
+
+/** banisa'dan kelgan yo'nalishlar — ular bu yerda tahrirlanmaydi. */
+export function externalOperationIds(clinicId: number): number[] {
+  return (
+    db
+      .prepare(`SELECT operation_id FROM clinic_operations WHERE clinic_id = ? AND source = 'banisa'`)
+      .all(clinicId) as { operation_id: number }[]
+  ).map((r) => r.operation_id);
 }
 
 export function updateClinicProfile(

@@ -2451,6 +2451,51 @@ async function main() {
     check('klinika nomi qatorga qo‘shiladi', 'clinicName' in adm.listUsers()[0]);
   }
 
+  /* ══════════════  Yo'nalishlar: banisa va qo'lda  ══════════════ */
+
+  section("Yo'nalishlar manbasi");
+
+  {
+    const cl = require('../services/clinics');
+    const ops = catalog.listOperations().filter((o: any) => o.active !== false);
+    const [a, b, c] = [ops[0].id, ops[1].id, ops[2].id];
+
+    // banisa'dan kelgan yo'nalish
+    db.prepare(
+      `INSERT OR REPLACE INTO clinic_operations (clinic_id, operation_id, source) VALUES (?, ?, 'banisa')`,
+    ).run(clinic.id, a);
+    // qo'lda qo'shilgan
+    cl.updateClinicOperations(clinic.id, [b]);
+
+    const after = new Set(cl.getClinicOperations(clinic.id));
+    check('banisa yo‘nalishi saqlanib qoldi', after.has(a));
+    check('qo‘lda qo‘shilgani ham bor', after.has(b));
+    check('banisa\'niki alohida ajratiladi', cl.externalOperationIds(clinic.id).join() === String(a));
+
+    /*
+     * Eng muhimi: klinika o'z ro'yxatini saqlaganda banisa qatori
+     * O'CHMASLIGI kerak. Ilgari funksiya hamma qatorni o'chirib
+     * qayta yozardi — shu sababli ulangan klinikaga ekran butunlay
+     * yopilgandi.
+     */
+    cl.updateClinicOperations(clinic.id, [c]);
+    const after2 = new Set(cl.getClinicOperations(clinic.id));
+    check('saqlash banisa yo‘nalishini o‘chirmadi', after2.has(a));
+    check('eski qo‘lda qo‘shilgani olib tashlandi', !after2.has(b));
+    check('yangi qo‘lda qo‘shilgani qo‘shildi', after2.has(c));
+
+    // banisa'nikini "tanlash" uni ikkilantirmasligi kerak
+    cl.updateClinicOperations(clinic.id, [a, c]);
+    const rows = db
+      .prepare(`SELECT source FROM clinic_operations WHERE clinic_id = ? AND operation_id = ?`)
+      .all(clinic.id, a) as { source: string }[];
+    check('banisa yozuvi ikkilanmadi', rows.length === 1, rows.length);
+    check('manbasi banisa bo‘lib qoldi', rows[0].source === 'banisa');
+
+    // Tozalash
+    db.prepare(`DELETE FROM clinic_operations WHERE clinic_id = ? AND source = 'banisa'`).run(clinic.id);
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);
