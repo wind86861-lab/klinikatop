@@ -193,9 +193,19 @@ export function RequestStepsScreen() {
               )}
             </AnimatePresence>
 
-            <Sheet open={editing !== null} onClose={() => setEditing(null)} title="Bosqich matni">
+            <Sheet
+              open={editing !== null}
+              onClose={() => setEditing(null)}
+              title={editing && !isBuiltin(editing.key) ? 'Savolni tahrirlash' : 'Bosqichni tahrirlash'}
+            >
               {editing && (
                 <StepEditor
+                  /*
+                   * `key` shart: varaq yopilib boshqa bosqich uchun ochilganda
+                   * React bir xil komponentni qayta ishlatadi va ichidagi
+                   * `useState(step)` eski qiymatda qolib ketardi.
+                   */
+                  key={editing.key}
                   step={editing}
                   onDone={(row) => {
                     upsert(server, row);
@@ -285,7 +295,7 @@ function StepRow({
           </>
         )}
         <Button size="sm" variant="ghost" onClick={onEdit}>
-          Matn
+          Tahrirlash
         </Button>
         {!builtin && (
           <Button size="sm" variant="ghost" onClick={onRemove}>
@@ -306,10 +316,16 @@ function StepEditor({ step, onDone }: { step: RequestStep; onDone: (row: Request
 
   return (
     <div className="stack">
-      {builtin && (
+      {builtin ? (
         <Notice>
-          Bo‘sh qoldirilsa ilovadagi tayyor matn ishlatiladi. Bu yerga yozsangiz — sizniki ustun
-          keladi.
+          <b>{BUILTIN_INFO[row.key]?.name ?? row.key}</b> — tayyor bosqich: {BUILTIN_INFO[row.key]?.what}.
+          Bo‘sh qoldirilsa ilovadagi tayyor matn ishlatiladi; bu yerga yozsangiz sizniki ustun keladi.
+        </Notice>
+      ) : (
+        <Notice>
+          Savol turi: <b>{KIND_LABEL[row.kind]}</b>. Turini keyin o‘zgartirib bo‘lmaydi — allaqachon
+          berilgan javoblar ma’nosini yo‘qotardi. Boshqa tur kerak bo‘lsa yangi savol qo‘shing.
+          Majburiyligini ro‘yxatdagi tugmadan o‘zgartirasiz.
         </Notice>
       )}
 
