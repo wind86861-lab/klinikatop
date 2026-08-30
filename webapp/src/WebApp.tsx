@@ -20,6 +20,7 @@ import { webToken } from '@/lib/session';
 import { tg } from '@/lib/telegram';
 import { TelegramGate } from '@/screens/web/TelegramGate';
 import { ClinicSignup } from '@/screens/ClinicSignup';
+import { BanisaLink } from '@/screens/web/BanisaLink';
 import { CabinetLogin } from '@/screens/web/CabinetLogin';
 import { SetPassword } from '@/screens/web/SetPassword';
 import { Dashboard, MoreMenu, NotificationPrefs, ClinicSettings } from '@/screens/clinic/Cabinet';
@@ -44,7 +45,7 @@ export function WebApp() {
   const path = location.pathname;
 
   /** Kirish talab qilmaydigan sahifalar */
-  const open = path === '/klinika' || path.startsWith('/kabinet');
+  const open = path === '/klinika' || path === '/ulanish' || path.startsWith('/kabinet');
 
   /*
    * Token localStorage'da, lekin uni holatda ham ushlaymiz: Telegram
@@ -69,6 +70,8 @@ export function WebApp() {
   }, [open, token, insideTelegram, navigate]);
 
   if (path === '/klinika') return <ClinicSignup />;
+  // banisa.uz'dan ulanish — bir bosishda
+  if (path === '/ulanish') return <BanisaLink />;
   if (path === '/kabinet/parol') return <SetPassword />;
   if (path.startsWith('/kabinet')) return <CabinetLogin />;
 

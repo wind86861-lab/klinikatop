@@ -92,6 +92,7 @@ function jsonArray(raw: string | null | undefined): string[] {
 export function mapClinic(r: any): Clinic {
   return {
     id: r.id,
+    externalId: r.external_id ?? null,
     name: r.name,
     cityId: r.city_id,
     address: r.address,

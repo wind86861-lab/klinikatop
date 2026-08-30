@@ -170,6 +170,11 @@ export interface Operation {
 
 export interface Clinic {
   id: number;
+  /**
+   * banisa.uz'dagi identifikator. To'ldirilgan bo'lsa — klinika
+   * o'sha yerdan keladi va yo'nalishlari shu yerda tahrirlanmaydi.
+   */
+  externalId: string | null;
   name: string;
   cityId: number;
   address: string;

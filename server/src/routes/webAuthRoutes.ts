@@ -29,6 +29,8 @@ import {
 } from '../services/webAuth';
 import { resolveUser } from '../middleware/auth';
 import { clinicStandingByPhone } from '../services/clinicIdentity';
+import { completeLink, issueHandoff, previewLink, readHandoff, verifyTicket } from '../services/clinicLink';
+import { asyncHandler } from '../lib/asyncHandler';
 
 export const webAuthRouter = Router();
 
@@ -231,3 +233,52 @@ webAuthRouter.get('/sessions', (req, res) => {
   const s = fullSession(req);
   res.json(listSessions(s.user.id, s.token));
 });
+
+/* ═════════════════  banisa.uz bilan ulanish  ═════════════════ */
+
+/**
+ * Biletni ko'rish — ulashdan OLDIN.
+ *
+ * Klinika o'z ma'lumotini tasdiqlash ekranida ko'radi: nomi, manzili,
+ * nechta yo'nalish ko'chiriladi. Shahar topilmagan bo'lsa, o'zi
+ * tanlaydi — jimgina taxmin qilinmaydi, chunki noto'g'ri shahar
+ * so'rovlarni butunlay to'xtatib qo'yadi.
+ *
+ * Bilet SHU YERDA ishlatilgan deb belgilanadi: u bir martalik.
+ * Shuning uchun ko'rish va yakunlash bir biletga tushadi —
+ * ikkinchi bosqichda bilet emas, uning ma'lumoti ishlatiladi.
+ */
+webAuthRouter.post(
+  '/link/banisa/preview',
+  rateLimit({ name: 'banisa-link', windowSec: 300, max: 20 }),
+  asyncHandler(async (req, res) => {
+    const body = z.object({ ticket: z.string().min(20).max(4000) }).parse(req.body);
+    const ticket = verifyTicket(body.ticket);
+    const preview = await previewLink(ticket);
+
+    /*
+     * Bilet allaqachon ishlatilgan deb belgilangan, shuning uchun
+     * yakunlash uchun qisqa muddatli ichki token beramiz. U bizniki
+     * va faqat shu oqim uchun.
+     */
+    res.json({ preview, handoff: issueHandoff(ticket) });
+  }),
+);
+
+/** Ulashni yakunlash — klinika shaharni tasdiqlagandan keyin. */
+webAuthRouter.post(
+  '/link/banisa/complete',
+  rateLimit({ name: 'banisa-link', windowSec: 300, max: 20 }),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        handoff: z.string().min(20).max(4000),
+        cityId: z.number().int().positive(),
+      })
+      .parse(req.body);
+
+    const ticket = readHandoff(body.handoff);
+    const result = await completeLink(ticket, body.cityId);
+    res.json(result);
+  }),
+);

@@ -4092,3 +4092,47 @@
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
+
+/* ══════════════════  banisa.uz'dan ulanish  ══════════════════ */
+
+.bl__from {
+  font-size: var(--t-xs);
+  color: var(--muted);
+  margin-top: calc(var(--s-3) * -1);
+}
+
+.bl__wait { font-size: var(--t-sm); color: var(--muted); }
+
+.bl__facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding: var(--s-4);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+
+/* Nom va qiymat yonma-yon; tor ekranda ustunga tushadi */
+.bl__fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  font-size: var(--t-sm);
+}
+.bl__fact dt { color: var(--muted); flex: none; }
+.bl__fact dd {
+  margin: 0;
+  color: var(--ink);
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.bl__note { font-size: var(--t-xs); color: var(--accent-ink); }
+
+@media (max-width: 380px) {
+  .bl__fact { flex-direction: column; gap: 1px; }
+  .bl__fact dd { text-align: left; }
+}

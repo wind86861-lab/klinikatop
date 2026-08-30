@@ -30,6 +30,7 @@ export function setWebToken(token: string | null) {
 export function isCabinetPath(pathname: string): boolean {
   return (
     pathname === '/klinika' ||
+    pathname === '/ulanish' ||
     pathname.startsWith('/kabinet') ||
     pathname.startsWith('/clinic') ||
     pathname.startsWith('/admin')

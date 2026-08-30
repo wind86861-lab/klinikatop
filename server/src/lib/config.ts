@@ -91,6 +91,20 @@ export const config = {
   catalogSource: {
     url: process.env.CATALOG_SOURCE_URL ?? '',
   },
+
+  /**
+   * banisa.uz bilan ulanish.
+   *
+   * `partnerKey` — katalog va klinika ma'lumotlarini o'qish uchun.
+   * `linkTicketSecret` — klinika "ulanish" tugmasini bosganda
+   * banisa beradigan biletning imzosi. Ikkisi ALOHIDA sir: biri
+   * sizib chiqsa ikkinchisi hali ham himoya qiladi.
+   */
+  banisa: {
+    url: (process.env.BANISA_URL ?? '').replace(/\/$/, ''),
+    partnerKey: process.env.BANISA_PARTNER_KEY ?? '',
+    linkTicketSecret: process.env.LINK_TICKET_SECRET ?? '',
+  },
 } as const;
 
 export const isProd = config.env === 'production';

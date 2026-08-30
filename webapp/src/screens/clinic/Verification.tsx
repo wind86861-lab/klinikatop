@@ -217,14 +217,14 @@ export function ClinicOperations() {
   const navigate = useNavigate();
 
   const res = useResource(async () => {
-    const [clinic, tree] = await Promise.all([api.clinic(), api.catalogTree()]);
-    return { clinic, tree };
+    const [me, tree] = await Promise.all([api.clinic(), api.catalogTree()]);
+    return { clinic: me.clinic, operationIds: me.operationIds, tree };
   });
 
   const [selected, setSelected] = useState<Set<number> | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const current = selected ?? new Set(res.data?.clinic.operationIds ?? []);
+  const current = selected ?? new Set(res.data?.operationIds ?? []);
 
   const toggle = (id: number) => {
     const next = new Set(current);
@@ -275,13 +275,47 @@ export function ClinicOperations() {
       title={t('ops.title')}
       subtitle={t('ops.sub')}
       footer={
-        <Button block loading={saving} disabled={current.size === 0} onClick={save}>
-          {t('ops.saveOps')} · {t('ops.selected', { n: current.size })}
-        </Button>
+        res.data?.clinic.externalId ? undefined : (
+          <Button block loading={saving} disabled={current.size === 0} onClick={save}>
+            {t('ops.saveOps')} · {t('ops.selected', { n: current.size })}
+          </Button>
+        )
       }
     >
       <Async resource={res} skeleton={<Skeleton h={320} />}>
-        {(data) => (
+        {(data) => {
+          /*
+           * banisa'dan ulangan klinika yo'nalishlarini BU YERDA
+           * tahrirlamaydi.
+           *
+           * Ular banisa'da boshqariladi va bu yerga avtomatik
+           * ko'chiriladi. Ikki joyda ham tahrirlash mumkin bo'lsa,
+           * har o'zgarishda "qaysi biri to'g'ri" degan savol chiqadi
+           * va uni ishonchli hal qilishning yo'li yo'q.
+           */
+          const linked = Boolean(data.clinic.externalId);
+
+          if (linked) {
+            return (
+              <>
+                <Notice tone="info">
+                  Yo‘nalishlaringiz banisa.uz’dan keladi va avtomatik yangilanadi.
+                  O‘zgartirish uchun o‘sha yerdagi «Xizmatlar» bo‘limiga o‘ting.
+                </Notice>
+
+                <CatalogBrowser
+                  tree={data.tree}
+                  lang={lang}
+                  mode="multi"
+                  selected={[...current]}
+                  onSelect={() => {}}
+                  emptyText={t('ops.noMatch')}
+                />
+              </>
+            );
+          }
+
+          return (
           <>
             {current.size > 0 && <Notice tone="info">{t('ops.matchHint', { n: current.size })}</Notice>}
 
@@ -301,7 +335,8 @@ export function ClinicOperations() {
               emptyText={t('ops.noMatch')}
             />
           </>
-        )}
+          );
+        }}
       </Async>
     </Screen>
   );

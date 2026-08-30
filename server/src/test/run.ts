@@ -14,6 +14,15 @@ process.env.ALLOW_DEV_AUTH = 'true';
 process.env.TELEGRAM_BOT_TOKEN = '';
 process.env.ANTHROPIC_API_KEY = '';
 process.env.MIN_DEALS_FOR_PRICE_STATS = '2';
+/*
+ * banisa sirlari MODULLAR YUKLANISHIDAN oldin qo'yiladi — `config`
+ * ularni bir marta o'qiydi va keyin o'zgartirib bo'lmaydi.
+ *
+ * Bu muhim: sir bo'lmasa `verifyTicket` darhol "sozlanmagan" deb
+ * xato beradi va biletga oid tekshiruvlar noto'g'ri sababdan
+ * "o'tib ketadi".
+ */
+process.env.LINK_TICKET_SECRET = 'sinov-uchun-bilet-siri-2026';
 for (const suffix of ['', '-wal', '-shm']) {
   fs.rmSync(TEST_DB + suffix, { force: true });
 }
@@ -1907,6 +1916,108 @@ async function main() {
   check(
     'bo‘sh soha daraxtda yo‘q',
     !catalog.catalogTree().some((b: any) => b.category.slug === 'bosh-soha'),
+  );
+
+
+  /* ═════ 22. banisa ulanishi ═════ */
+  console.log('\n22. banisa ulanishi');
+
+  const cityMatch = require('../services/cityMatch');
+  const clinicLink = require('../services/clinicLink');
+
+  /*
+   * Shahar moslashtirish. banisa'da hudud erkin matn va haqiqiy
+   * bazada Toshkent TO'RT xil yozilgan — to'rttasi ham bir shaharga
+   * borishi kerak, aks holda klinikaga so'rov umuman kelmaydi.
+   */
+  const tashkentId = db.prepare("SELECT id FROM cities WHERE slug = 'tashkent'").get().id;
+
+  for (const form of ['Toshkent', 'Toshkent shahri', 'tashkent_city', 'toshkent', 'TASHKENT']) {
+    const m = cityMatch.matchCity(form);
+    check(`"${form}" → Toshkent`, m.cityId === tashkentId, m);
+  }
+
+  check('samarkand ham topiladi', cityMatch.matchCity('Samarkand').cityId !== null);
+  check('notanish hudud topilmaydi', cityMatch.matchCity('Atlantida').cityId === null);
+  check('bo‘sh hudud topilmaydi', cityMatch.matchCity('').cityId === null);
+  check('null ham xato bermaydi', cityMatch.matchCity(null).cityId === null);
+
+  /* ── Bilet ── */
+
+  const secret = process.env.LINK_TICKET_SECRET!;
+
+  const makeTicket = (payload: any, sig?: string) => {
+    const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const signature =
+      sig ??
+      nodeCrypto.createHmac('sha256', secret).update(`${head}.${body}`).digest('base64url');
+    return `${head}.${body}.${signature}`;
+  };
+
+  const soon = Math.floor(Date.now() / 1000) + 60;
+
+  throws('shakli buzuq bilet rad etiladi', () => clinicLink.verifyTicket('axlat'));
+  throws(
+    'imzosi noto‘g‘ri bilet rad etiladi',
+    () => clinicLink.verifyTicket(makeTicket({ clinicId: 'c1', jti: 'j1', exp: soon }, 'yolgon')),
+  );
+  throws(
+    'muddati o‘tgan bilet rad etiladi',
+    () =>
+      clinicLink.verifyTicket(
+        makeTicket({ clinicId: 'c1', jti: 'j-old', exp: Math.floor(Date.now() / 1000) - 10 }),
+      ),
+  );
+  throws(
+    'klinikasiz bilet rad etiladi',
+    () => clinicLink.verifyTicket(makeTicket({ jti: 'j2', exp: soon })),
+  );
+
+  const good = makeTicket({ clinicId: 'c-banisa-1', userId: 'u1', phone: '998901112233', jti: 'j-ok', exp: soon });
+  const parsed = clinicLink.verifyTicket(good);
+  check('to‘g‘ri bilet o‘qildi', parsed.clinicId === 'c-banisa-1' && parsed.phone === '998901112233');
+
+  /*
+   * Bir martalik. banisa biletni saqlamaydi — takrorni shu yerda
+   * to'xtatamiz, aks holda bir havola bilan qayta-qayta ulanish
+   * mumkin bo'lardi.
+   */
+  throws('bilet ikkinchi marta ishlamaydi', () => clinicLink.verifyTicket(good), 'ticket_used');
+
+  /* ── Ichki token ── */
+
+  const handoff = clinicLink.issueHandoff(parsed);
+  const back = clinicLink.readHandoff(handoff);
+  check('ichki token o‘qildi', back.clinicId === 'c-banisa-1');
+
+  throws('buzilgan ichki token rad etiladi', () => clinicLink.readHandoff(handoff.slice(0, -4) + 'aaaa'));
+
+  /*
+   * Ichki token banisa bileti bilan BIR XIL sir ishlatmasligi kerak:
+   * aks holda biri ikkinchisining o'rniga o'tib ketardi.
+   */
+  throws('banisa bileti ichki token sifatida ishlamaydi', () => clinicLink.readHandoff(good));
+
+  /* ── Telefon va manzil tozalash ── */
+
+  const banisa = require('../services/banisa');
+
+  check(
+    'takroriy telefonlar olib tashlandi',
+    banisa.cleanPhones(['+998 93 380-23-13', '+998 93 380-23-13', '+998 93 380-23-13']).length === 1,
+  );
+  check('qisqa raqam tashlandi', banisa.cleanPhones(['123']).length === 0);
+  check('massiv bo‘lmasa bo‘sh qaytadi', banisa.cleanPhones(null).length === 0);
+
+  check(
+    'manzildan hudud prefiksi olindi',
+    banisa.cleanAddress('tashkent_city, olmazor, Beltepa 1A', 'tashkent_city') ===
+      'olmazor, Beltepa 1A',
+  );
+  check(
+    'bo‘sh bo‘laklar tozalandi',
+    banisa.cleanAddress('olmazor, , Forobiy 28', null) === 'olmazor, Forobiy 28',
   );
 
   console.log(`\n${'─'.repeat(50)}`);

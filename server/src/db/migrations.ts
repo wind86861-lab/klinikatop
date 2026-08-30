@@ -872,6 +872,108 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    /**
+     * banisa.uz bilan ulanish.
+     *
+     * Klinika banisa'da ro'yxatdan o'tgan va operatsiyalarini yoqqan
+     * bo'lsa, bu yerda hammasini qaytadan qilmasligi kerak. Ulanish
+     * bir bosishda bo'ladi va yo'nalishlar shundan keyin ham
+     * sinxron turadi.
+     *
+     * Egalik chegarasi: banisa — klinika kimligi va nima qilishining
+     * egasi; bu yerdagi yozuvlar KO'ZGU. Tender shartlari (tarif,
+     * komissiya, reyting) esa KlinikaTop'niki bo'lib qoladi.
+     */
+    id: '017_banisa_link',
+    up: (db) => {
+      addColumn(db, 'clinics', 'external_id', 'TEXT');
+      addColumn(db, 'clinics', 'external_synced_at', 'TEXT');
+
+      /*
+       * Yo'nalish kimdan kelgani. banisa'dan kelganini bu yerda
+       * tahrirlab bo'lmaydi — aks holda ikki tomon bir faktni
+       * o'zgartiradi va ular ajralib ketadi.
+       */
+      addColumn(db, 'clinic_operations', 'source', `TEXT NOT NULL DEFAULT 'manual'`);
+
+      db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clinics_external
+          ON clinics(external_id) WHERE external_id IS NOT NULL;
+
+        /*
+         * Shahar moslashtirish.
+         *
+         * banisa'da hudud ERKIN MATN va bir shahar bir necha xil
+         * yoziladi: "Toshkent", "Toshkent shahri", "tashkent_city",
+         * "toshkent" — hozir to'rttasi ham bazada bor.
+         *
+         * Normallashtirish ko'pini hal qiladi, qolganini shu jadval.
+         * Topilmasa klinikadan so'raladi — jimgina taxmin qilinmaydi,
+         * chunki noto'g'ri shahar so'rovlarni butunlay to'xtatib
+         * qo'yadi va buni bir necha hafta sezmaslik mumkin.
+         */
+        CREATE TABLE IF NOT EXISTS city_aliases (
+          alias      TEXT PRIMARY KEY,
+          city_id    INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        /*
+         * Ishlatilgan biletlar.
+         *
+         * Bilet bir martalik. banisa uni saqlamaydi — takrorni shu
+         * yerda to'xtatamiz. Muddati o'tganlari tozalab turiladi.
+         */
+        CREATE TABLE IF NOT EXISTS used_link_tickets (
+          jti        TEXT PRIMARY KEY,
+          used_at    TEXT NOT NULL DEFAULT (datetime('now')),
+          expires_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_used_tickets_exp ON used_link_tickets(expires_at);
+      `);
+
+      /*
+       * Ma'lum yozilishlar oldindan kiritiladi. Ro'yxat to'liq
+       * bo'lishi shart emas — normallashtirish ko'pini o'zi tutadi,
+       * bu esa qolgan chetki holatlar uchun.
+       */
+      const seed = db.prepare(
+        `INSERT OR IGNORE INTO city_aliases (alias, city_id)
+         SELECT ?, id FROM cities WHERE slug = ?`,
+      );
+
+      const pairs: [string, string][] = [
+        ['toshkent', 'tashkent'],
+        ['tashkent', 'tashkent'],
+        ['toshkentshahri', 'tashkent'],
+        ['toshkentviloyati', 'tashkent'],
+        ['samarqand', 'samarkand'],
+        ['samarkand', 'samarkand'],
+        ['buxoro', 'bukhara'],
+        ['bukhara', 'bukhara'],
+        ['andijon', 'andijan'],
+        ['andijan', 'andijan'],
+        ['fargona', 'fergana'],
+        ['fergana', 'fergana'],
+        ['namangan', 'namangan'],
+        ['nukus', 'nukus'],
+        ['qarshi', 'qarshi'],
+        ['karshi', 'qarshi'],
+        ['urganch', 'urgench'],
+        ['urgench', 'urgench'],
+        ['navoiy', 'navoiy'],
+        ['navoi', 'navoiy'],
+        ['jizzax', 'jizzakh'],
+        ['jizzakh', 'jizzakh'],
+        ['termiz', 'termez'],
+        ['termez', 'termez'],
+      ];
+
+      for (const [alias, slug] of pairs) seed.run(alias, slug);
+    },
+  },
 ];
 
 /**
