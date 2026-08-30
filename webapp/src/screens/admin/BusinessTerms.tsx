@@ -10,12 +10,11 @@
  * platforma qaysi shartlar bilan ishlaydi va shu klinika uchun shartlar
  * qanday.
  */
-import { useState } from 'react';
-import { AnimatePresence, m } from 'framer-motion';
+import { useMemo, useState } from 'react';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
-import { popVariants, spring } from '@/lib/motion';
+import { spring } from '@/lib/motion';
 import { formatDate } from '@/lib/format';
 import { cityName } from '@/i18n';
 import {
@@ -23,7 +22,6 @@ import {
   Card,
   Chip,
   Field,
-  IconCheck,
   IconShield,
   Input,
   Notice,
@@ -33,6 +31,8 @@ import {
   Skeleton,
 } from '@/ui';
 import { Async, useResource } from '@/screens/clinic/shell';
+import { DataTable, Empty, PageHeader, RowMenu, Tag } from './ui';
+import type { ColumnDef } from '@tanstack/react-table';
 import {
   ADMIN_CLINIC_FILTERS,
   type AdminClinicFilter,
@@ -68,96 +68,150 @@ export function AdminClinics() {
     }
   };
 
+  /*
+   * Ustunlar komponentdan TASHQARIDA emas, ichida: ular `cities`, `t` va
+   * `decide` ga tayanadi. `useMemo` bo'lmasa har chizishda jadval
+   * ustunlarni yangi deb bilib holatini (saralash, sahifa) tashlab
+   * yuboradi.
+   */
+  const columns = useMemo<ColumnDef<AdminClinicRow, any>[]>(
+    () => [
+      {
+        accessorKey: 'name',
+        header: t('ac.col.clinic'),
+        cell: (c) => {
+          const row = c.row.original;
+          const city = cities.find((x) => x.id === row.cityId);
+          return (
+            <div>
+              <div className="atable__name">{row.name}</div>
+              <div className="atable__sub">{city ? cityName(city, lang) : '—'}</div>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'verification',
+        header: t('ac.col.status'),
+        size: 130,
+        cell: (c) => {
+          const v = c.getValue() as AdminClinicRow['verification'];
+          return (
+            <Tag tone={v === 'approved' ? 'good' : v === 'rejected' ? 'bad' : 'warn'}>
+              {t(`ver.status.${v}` as any)}
+            </Tag>
+          );
+        },
+      },
+      {
+        accessorKey: 'pendingDocuments',
+        header: t('ac.col.docs'),
+        size: 90,
+        cell: (c) => {
+          const n = c.getValue() as number;
+          // Nol qiymat e'tiborni tortmasin — faqat ish borini ko'rsatamiz
+          return n > 0 ? <Tag tone="warn">{n}</Tag> : <span className="muted">—</span>;
+        },
+      },
+      {
+        accessorKey: 'dealsCount',
+        header: t('ac.col.deals'),
+        size: 90,
+        cell: (c) => <span className="num">{c.getValue() as number}</span>,
+      },
+      {
+        accessorKey: 'offersCount',
+        header: t('ac.col.offers'),
+        size: 90,
+        cell: (c) => <span className="num">{c.getValue() as number}</span>,
+      },
+      {
+        accessorKey: 'effectiveCommissionPercent',
+        header: t('ac.col.commission'),
+        size: 120,
+        cell: (c) => {
+          const row = c.row.original;
+          return (
+            <span className="num">
+              {row.effectiveCommissionPercent}%
+              {row.commissionPercent != null && <span className="atable__sub"> {t('ac.commissionOwn')}</span>}
+            </span>
+          );
+        },
+      },
+      {
+        id: 'trial',
+        header: t('ac.col.trial'),
+        size: 130,
+        accessorFn: (r) => r.trialUntil ?? '',
+        cell: (c) => {
+          const v = c.row.original.trialUntil;
+          const on = v && new Date(v) > new Date();
+          return on ? (
+            <span className="tiny">{formatDate(v!, lang)}</span>
+          ) : (
+            <span className="muted">—</span>
+          );
+        },
+      },
+      {
+        id: 'actions',
+        header: '',
+        size: 150,
+        enableSorting: false,
+        cell: (c) => {
+          const row = c.row.original;
+          return (
+            /*
+             * Jadvalda o'nlab qator bor: har birida to'ldirilgan yashil
+             * tugma bo'lsa, ekran butunlay tugmaga aylanadi va nima
+             * muhimligi bilinmay qoladi. Shuning uchun asosiy amal ham
+             * ikkilamchi ko'rinishda — u baribir yagona yashil element.
+             */
+            <div className="arow-actions">
+              {row.verification !== 'approved' && (
+                <Button size="sm" variant="secondary" onClick={() => decide(row)}>
+                  {t('ac.approve')}
+                </Button>
+              )}
+              <RowMenu
+                items={[
+                  { label: t('ac.setCommission'), onClick: () => open(row, 'commission') },
+                  { label: t('ac.grantTrial'), onClick: () => open(row, 'trial') },
+                ]}
+              />
+            </div>
+          );
+        },
+      },
+    ],
+    [cities, lang, t],
+  );
+
   return (
-    <>
-      <div className="scroll-x">
-        <div className="row" style={{ gap: 6 }}>
-          {ADMIN_CLINIC_FILTERS.map((f) => (
-            <Chip key={f} size="sm" active={filter === f} onClick={() => setFilter(f)}>
-              {t(`ac.filter.${f}` as any)}
-            </Chip>
-          ))}
-        </div>
-      </div>
+    <div className="stack">
+      <PageHeader
+        title={t('admin.tabClinics')}
+        description={t('ac.desc')}
+        actions={
+          <div className="row" style={{ gap: 6 }}>
+            {ADMIN_CLINIC_FILTERS.map((f) => (
+              <Chip key={f} size="sm" active={filter === f} onClick={() => setFilter(f)}>
+                {t(`ac.filter.${f}` as any)}
+              </Chip>
+            ))}
+          </div>
+        }
+      />
 
-      <Async
-        resource={res}
-        skeleton={<Skeleton h={260} />}
-        isEmpty={(d) => d.length === 0}
-        empty={{ title: t('ac.empty') }}
-      >
+      <Async resource={res} skeleton={<Skeleton h={320} />}>
         {(list) => (
-          <AnimatePresence initial={false}>
-            {list.map((clinic) => {
-              const city = cities.find((c) => c.id === clinic.cityId);
-              const onTrial = clinic.trialUntil && new Date(clinic.trialUntil) > new Date();
-
-              return (
-                <m.div key={clinic.id} layout variants={popVariants} initial="initial" animate="animate">
-                  <Card className="stack" style={{ gap: 8 }}>
-                    <div className="between">
-                      <strong className="truncate">{clinic.name}</strong>
-                      <span
-                        className={`badge badge--${
-                          clinic.verification === 'approved'
-                            ? 'success'
-                            : clinic.verification === 'rejected'
-                              ? 'muted'
-                              : 'accent'
-                        }`}
-                      >
-                        {t(`ver.status.${clinic.verification}` as any)}
-                      </span>
-                    </div>
-
-                    <span className="tiny">
-                      {city ? cityName(city, lang) : '—'} ·{' '}
-                      {t('ac.deals', { n: clinic.dealsCount, o: clinic.offersCount })}
-                    </span>
-
-                    {clinic.pendingDocuments > 0 && (
-                      <Notice tone="warning">{t('ac.pendingDocs', { n: clinic.pendingDocuments })}</Notice>
-                    )}
-
-                    {/* Amaldagi shartlar — bir qarashda ko'rinadi */}
-                    <div className="terms-row">
-                      <span className="terms-row__label">{t('ac.commission')}</span>
-                      <span className="terms-row__value num">
-                        {clinic.effectiveCommissionPercent}%
-                        <span className="tiny">
-                          {' '}
-                          {clinic.commissionPercent != null
-                            ? `· ${t('ac.commissionOwn')}`
-                            : `· ${t('ac.commissionPlatform')}`}
-                        </span>
-                      </span>
-                    </div>
-
-                    <div className="terms-row">
-                      <span className="terms-row__label">{t('ac.trial')}</span>
-                      <span className="terms-row__value">
-                        {onTrial ? t('ac.trialUntil', { v: formatDate(clinic.trialUntil!, lang) }) : t('ac.noTrial')}
-                      </span>
-                    </div>
-
-                    <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                      {clinic.verification !== 'approved' && (
-                        <Button size="sm" icon={<IconCheck size={14} />} onClick={() => decide(clinic)}>
-                          {t('ac.approve')}
-                        </Button>
-                      )}
-                      <Button size="sm" variant="secondary" onClick={() => open(clinic, 'commission')}>
-                        {t('ac.setCommission')}
-                      </Button>
-                      <Button size="sm" variant="secondary" onClick={() => open(clinic, 'trial')}>
-                        {t('ac.grantTrial')}
-                      </Button>
-                    </div>
-                  </Card>
-                </m.div>
-              );
-            })}
-          </AnimatePresence>
+          <DataTable
+            data={list}
+            columns={columns}
+            searchPlaceholder={t('ac.search')}
+            empty={<Empty title={t('ac.empty')} />}
+          />
         )}
       </Async>
 
@@ -171,7 +225,7 @@ export function AdminClinics() {
           res.reload();
         }}
       />
-    </>
+    </div>
   );
 }
 

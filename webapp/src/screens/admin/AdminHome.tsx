@@ -5,27 +5,33 @@
  * chalkashlik keltirardi: ikkovi bir xil ekranlarni ko'rardi va farqni
  * eslab qolish uchun sabab yo'q edi. Endi bitta daraja.
  */
-import { useCallback, useEffect, useState } from 'react';
-import { m } from 'framer-motion';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
 import { formatDate, groupDigits, money } from '@/lib/format';
 import { haptic } from '@/lib/telegram';
-import { spring } from '@/lib/motion';
 import {
   AnimatedItem,
   AnimatedList,
   Badge,
   Button,
   Card,
-  CountUp,
   EmptyState,
   ErrorState,
   Field,
   IconCheck,
+  IconInfo,
+  IconSparkle,
+  IconWallet,
+  IconStethoscope,
+  IconChart,
+  IconClinic,
+  IconAlert,
+  IconInbox,
   IconShield,
   Input,
   Notice,
+  Section,
   Sheet,
   Skeleton,
   SkeletonList,
@@ -37,6 +43,7 @@ import { Applications } from './Applications';
 import { CatalogSync } from './CatalogSync';
 import { RequestStepsScreen } from './RequestSteps';
 import { CommissionPayments } from './CommissionPayments';
+import { Empty, Kpi, PageHeader } from './ui';
 import { Security } from '../web/Security';
 import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
 import type { AdminMetrics, ChatMessage, Clinic, ClinicDocument, Deal, DealDetail } from '@shared/types';
@@ -127,30 +134,34 @@ export function AdminHome() {
    * Yonidagi raqam — e'tibor talab qiladigan ishlar soni.
    */
   const sections: AdminSection[] = [
-    { id: 'applications', label: t('admin.tabApplications'), render: () => <Applications /> },
+    { id: 'applications', label: t('admin.tabApplications'), group: 'Navbat', icon: <IconInbox size={17} />, render: () => <Applications /> },
     {
       id: 'verifications',
       label: t('admin.verifications'),
+      group: 'Navbat',
+      icon: <IconShield size={17} />,
       badge: pending?.length,
       render: () => <VerificationList pending={pending} onDecide={decide} onReject={setRejecting} />,
     },
     {
       id: 'disputes',
       label: t('admin.disputes'),
+      group: 'Navbat',
+      icon: <IconAlert size={17} />,
       badge: disputes?.length,
       render: () => <DisputeList disputes={disputes} onOpen={openDispute} />,
     },
-    { id: 'clinics', label: t('admin.tabClinics'), render: () => <AdminClinics /> },
-    { id: 'metrics', label: t('admin.metrics'), render: () => <MetricsPanel metrics={metrics} /> },
-    { id: 'catalog', label: 'Katalog', render: () => <CatalogSync /> },
-    { id: 'commission', label: 'Komissiya to‘lovlari', render: () => <CommissionPayments /> },
-    { id: 'steps', label: 'So‘rov bosqichlari', render: () => <RequestStepsScreen /> },
-    { id: 'settings', label: t('admin.tabSettings'), render: () => <PlatformSettingsScreen /> },
+    { id: 'clinics', label: t('admin.tabClinics'), group: 'Boshqaruv', icon: <IconClinic size={17} />, render: () => <AdminClinics /> },
+    { id: 'metrics', label: t('admin.metrics'), group: 'Boshqaruv', icon: <IconChart size={17} />, render: () => <MetricsPanel metrics={metrics} /> },
+    { id: 'catalog', label: 'Katalog', group: 'Boshqaruv', icon: <IconStethoscope size={17} />, render: () => <CatalogSync /> },
+    { id: 'commission', label: 'Komissiya to‘lovlari', group: 'Pul', icon: <IconWallet size={17} />, render: () => <CommissionPayments /> },
+    { id: 'steps', label: 'So‘rov bosqichlari', group: 'Sozlash', icon: <IconSparkle size={17} />, render: () => <RequestStepsScreen /> },
+    { id: 'settings', label: t('admin.tabSettings'), group: 'Sozlash', icon: <IconInfo size={17} />, render: () => <PlatformSettingsScreen /> },
     /*
      * Xavfsizlik oxirida, lekin ko'rinadigan joyda. Bu hisob butun
      * platformani boshqaradi va 2FA aynan shu yerdan yoqiladi.
      */
-    { id: 'security', label: 'Xavfsizlik', render: () => <Security /> },
+    { id: 'security', label: 'Xavfsizlik', group: 'Sozlash', icon: <IconShield size={17} />, render: () => <Security /> },
   ];
 
   return (
@@ -171,6 +182,21 @@ export function AdminHome() {
 
 /* ═════════════════  Bo'limlar  ═════════════════ */
 
+/**
+ * Verifikatsiya navbati — ro'yxat va tafsilot yonma-yon.
+ *
+ * Ilgari 58 ta klinika 11 600 piksel karta bo'lib cho'zilgandi va har
+ * birining hujjatlari o'sha yerda ochilardi. Navbatning uzunligini
+ * ko'rish uchun ham varaqlash kerak edi.
+ *
+ * Bu ekran uchun oddiy jadval ham yetarli emas: qaror HUJJATGA qarab
+ * qabul qilinadi, ya'ni ular ko'z oldida turishi kerak. Shuning uchun
+ * chapda qisqa ro'yxat, o'ngda tanlanganning to'liq tafsiloti.
+ *
+ * Ommaviy tasdiqlash ATAYLAB yo'q: litsenziyani ko'rmasdan o'nlab
+ * klinikani bir bosishda tasdiqlash — verifikatsiyaning ma'nosini
+ * yo'qotadi.
+ */
 function VerificationList({
   pending,
   onDecide,
@@ -181,36 +207,86 @@ function VerificationList({
   onReject: (clinic: Clinic) => void;
 }) {
   const { t } = useApp();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+
+  const list = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return pending ?? [];
+    return (pending ?? []).filter(
+      (c) => c.name.toLowerCase().includes(q) || (c.address ?? '').toLowerCase().includes(q),
+    );
+  }, [pending, query]);
+
+  /* Tanlov yo'q bo'lsa birinchisi ochiladi — navbat darrov ish beradi */
+  const selected = list.find((c) => c.id === selectedId) ?? list[0] ?? null;
 
   if (pending === null) return <SkeletonList count={2} />;
-  if (pending.length === 0) return <EmptyState icon={<IconShield size={32} />} title={t('admin.noPending')} />;
 
   return (
-    <AnimatedList>
-      {pending.map((clinic) => (
-        <AnimatedItem key={clinic.id}>
-          <Card className="stack">
-            <div className="between">
-              <strong>{clinic.name}</strong>
-              <Badge tone="warning">{t(`ver.status.${clinic.verification}` as any)}</Badge>
-            </div>
-            <span className="tiny">{clinic.address}</span>
-            {clinic.about && <p className="tiny" style={{ color: 'var(--body)' }}>{clinic.about}</p>}
-            {/* Hujjatlarni ko'rmasdan tasdiqlash — verifikatsiyaning ma'nosini yo'qotadi */}
-            <ClinicDocuments clinicId={clinic.id} />
+    <div className="stack">
+      <PageHeader
+        title={t('admin.verifications')}
+        description="Klinika litsenziyasi va hujjatlarini tekshirib, qaror qabul qiling"
+        count={pending.length}
+      />
 
-            <div className="row" style={{ gap: 'var(--s-2)' }}>
-              <Button size="sm" icon={<IconCheck size={15} />} onClick={() => onDecide(clinic, 'approved', null)}>
-                {t('admin.approve')}
-              </Button>
-              <Button size="sm" variant="danger" onClick={() => onReject(clinic)}>
-                {t('admin.reject')}
-              </Button>
+      {pending.length === 0 ? (
+        <EmptyState icon={<IconShield size={32} />} title={t('admin.noPending')} />
+      ) : (
+        <div className="review">
+          <div className="review__list">
+            <Input
+              value={query}
+              placeholder={t('common.search')}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label={t('common.search')}
+            />
+            <div className="review__rows">
+              {list.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`review__row ${selected?.id === c.id ? 'is-active' : ''}`}
+                  onClick={() => setSelectedId(c.id)}
+                >
+                  <span className="review__name">{c.name}</span>
+                  <span className="review__meta">{c.address || '—'}</span>
+                </button>
+              ))}
+              {list.length === 0 && <Empty title={t('ac.empty')} />}
             </div>
-          </Card>
-        </AnimatedItem>
-      ))}
-    </AnimatedList>
+          </div>
+
+          {selected && (
+            <div className="review__detail">
+              <div className="between">
+                <strong>{selected.name}</strong>
+                <Badge tone="warning">{t(`ver.status.${selected.verification}` as any)}</Badge>
+              </div>
+              <span className="tiny">{selected.address}</span>
+              {selected.about && (
+                <p className="tiny" style={{ color: 'var(--body)' }}>
+                  {selected.about}
+                </p>
+              )}
+
+              {/* Hujjatlarni ko'rmasdan tasdiqlash — verifikatsiyaning ma'nosini yo'qotadi */}
+              <ClinicDocuments clinicId={selected.id} />
+
+              <div className="row" style={{ gap: 'var(--s-2)' }}>
+                <Button size="sm" icon={<IconCheck size={15} />} onClick={() => onDecide(selected, 'approved', null)}>
+                  {t('admin.approve')}
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => onReject(selected)}>
+                  {t('admin.reject')}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -246,51 +322,86 @@ function DisputeList({
 }
 
 function MetricsPanel({ metrics }: { metrics: AdminMetrics | null }) {
-  const { t } = useApp();
+  const { lang } = useApp();
   if (metrics === null) return <SkeletonList count={2} />;
 
-  return (
-    <div className="kpi-grid">
-      <MetricCard label={t('home.greeting')} value={metrics.users} />
-      <MetricCard label={t('clinic.title')} value={metrics.clinics} />
-      <MetricCard label={t('home.active')} value={metrics.requests} />
-      <MetricCard label={t('offers.title')} value={metrics.offers} />
-      <MetricCard label={t('home.deals')} value={metrics.deals} />
-      <MetricCard label={t('deal.step.CONFIRMED')} value={metrics.confirmedDeals} />
-      <MetricCard label={t('clinic.kpi.winRate')} value={metrics.conversionPercent} suffix="%" />
-      <MetricCard label={t('clinic.kpi.commission')} value={metrics.commissionUzs} isMoney />
-      <MetricCard label={t('clinic.subscription')} value={metrics.subscriptionRevenueUzs} isMoney />
-      <MetricCard label={t('admin.disputes')} value={metrics.disputes} />
-    </div>
-  );
-}
+  /*
+   * Bu ekran ilgari o'nta bir xil plitka edi va yorliqlari boshqa
+   * ekranlardan qarzga olingandi — foydalanuvchilar soni "Salom" deb
+   * turardi. Raqamlar bor edi, ma'no yo'q edi.
+   *
+   * Endi uch guruh, va tartib admin nimadan boshlashiga qarab:
+   *   1. E'tibor talab qiladigan ish (kutayotgan odam bor)
+   *   2. Voronka — so'rovdan bitimgacha qayerda yo'qotilyapti
+   *   3. Pul
+   */
+  const funnel = [
+    { label: 'So‘rov', value: metrics.requests },
+    { label: 'Taklif', value: metrics.offers },
+    { label: 'Bitim', value: metrics.deals },
+    { label: 'Yopilgan', value: metrics.confirmedDeals },
+  ];
+  const peak = Math.max(...funnel.map((f) => f.value), 1);
 
-function MetricCard({
-  label,
-  value,
-  suffix,
-  isMoney,
-}: {
-  label: string;
-  value: number;
-  suffix?: string;
-  isMoney?: boolean;
-}) {
-  const { lang } = useApp();
   return (
-    <m.div className="kpi" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-      <div className="kpi__label">{label}</div>
-      <div className="kpi__value">
-        {isMoney ? (
-          money(value, lang)
-        ) : (
-          <>
-            <CountUp value={value} format={(n) => String(Math.round(n))} />
-            {suffix}
-          </>
-        )}
-      </div>
-    </m.div>
+    <div className="stack">
+      <PageHeader title="Ko‘rsatkichlar" description="Platformaning umumiy holati" />
+
+      {/* ── 1. E'tibor talab qiladi ── */}
+      <Section title="E'tibor talab qiladi">
+        <div className="kpi-grid">
+          <Kpi
+            label="Verifikatsiya kutmoqda"
+            value={metrics.pendingVerifications}
+            tone={metrics.pendingVerifications > 0 ? 'warn' : 'good'}
+            hint={metrics.pendingVerifications > 0 ? 'Klinikalar javob kutmoqda' : 'Navbat bo‘sh'}
+          />
+          <Kpi
+            label="Ochiq nizolar"
+            value={metrics.disputes}
+            tone={metrics.disputes > 0 ? 'bad' : 'good'}
+            hint={metrics.disputes > 0 ? 'Moderator qarori kerak' : 'Nizo yo‘q'}
+          />
+        </div>
+      </Section>
+
+      {/* ── 2. Voronka ── */}
+      <Section title="So‘rovdan bitimgacha">
+        <div className="funnel">
+          {funnel.map((f, i) => {
+            const prev = i > 0 ? funnel[i - 1].value : null;
+            /* Har bosqichda oldingisidan qancha qismi o'tgani — yo'qotish shu yerda ko'rinadi */
+            const keep = prev && prev > 0 ? Math.round((f.value / prev) * 100) : null;
+            return (
+              <div className="funnel__row" key={f.label}>
+                <span className="funnel__label">{f.label}</span>
+                <div className="funnel__track">
+                  <div className="funnel__bar" style={{ width: `${Math.max(2, (f.value / peak) * 100)}%` }} />
+                </div>
+                <span className="funnel__value num">{f.value}</span>
+                <span className="funnel__keep">{keep != null ? `${keep}%` : ''}</span>
+              </div>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* ── 3. Pul va hajm ── */}
+      <Section title="Pul va hajm">
+        <div className="kpi-grid">
+          <Kpi label="Komissiya" value={money(metrics.commissionUzs, lang)} hint="Yopilgan bitimlardan" />
+          <Kpi label="Obuna daromadi" value={money(metrics.subscriptionRevenueUzs, lang)} />
+          <Kpi
+            label="Bitimga aylanish"
+            value={`${metrics.conversionPercent}%`}
+            hint="So‘rovlardan bitim bo‘lgani"
+          />
+          <Kpi label="Klinikalar" value={metrics.clinics} />
+          <Kpi label="Bemorlar" value={metrics.patients} />
+          <Kpi label="Jami foydalanuvchi" value={metrics.users} />
+        </div>
+      </Section>
+    </div>
   );
 }
 

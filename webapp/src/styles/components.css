@@ -3342,7 +3342,13 @@
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
-  max-width: 860px;
+  /*
+   * 860px matn uchun to'g'ri edi, lekin jadval uchun tor: 1600px
+   * ekranda o'ng tomonning yarmi bo'sh turardi. Endi kengroq, o'qish
+   * kengligini esa element darajasida ushlab turamiz — matn uchun
+   * `.ah__desc` (68ch), kiritish maydonlari uchun `.admin .input` (420px).
+   */
+  max-width: 1400px;
 }
 
 .admin__scrim {
@@ -4298,4 +4304,552 @@
   display: flex;
   gap: var(--s-2);
   flex-shrink: 0;
+}
+
+/* ═════════════  Admin: dizayn qatlami  ═════════════ */
+
+/* ── Sahifa sarlavhasi ── */
+.ah {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.ah__titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.ah__title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.ah__count {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ah__desc {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 68ch;
+}
+
+.ah__actions {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+/* ── Asboblar paneli ── */
+.atoolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.atoolbar__main {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.atoolbar__right {
+  margin-left: auto;
+}
+
+.atoolbar__count {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.admin .atoolbar__search {
+  width: 280px;
+  max-width: 100%;
+}
+
+/* ── Ko'rsatkich ── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--s-3);
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  /* Chap chetdagi ingichka chiziq — ko'rsatkich turini rangsiz ham ajratadi */
+  border-left-width: 3px;
+}
+
+.kpi--good { border-left-color: var(--success); }
+.kpi--warn { border-left-color: var(--warning); }
+.kpi--bad  { border-left-color: var(--danger); }
+
+.kpi__label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.kpi__valueRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+}
+
+.kpi__value {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi__delta {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.kpi__delta.is-up { color: var(--success); }
+.kpi__delta.is-down { color: var(--danger); }
+
+.kpi__hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Jadval ── */
+.atable__wrap {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  /* Keng jadval O'Z ichida suriladi — sahifa yon tomonga qimirlamaydi */
+  overflow-x: auto;
+}
+
+.atable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.atable th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px var(--s-3);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.atable th.is-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.atable th.is-sortable:hover {
+  color: var(--text);
+}
+
+.atable__th {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.atable__sort {
+  font-style: normal;
+  opacity: 0.4;
+  font-size: 10px;
+}
+
+.atable td {
+  padding: 10px var(--s-3);
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.atable tr:last-child td {
+  border-bottom: 0;
+}
+
+.atable tbody tr.is-clickable {
+  cursor: pointer;
+}
+
+.atable tbody tr:hover {
+  background: var(--bg-elevated);
+}
+
+.atable .num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Jadval ichidagi amal tugmalari — qator balandligini oshirmasin */
+.atable .btn {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.arow-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* ── Holat belgisi ── */
+.atag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+
+.atag--good { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.atag--warn { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+.atag--bad  { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.atag--neutral { background: var(--bg-elevated); color: var(--muted); }
+
+/* ── Sahifalash ── */
+.apager {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.apager__slot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.apager__gap {
+  color: var(--muted);
+  padding: 0 2px;
+}
+
+.apager__page {
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.apager__page.is-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ── Bo'sh holat ── */
+.aempty {
+  padding: var(--s-6) var(--s-4);
+  text-align: center;
+}
+
+.aempty__title {
+  font-weight: 600;
+}
+
+.aempty__hint {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Jadval katagi ichidagi ikki qatorli matn */
+.atable__name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.atable__sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Ustki paneldagi bo'lim nomi kompyuterda yashiriladi — sahifa o'z
+   sarlavhasini o'zi ko'rsatadi (izohi va amallari bilan birga) */
+@media (min-width: 921px) {
+  .admin__title { display: none; }
+  .admin__top { display: none; }
+}
+
+/* ── Voronka: bosqichdan bosqichga qancha o'tgani ── */
+.funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.funnel__row {
+  display: grid;
+  grid-template-columns: 90px 1fr 64px 48px;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.funnel__label {
+  font-size: 13px;
+  color: var(--body);
+}
+
+.funnel__track {
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.funnel__bar {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--primary);
+}
+
+.funnel__value {
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Oldingi bosqichdan qancha qismi o'tgani — yo'qotish shu ustunda ko'rinadi */
+.funnel__keep {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .funnel__row { grid-template-columns: 76px 1fr 52px 40px; gap: var(--s-2); }
+}
+
+/* ── Yon panel: guruhlar va belgilar ── */
+.admin__navGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin__navGroup + .admin__navGroup {
+  margin-top: var(--s-4);
+}
+
+.admin__navGroupLabel {
+  padding: 0 var(--s-3) 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.admin__navIcon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* Tanlangan bo'limda belgi ham matn bilan bir xil rangda bo'lsin */
+.admin__navItem.is-active .admin__navIcon {
+  color: var(--primary);
+}
+
+/* ── Qator menyusi ── */
+.rowmenu {
+  position: relative;
+  display: inline-flex;
+}
+
+.rowmenu__btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  color: var(--body);
+  cursor: pointer;
+  line-height: 1;
+  font-size: 15px;
+}
+
+.rowmenu__btn:hover {
+  border-color: var(--field-line);
+}
+
+/* Tashqariga bosish uchun ko'rinmas qatlam */
+.rowmenu__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.rowmenu__list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  box-shadow: var(--shadow-lg);
+}
+
+.rowmenu__item {
+  text-align: left;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rowmenu__item:hover {
+  background: var(--bg-elevated);
+}
+
+.rowmenu__item.is-danger {
+  color: var(--danger);
+}
+
+/* ── Ko'rib chiqish navbati: ro'yxat + tafsilot ── */
+.review {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--s-4);
+  align-items: start;
+}
+
+.review__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  /*
+   * Ro'yxat o'z ichida suriladi: navbat 58 ta bo'lsa ham o'ngdagi
+   * hujjatlar ekrandan chiqib ketmasligi kerak.
+   */
+  position: sticky;
+  top: var(--s-4);
+  max-height: calc(100vh - 140px);
+}
+
+.review__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  padding: 4px;
+}
+
+.review__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.review__row:hover {
+  background: var(--bg-elevated);
+}
+
+.review__row.is-active {
+  background: var(--primary-soft);
+}
+
+.review__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.review__meta {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+}
+
+@media (max-width: 920px) {
+  .review {
+    grid-template-columns: 1fr;
+  }
+  .review__list {
+    position: static;
+    max-height: 320px;
+  }
 }
