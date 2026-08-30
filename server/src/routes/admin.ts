@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { STEP_KINDS } from '../../../shared/types';
+import { listSteps, saveSteps } from '../services/requestSteps';
 import { listSyncLog, planSync, runSync, sourceConfigured } from '../services/catalogSync';
 import { rateLimit } from '../middleware/rateLimit';
 import { forbidden } from '../lib/errors';
@@ -312,3 +314,50 @@ adminRouter.post(
     res.json(result);
   }),
 );
+
+/* ═════════════════  So'rov bosqichlari  ═════════════════ */
+
+/**
+ * Bemor so'rov qoldirayotgandagi bosqichlar.
+ *
+ * Tartib, matn va yoqilgan-yoqilmagani — mahsulot qarori. Admin ularni
+ * shu yerdan o'zgartiradi va o'zining savolini qo'sha oladi.
+ */
+adminRouter.get('/request-steps', (_req, res) => {
+  res.json(listSteps());
+});
+
+const stepOption = z.object({
+  value: z.string().min(1).max(40),
+  uz: z.string().min(1).max(80),
+  ru: z.string().max(80).optional().default(''),
+});
+
+adminRouter.put('/request-steps', (req, res) => {
+  const body = z
+    .object({
+      steps: z
+        .array(
+          z.object({
+            key: z.string().min(2).max(40),
+            kind: z.enum(STEP_KINDS),
+            enabled: z.boolean(),
+            required: z.boolean(),
+            titleUz: z.string().max(120).nullable().optional(),
+            titleRu: z.string().max(120).nullable().optional(),
+            subUz: z.string().max(240).nullable().optional(),
+            subRu: z.string().max(240).nullable().optional(),
+            options: z.array(stepOption).nullable().optional(),
+          }),
+        )
+        .min(1)
+        .max(24),
+    })
+    .parse(req.body);
+
+  const before = listSteps();
+  const after = saveSteps(body.steps, null);
+  logModeration(req.user!.id, 'platform', 0, 'request-steps:update', JSON.stringify({ before, after }));
+
+  res.json(after);
+});

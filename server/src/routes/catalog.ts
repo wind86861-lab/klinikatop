@@ -14,6 +14,7 @@ import { getClinicPublic } from '../services/clinics';
 import { countMatchingClinics } from '../services/matching';
 import { getPricePulse, getTestimonials } from '../services/highlights';
 import { resolveUser } from '../middleware/auth';
+import { wizardSteps } from '../services/requestSteps';
 
 export const catalogRouter = Router();
 
@@ -75,4 +76,18 @@ catalogRouter.get('/highlights', (req, res) => {
     pulse: getPricePulse(cityId, lang),
     testimonials: getTestimonials(8, lang),
   });
+});
+
+/**
+ * So'rov sehrgarining bosqichlari.
+ *
+ * Admin ularni panelidan o'zgartiradi, shu sababli ilova ro'yxatni
+ * kodda emas, shu yerdan oladi. Faqat YOQILGANLARI qaytadi va matn
+ * foydalanuvchi tilida keladi; bo'sh bo'lsa `null` — u holda ilova
+ * o'zining tarjima faylidagi matnni ishlatadi.
+ */
+catalogRouter.get('/request-steps', (req, res) => {
+  const user = resolveUser(req);
+  const lang = user?.lang ?? (String(req.query.lang) === 'ru' ? 'ru' : 'uz');
+  res.json(wizardSteps(lang));
 });

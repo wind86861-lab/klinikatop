@@ -53,6 +53,13 @@ const createSchema = z.object({
     errorMap: () => ({ message: 'Ommaviy oferta shartlarini qabul qiling' }),
   }),
   termsVersion: z.string().max(40).optional(),
+  /*
+   * Admin qo'shgan savollarga javoblar. Shakli oldindan ma'lum emas —
+   * savollarni admin yaratadi. Shuning uchun bu yerda faqat "obyekt"
+   * deb qabul qilinadi, mazmuni esa `validateAnswers` da amaldagi
+   * savollarga solishtirib tekshiriladi.
+   */
+  extraAnswers: z.record(z.unknown()).nullable().optional(),
 });
 
 requestsRouter.get('/', (req, res) => {
@@ -81,6 +88,7 @@ requestsRouter.post('/', (req, res) => {
     subjectBirthYear: body.subjectBirthYear,
     subjectGender: body.subjectGender,
     acceptTerms: body.acceptTerms,
+    extraAnswers: body.extraAnswers ?? null,
     userAgent: req.header('user-agent') ?? null,
   });
   res.status(201).json(request);

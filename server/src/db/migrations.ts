@@ -974,6 +974,82 @@ export const MIGRATIONS: Migration[] = [
       for (const [alias, slug] of pairs) seed.run(alias, slug);
     },
   },
+  {
+    /*
+     * So'rov bosqichlari admin qo'lida.
+     *
+     * Bemor so'rov qoldirayotganda bosqichma-bosqich yuradi. Qaysi
+     * bosqich bor, qaysi tartibda va nima deb yozilgani — bu MAHSULOT
+     * qarori, kod emas. Uni o'zgartirish uchun har safar deploy kutish
+     * noto'g'ri: matn tajriba qilinadi, ortiqcha bosqich olib
+     * tashlanadi, mavsumiy savol qo'shiladi.
+     *
+     * Ikki xil bosqich bor va farqi tub:
+     *
+     *   `builtin` — kodda yozilgan maxsus ekranlar (katalog tanlash,
+     *   byudjet slayderi, sana oynasi, hujjat yuklash). Admin ularning
+     *   TARTIBI, MATNI va yoqilgan-yoqilmaganini o'zgartiradi, lekin
+     *   yangisini yarata olmaydi — ular kod.
+     *
+     *   Qolganlari — admin YARATADIGAN oddiy savollar (matn, tanlov,
+     *   raqam, ha/yo'q). Javoblari `requests.extra_answers` ichida
+     *   JSON bo'lib yotadi.
+     *
+     * Ba'zi bosqichlar o'chirilmaydi (`locked`): ularsiz so'rov
+     * serverda rad etiladi — operatsiya, holat, viloyat va oferta.
+     * Buni bazada belgilab qo'yamiz, aks holda admin o'zi bilmagan
+     * holda so'rov yaratishni butunlay buzib qo'yishi mumkin.
+     */
+    id: '018_request_steps',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS request_steps (
+          id          INTEGER PRIMARY KEY,
+          key         TEXT    NOT NULL UNIQUE,
+          kind        TEXT    NOT NULL,
+          position    INTEGER NOT NULL,
+          enabled     INTEGER NOT NULL DEFAULT 1,
+          required    INTEGER NOT NULL DEFAULT 0,
+          locked      INTEGER NOT NULL DEFAULT 0,
+          title_uz    TEXT,
+          title_ru    TEXT,
+          sub_uz      TEXT,
+          sub_ru      TEXT,
+          options     TEXT,
+          updated_by  INTEGER REFERENCES users(id),
+          updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_request_steps_pos ON request_steps(position);
+      `);
+
+      // Admin yaratgan savollarga bemor bergan javoblar
+      addColumn(db, 'requests', 'extra_answers', 'TEXT');
+
+      /*
+       * Boshlang'ich qiymat — hozir kodda qanday bo'lsa shundoq.
+       * Matn maydonlari bo'sh: bo'sh bo'lsa ilova o'zining tarjima
+       * fayllaridagi matnni ishlatadi. Admin yozsagina ustun keladi.
+       * Shu sababli tilga bog'liq matn ikki joyda takrorlanmaydi.
+       */
+      const seed = db.prepare(
+        `INSERT OR IGNORE INTO request_steps (key, kind, position, enabled, required, locked)
+         VALUES (?, 'builtin', ?, 1, ?, ?)`,
+      );
+      const BUILTIN: [string, number, number][] = [
+        // kalit, majburiymi, qulflanganmi
+        ['who', 0, 0],
+        ['operation', 1, 1],
+        ['condition', 1, 1],
+        ['documents', 0, 0],
+        ['region', 1, 1],
+        ['budget', 0, 0],
+        ['date', 0, 0],
+        ['note', 0, 0],
+        ['review', 1, 1],
+      ];
+      BUILTIN.forEach(([key, required, locked], i) => seed.run(key, i * 10, required, locked));
+    },
+  },
 ];
 
 /**

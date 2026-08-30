@@ -11,6 +11,8 @@ export const uz = {
   'common.close': 'Yopish',
   'common.search': 'Qidirish',
   'common.retry': 'Qayta urinish',
+  'common.yes': 'Ha',
+  'common.no': 'Yo‘q',
   'common.loading': 'Yuklanmoqda…',
   'common.error': 'Xatolik yuz berdi',
   'common.offline': 'Internet aloqasi yo‘q',
@@ -365,6 +367,7 @@ export const uz = {
   'wz.step': '{n} / {total}',
   'wz.back': 'Orqaga',
   'wz.next': 'Keyingi',
+  'wz.optional': 'Ixtiyoriy',
 
   'wz.op.title': 'Qanday operatsiya kerak?',
   'wz.op.sub': 'Bilmasangiz ham bo‘ladi — klinika holatingizga qarab aniqlaydi',

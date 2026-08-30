@@ -12,6 +12,8 @@ export const ru: Record<TranslationKey, string> = {
   'common.close': 'Закрыть',
   'common.search': 'Поиск',
   'common.retry': 'Повторить',
+  'common.yes': 'Да',
+  'common.no': 'Нет',
   'common.loading': 'Загрузка…',
   'common.error': 'Произошла ошибка',
   'common.offline': 'Нет соединения',
@@ -346,6 +348,7 @@ export const ru: Record<TranslationKey, string> = {
   'wz.step': '{n} / {total}',
   'wz.back': 'Назад',
   'wz.next': 'Далее',
+  'wz.optional': 'Необязательно',
 
   'wz.op.title': 'Какая операция нужна?',
   'wz.op.sub': 'Можно и не знать — клиника определит по вашему состоянию',

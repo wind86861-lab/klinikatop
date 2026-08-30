@@ -279,6 +279,12 @@ export interface MedicalRequest {
   /** AI bilan bo'lgan suhbat — klinika bemor nima yozganini to'liq ko'radi */
   aiConversation: ChatTurn[] | null;
   /**
+   * Admin qo'shgan savollarga javoblar, xom holida (kalit → qiymat).
+   * Yorliqlar bosqichlar ro'yxatidan olinadi, shu sababli bu yerda
+   * matn takrorlanmaydi.
+   */
+  extraAnswers: Record<string, unknown> | null;
+  /**
    * So'rov kimga tegishli. O'ziga bo'lsa bemorning profil ma'lumotlari
    * ishlatiladi; tanishiga bo'lsa shu yerdagi qiymatlar.
    */
@@ -877,4 +883,70 @@ export interface RequestSubject {
   name: string | null;
   birthYear: number | null;
   gender: Gender | null;
+}
+
+/* ─────────────────────────  So'rov bosqichlari  ───────────────────────── */
+
+/**
+ * Bemor so'rov qoldirayotgandagi bosqichlar admin panelidan boshqariladi.
+ *
+ * `builtin` — kodda yozilgan maxsus ekran (katalog, byudjet, sana, hujjat).
+ * Qolgan turlar — admin o'zi yaratadigan oddiy savollar; javoblari
+ * so'rovning `extraAnswers` maydonida saqlanadi.
+ */
+export const STEP_KINDS = ['builtin', 'text', 'longtext', 'choice', 'multichoice', 'number', 'boolean'] as const;
+export type StepKind = (typeof STEP_KINDS)[number];
+
+/** Kodda ekrani bor bosqichlar — admin bularni yarata olmaydi, faqat sozlaydi. */
+export const BUILTIN_STEPS = [
+  'who',
+  'operation',
+  'condition',
+  'documents',
+  'region',
+  'budget',
+  'date',
+  'note',
+  'review',
+] as const;
+export type BuiltinStep = (typeof BUILTIN_STEPS)[number];
+
+/**
+ * O'chirib bo'lmaydigan bosqichlar: serverdagi `createRequest` ularsiz
+ * so'rovni rad etadi, ya'ni o'chirish oqimni butunlay buzardi.
+ */
+export const LOCKED_STEPS: readonly BuiltinStep[] = ['operation', 'condition', 'region', 'review'];
+
+export interface StepOption {
+  value: string;
+  uz: string;
+  ru: string;
+}
+
+export interface RequestStep {
+  id: number;
+  key: string;
+  kind: StepKind;
+  position: number;
+  enabled: boolean;
+  required: boolean;
+  /** Qulflangan bosqichni o'chirib ham, ixtiyoriy qilib ham bo'lmaydi */
+  locked: boolean;
+  /** Bo'sh bo'lsa ilova o'zining tarjimasini ishlatadi */
+  titleUz: string | null;
+  titleRu: string | null;
+  subUz: string | null;
+  subRu: string | null;
+  /** Faqat `choice` va `multichoice` uchun */
+  options: StepOption[] | null;
+}
+
+/** Bemor ilovasiga beriladigan ko'rinish — faqat yoqilganlari, tili tanlangan. */
+export interface WizardStep {
+  key: string;
+  kind: StepKind;
+  required: boolean;
+  title: string | null;
+  sub: string | null;
+  options: { value: string; label: string }[] | null;
 }

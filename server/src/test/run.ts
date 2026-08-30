@@ -2020,6 +2020,154 @@ async function main() {
     banisa.cleanAddress('olmazor, , Forobiy 28', null) === 'olmazor, Forobiy 28',
   );
 
+  /* ══════════════  So'rov bosqichlari  ══════════════ */
+
+  section("So'rov bosqichlari");
+
+  const steps = require('../services/requestSteps');
+
+  const base = steps.listSteps();
+  check('boshlang‘ich to‘qqizta tayyor bosqich', base.length === 9);
+  check('hammasi builtin', base.every((s: any) => s.kind === 'builtin'));
+  check('tartib o‘sib boradi', base.every((s: any, i: number) => i === 0 || s.position >= base[i - 1].position));
+  check('operatsiya qulflangan', base.find((s: any) => s.key === 'operation').locked === true);
+  check('izoh qulflanmagan', base.find((s: any) => s.key === 'note').locked === false);
+
+  /** Ro'yxatni saqlashga tayyor ko'rinishga o'tkazadi. */
+  const asInput = (list: any[]) =>
+    list.map((s) => ({
+      key: s.key,
+      kind: s.kind,
+      enabled: s.enabled,
+      required: s.required,
+      titleUz: s.titleUz,
+      titleRu: s.titleRu,
+      subUz: s.subUz,
+      subRu: s.subRu,
+      options: s.options,
+    }));
+
+  // ── Tartibni o'zgartirish ──
+  const reordered = asInput(base);
+  const noteIdx = reordered.findIndex((s) => s.key === 'note');
+  const [note] = reordered.splice(noteIdx, 1);
+  reordered.splice(1, 0, note);
+  const afterMove = steps.saveSteps(reordered, null);
+  check('izoh ikkinchi o‘ringa ko‘chdi', afterMove[1].key === 'note');
+  check('ko‘chirishdan keyin ham to‘qqizta', afterMove.length === 9);
+
+  // ── Ixtiyoriy bosqichni o'chirish ──
+  const off = asInput(afterMove).map((s) => (s.key === 'documents' ? { ...s, enabled: false } : s));
+  steps.saveSteps(off, null);
+  check(
+    'hujjatlar bosqichi o‘chdi',
+    steps.wizardSteps('uz').every((s: any) => s.key !== 'documents'),
+  );
+  check('o‘chgan bosqich admin ro‘yxatida qoladi', steps.listSteps().some((s: any) => s.key === 'documents'));
+
+  // ── Qulflangan bosqichni o'chirib bo'lmaydi ──
+  throws('qulflangan bosqich o‘chmaydi', () =>
+    steps.saveSteps(
+      asInput(steps.listSteps()).map((s) => (s.key === 'operation' ? { ...s, enabled: false } : s)),
+      null,
+    ),
+  );
+  throws('qulflangan bosqich ixtiyoriy bo‘lmaydi', () =>
+    steps.saveSteps(
+      asInput(steps.listSteps()).map((s) => (s.key === 'region' ? { ...s, required: false } : s)),
+      null,
+    ),
+  );
+
+  // ── Tayyor bosqichni yo'qotib bo'lmaydi ──
+  throws('tayyor bosqich ro‘yxatdan tushib qolmaydi', () =>
+    steps.saveSteps(asInput(steps.listSteps()).filter((s) => s.key !== 'budget'), null),
+  );
+  throws('yangi builtin yaratib bo‘lmaydi', () =>
+    steps.saveSteps([...asInput(steps.listSteps()), { key: 'xray', kind: 'builtin', enabled: true, required: false }], null),
+  );
+
+  // ── Matnni o'zgartirish ──
+  steps.saveSteps(
+    asInput(steps.listSteps()).map((s) =>
+      s.key === 'budget' ? { ...s, titleUz: 'Byudjetingiz', titleRu: 'Ваш бюджет' } : s,
+    ),
+    null,
+  );
+  check(
+    'sarlavha o‘zbekcha keldi',
+    steps.wizardSteps('uz').find((s: any) => s.key === 'budget').title === 'Byudjetingiz',
+  );
+  check(
+    'sarlavha ruscha keldi',
+    steps.wizardSteps('ru').find((s: any) => s.key === 'budget').title === 'Ваш бюджет',
+  );
+  check(
+    'yozilmagan matn null qaytadi',
+    steps.wizardSteps('uz').find((s: any) => s.key === 'note').title === null,
+  );
+
+  // ── Admin savoli qo'shish ──
+  const withCustom = [
+    ...asInput(steps.listSteps()),
+    {
+      key: 'smoking',
+      kind: 'choice',
+      enabled: true,
+      required: true,
+      titleUz: 'Chekasizmi?',
+      titleRu: 'Курите?',
+      options: [
+        { value: 'yes', uz: 'Ha', ru: 'Да' },
+        { value: 'no', uz: 'Yo‘q', ru: 'Нет' },
+      ],
+    },
+  ];
+  const withQ = steps.saveSteps(withCustom, null);
+  check('savol qo‘shildi', withQ.length === 10);
+  check('savol turi saqlandi', withQ.find((s: any) => s.key === 'smoking').kind === 'choice');
+  check(
+    'variantlar tilga qarab keladi',
+    steps.wizardSteps('ru').find((s: any) => s.key === 'smoking').options[0].label === 'Да',
+  );
+
+  throws('ikkitadan kam variant rad etiladi', () =>
+    steps.saveSteps(
+      [...asInput(steps.listSteps()).filter((s) => s.key !== 'smoking'),
+        { key: 'q2', kind: 'choice', enabled: true, required: false, titleUz: 'Savol', options: [{ value: 'a', uz: 'A', ru: 'A' }] }],
+      null,
+    ),
+  );
+  throws('noto‘g‘ri kalit rad etiladi', () =>
+    steps.saveSteps([...asInput(steps.listSteps()), { key: 'Bad Key!', kind: 'text', enabled: true, required: false }], null),
+  );
+  throws('bir kalit ikki marta kelmaydi', () =>
+    steps.saveSteps([...asInput(steps.listSteps()), ...asInput(steps.listSteps()).slice(0, 1)], null),
+  );
+
+  // ── Javoblarni tekshirish ──
+  check('to‘g‘ri javob qabul qilindi', steps.validateAnswers({ smoking: 'yes' }) === '{"smoking":"yes"}');
+  throws('noma‘lum variant rad etiladi', () => steps.validateAnswers({ smoking: 'maybe' }));
+  throws('majburiy savolsiz o‘tmaydi', () => steps.validateAnswers({}));
+  check(
+    'noma‘lum kalit e‘tiborsiz qoldiriladi',
+    steps.validateAnswers({ smoking: 'no', qadimgi: 'x' }) === '{"smoking":"no"}',
+  );
+
+  // Ko'rsatish uchun ochish
+  const shown = steps.readAnswers('{"smoking":"no"}', 'uz');
+  check('javob yorlig‘i bilan ochildi', shown[0].label === 'Chekasizmi?' && shown[0].value === 'Yo‘q');
+  check('buzuq JSON bo‘sh qaytaradi', steps.readAnswers('{buzuq', 'uz').length === 0);
+
+  // ── Tozalash: sinovdan keyin dastlabki holatga qaytaramiz ──
+  steps.saveSteps(
+    asInput(steps.listSteps())
+      .filter((s) => s.kind === 'builtin')
+      .map((s) => ({ ...s, enabled: true, titleUz: null, titleRu: null })),
+    null,
+  );
+  check('sinovdan keyin tiklandi', steps.listSteps().length === 9 && steps.validateAnswers({}) === null);
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

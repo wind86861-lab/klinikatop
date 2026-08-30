@@ -19,6 +19,7 @@ import { cityName } from '@/i18n';
 import { TermsCheckbox, TermsSheet } from '@/components/Terms';
 import { OperationStep } from '@/components/wizard/OperationStep';
 import { DocumentsStep } from '@/components/wizard/DocumentsStep';
+import { CustomStep } from '@/components/wizard/CustomStep';
 import { PriceChart } from '@/components/Visuals';
 import {
   Button,
@@ -33,7 +34,7 @@ import {
   Skeleton,
   Textarea,
 } from '@/ui';
-import { GENDERS, ageFromBirthYear, type ChatTurn, type Gender, type Operation, type PriceStats, type StoredFile, type Urgency } from '@shared/types';
+import { GENDERS, ageFromBirthYear, type ChatTurn, type Gender, type Operation, type PriceStats, type StoredFile, type Urgency, type WizardStep } from '@shared/types';
 
 /** Vizard qoralamasi — bitta manba. */
 export interface Draft {
@@ -63,13 +64,22 @@ export interface Draft {
  * (o'ziga bo'lsa profil ma'lumotlari ishlatiladi), shuning uchun uni
  * oxirida so'rash kech bo'lardi.
  */
-const STEPS = ['who', 'operation', 'condition', 'documents', 'region', 'budget', 'date', 'note', 'review'] as const;
-type Step = (typeof STEPS)[number];
+/*
+ * Zaxira ro'yxat. Bosqichlar admin panelidan keladi, lekin so'rov
+ * javob bermasa bemor ilovasiz qolmasligi kerak — shunda shu ishlatiladi.
+ */
+const FALLBACK_STEPS: WizardStep[] = [
+  'who', 'operation', 'condition', 'documents', 'region', 'budget', 'date', 'note', 'review',
+].map((key) => ({ key, kind: 'builtin', required: false, title: null, sub: null, options: null }));
+
+type Step = string;
 
 export function NewRequest() {
   const { t, user, session, toast } = useApp();
   const navigate = useNavigate();
 
+  const [steps, setSteps] = useState<WizardStep[]>(FALLBACK_STEPS);
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -96,6 +106,26 @@ export function NewRequest() {
   });
 
   const patch = (part: Partial<Draft>) => setDraft((d) => ({ ...d, ...part }));
+  const answer = (key: string, value: unknown) => setAnswers((a) => ({ ...a, [key]: value }));
+
+  /*
+   * Bosqichlarni admin belgilaydi. Xato bo'lsa zaxira ro'yxat qoladi —
+   * so'rov qoldirish imkoniyati sozlama tufayli yo'qolmasligi kerak.
+   */
+  useEffect(() => {
+    let alive = true;
+    api
+      .requestSteps()
+      .then((list) => {
+        if (alive && list.length) setSteps(list);
+      })
+      .catch(() => {
+        /* zaxira ro'yxat bilan davom etamiz */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Profil to'ldirilmagan bo'lsa avval ro'yxatdan o'tkazamiz
   useEffect(() => {
@@ -109,10 +139,23 @@ export function NewRequest() {
     if (user?.cityId) setDraft((d) => (d.cityId === null ? { ...d, cityId: user.cityId } : d));
   }, [user?.cityId]);
 
-  const step = STEPS[index];
+  const current = steps[Math.min(index, steps.length - 1)];
+  const step = current?.key ?? 'review';
+  /** Bosqich kaliti bo'yicha o'rni — tartib o'zgargani uchun qidiriladi */
+  const indexOf = (key: string) => steps.findIndex((s) => s.key === key);
+  /** Shu bosqichdan keyingisi; oxirgisi bo'lsa o'sha joyda qoladi */
+  const nextAfter = (key: string) => Math.min(indexOf(key) + 1, steps.length - 1);
 
   /** Har qadamning "davom etish" sharti. Ixtiyoriy qadamlar doim o'tadi. */
   const canAdvance = useMemo(() => {
+    // Admin qo'shgan savol: majburiy bo'lsa javob bo'lishi shart
+    if (current && current.kind !== 'builtin') {
+      if (!current.required) return true;
+      const v = answers[current.key];
+      if (Array.isArray(v)) return v.length > 0;
+      if (typeof v === 'string') return v.trim().length > 0;
+      return v !== undefined && v !== null && v !== '';
+    }
     switch (step) {
       case 'who':
         // Tanishiga bo'lsa uning ma'lumotlari to'liq bo'lishi kerak
@@ -131,7 +174,7 @@ export function NewRequest() {
       default:
         return true;
     }
-  }, [step, draft, termsAccepted]);
+  }, [step, current, answers, draft, termsAccepted]);
 
   const go = (delta: number) => {
     const next = index + delta;
@@ -139,7 +182,7 @@ export function NewRequest() {
       navigate(-1);
       return;
     }
-    if (next >= STEPS.length) return;
+    if (next >= steps.length) return;
     setDirection(delta);
     setIndex(next);
     haptic.select();
@@ -148,7 +191,7 @@ export function NewRequest() {
 
   const jumpTo = (target: Step) => {
     setDirection(-1);
-    setIndex(STEPS.indexOf(target));
+    setIndex(Math.max(0, indexOf(target)));
     window.scrollTo({ top: 0 });
   };
 
@@ -175,6 +218,7 @@ export function NewRequest() {
         subjectGender: draft.forSelf ? null : draft.subjectGender,
         aiSuggested: draft.aiSuggested,
         acceptTerms: true,
+        extraAnswers: Object.keys(answers).length ? answers : null,
       });
       haptic.success();
       navigate(`/request/${request.id}`, { replace: true });
@@ -188,7 +232,7 @@ export function NewRequest() {
   return (
     <Screen
       onBack={() => go(-1)}
-      title={t('wz.step', { n: index + 1, total: STEPS.length })}
+      title={t('wz.step', { n: index + 1, total: steps.length })}
       footer={
         step === 'review' ? (
           <Button block loading={submitting} disabled={!canAdvance} onClick={submit}>
@@ -202,9 +246,9 @@ export function NewRequest() {
       }
     >
       <div className="wz-progress" aria-hidden>
-        {STEPS.map((s, i) => (
+        {steps.map((s, i) => (
           <m.span
-            key={s}
+            key={s.key}
             className="wz-progress__seg"
             animate={{
               background: i <= index ? 'var(--primary)' : 'var(--line)',
@@ -231,9 +275,10 @@ export function NewRequest() {
               draft={draft}
               onPick={(operation, aiSuggested) => {
                 patch({ operation, aiSuggested });
-                // Tanlangach avtomatik keyingi qadamga — bitta tegish kamayadi
+                // Tanlangach avtomatik keyingi qadamga — bitta tegish kamayadi.
+                // Qattiq raqam emas: admin tartibni o'zgartirgan bo'lishi mumkin.
                 setDirection(1);
-                setIndex(2);
+                setIndex(nextAfter('operation'));
                 haptic.press();
                 window.scrollTo({ top: 0 });
               }}
@@ -246,11 +291,15 @@ export function NewRequest() {
                   aiConversation: turns,
                 });
                 setDirection(1);
-                setIndex(2);
+                setIndex(nextAfter('operation'));
                 haptic.press();
                 window.scrollTo({ top: 0 });
               }}
             />
+          )}
+
+          {current && current.kind !== 'builtin' && (
+            <CustomStep step={current} value={answers[current.key]} onChange={(v: unknown) => answer(current.key, v)} />
           )}
 
           {step === 'condition' && <ConditionStep draft={draft} patch={patch} />}

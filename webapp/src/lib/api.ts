@@ -48,6 +48,10 @@ import type {
   Urgency,
   User,
   ChatMessage,
+  WizardStep,
+  RequestStep,
+  StepOption,
+  StepKind,
 } from '@shared/types';
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
@@ -234,6 +238,19 @@ export interface Highlights {
   testimonials: Testimonial[];
 }
 
+/** Admin panel bosqichni saqlashda yuboradigan shakl */
+export interface StepDraft {
+  key: string;
+  kind: StepKind;
+  enabled: boolean;
+  required: boolean;
+  titleUz?: string | null;
+  titleRu?: string | null;
+  subUz?: string | null;
+  subRu?: string | null;
+  options?: StepOption[] | null;
+}
+
 export const api = {
   me: () => get<Bootstrap>('/me'),
   setLang: (lang: Lang) => patch<User>('/me', { lang }),
@@ -274,6 +291,9 @@ export const api = {
       `/catalog/price-stats?operationId=${operationId}&cityId=${cityId}`,
     ),
   highlights: () => get<Highlights>('/catalog/highlights'),
+
+  /** So'rov sehrgarining bosqichlari — admin panelidan boshqariladi */
+  requestSteps: () => get<WizardStep[]>('/catalog/request-steps'),
   unknownOperation: () => get<Operation | null>('/catalog/unknown-operation'),
   clinicProfile: (id: number) => get<{ clinic: ClinicPublic; reviews: Review[] }>(`/catalog/clinics/${id}`),
 
@@ -302,6 +322,8 @@ export const api = {
     subjectGender?: Gender | null;
     /** Ommaviy oferta qabuli — serverda majburiy */
     acceptTerms: true;
+    /** Admin qo'shgan savollarga javoblar */
+    extraAnswers?: Record<string, unknown> | null;
   }) => post<RequestWithMeta>('/requests', body),
 
   /** Tibbiy hujjat yuklash — base64, qo'shimcha kutubxona kerak emas */
@@ -405,6 +427,10 @@ export const api = {
   adminClinics: (filter: AdminClinicFilter = 'all') =>
     get<AdminClinicRow[]>(`/admin/clinics?filter=${filter}`),
   platformSettings: () => get<PlatformSettings>('/admin/settings'),
+
+  /** So'rov bosqichlari — admin ko'rinishi (o'chirilganlari bilan) */
+  adminRequestSteps: () => get<RequestStep[]>('/admin/request-steps'),
+  saveRequestSteps: (steps: StepDraft[]) => put<RequestStep[]>('/admin/request-steps', { steps }),
   savePlatformSettings: (body: Partial<PlatformSettings>) =>
     patch<PlatformSettings>('/admin/settings', body),
   setClinicCommission: (clinicId: number, percent: number | null) =>

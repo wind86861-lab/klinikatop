@@ -21,6 +21,7 @@ import {
 import { bus, ch } from './events';
 import { findMatchingClinics } from './matching';
 import { notify, notifyClinic } from './notifications';
+import { validateAnswers } from './requestSteps';
 import { TERMS_VERSION, recordAcceptance } from './terms';
 import { assertOwnedFiles, listFiles } from './files';
 
@@ -88,6 +89,8 @@ export interface CreateRequestInput {
   forSelf?: boolean;
   subjectName?: string | null;
   subjectBirthYear?: number | null;
+  /** Admin qo'shgan savollarga javoblar — kalit: bosqich kaliti */
+  extraAnswers?: Record<string, unknown> | null;
   subjectGender?: 'male' | 'female' | null;
   /** Bemor ommaviy ofertani qabul qilganini tasdiqlaydi — har so'rovda majburiy */
   acceptTerms: boolean;
@@ -200,17 +203,20 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
     throw badRequest('invalid_budget', 'Byudjet noto‘g‘ri');
   }
 
+  // Admin qo'shgan savollar: majburiylari to'ldirilganmi
+  const extraAnswers = validateAnswers(input.extraAnswers ?? null);
+
   const requestId = tx(() => {
     const info = db
       .prepare(
         `INSERT INTO requests (patient_id, operation_id, city_id, budget_uzs, condition_text, note,
                                urgency, attachments, other_regions_ok, date_from, date_to, date_flexible,
                                ai_conversation, status, ai_suggested, expires_at, terms_version, terms_accepted_at,
-                               for_self, subject_name, subject_birth_year, subject_gender)
+                               for_self, subject_name, subject_birth_year, subject_gender, extra_answers)
          VALUES (@patientId, @operationId, @cityId, @budgetUzs, @conditionText, @note,
                  @urgency, @attachments, @otherRegionsOk, @dateFrom, @dateTo, @dateFlexible,
                  @aiConversation, 'NEW', @aiSuggested, @expiresAt, @termsVersion, datetime('now'),
-                 @forSelf, @subjectName, @subjectBirthYear, @subjectGender)`,
+                 @forSelf, @subjectName, @subjectBirthYear, @subjectGender, @extraAnswers)`,
       )
       .run({
         patientId: input.patientId,
@@ -235,6 +241,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
         aiSuggested: input.aiSuggested ? 1 : 0,
         expiresAt: hoursFromNow(config.rules.requestTtlHours),
         termsVersion: TERMS_VERSION,
+        extraAnswers,
       });
 
     const id = Number(info.lastInsertRowid);

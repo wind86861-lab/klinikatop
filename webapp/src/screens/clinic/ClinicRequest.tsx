@@ -12,6 +12,7 @@ import { haptic } from '@/lib/telegram';
 import { popVariants, spring } from '@/lib/motion';
 import { cityName, opAlias, opName } from '@/i18n';
 import { PriceChart } from '@/components/Visuals';
+import { ExtraAnswers } from '@/components/ExtraAnswers';
 import { AttachmentList } from '@/components/wizard/DocumentsStep';
 import {
   Badge,
@@ -221,6 +222,9 @@ export function ClinicRequest() {
             <p style={{ fontSize: 'var(--t-sm)', lineHeight: 1.5 }}>{request.conditionText}</p>
           </div>
         )}
+
+        {/* Admin qo'shgan savollarga javoblar */}
+        <ExtraAnswers answers={request.extraAnswers} />
 
         {request.dateFrom && (
           <div className="between">

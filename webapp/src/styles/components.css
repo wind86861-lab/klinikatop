@@ -4136,3 +4136,124 @@
   .bl__fact { flex-direction: column; gap: 1px; }
   .bl__fact dd { text-align: left; }
 }
+
+/* ═════════════  Admin: so'rov bosqichlari  ═════════════ */
+
+/*
+ * Bosqichlar ro'yxati admin uchun — kompyuterda, sichqoncha bilan
+ * ishlanadi. Shuning uchun tortib ko'chirish emas, ↑/↓ tugmalari:
+ * ular klaviaturadan ham ishlaydi va tegib ketib tasodifan tartibni
+ * buzib qo'yish xavfi yo'q.
+ */
+.stack--tight {
+  gap: var(--s-2);
+}
+
+.row--gap {
+  gap: var(--s-2);
+  align-items: center;
+}
+
+.row--gap > * {
+  flex: 1;
+}
+
+.row--gap > button {
+  flex: 0 0 auto;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.stepRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+/* O'chirilgan bosqich ro'yxatda qoladi, lekin darrov ajralib turadi */
+.stepRow.is-off {
+  opacity: 0.55;
+}
+
+.stepRow__order {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.stepRow__order button {
+  width: 26px;
+  height: 22px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.stepRow__order button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.stepRow__num {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.stepRow__body {
+  min-width: 0;
+}
+
+.stepRow__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.stepRow__what {
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.stepRow__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Saqlash paneli ustida turadi — o'zgarish yo'qolib qolmasin */
+.admin__saveBar {
+  position: sticky;
+  bottom: var(--s-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 720px) {
+  .stepRow {
+    grid-template-columns: auto 1fr;
+  }
+  .stepRow__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
