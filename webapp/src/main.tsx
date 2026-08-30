@@ -6,7 +6,7 @@ import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { isCabinetPath } from './lib/session';
 import { initTelegram } from './lib/telegram';
-import { applyTheme, watchTelegramTheme } from './lib/theme';
+import { applyTheme, watchSystemTheme, watchTelegramTheme } from './lib/theme';
 import './styles/global.css';
 import './styles/components.css';
 
@@ -41,6 +41,7 @@ initTelegram();
  */
 applyTheme();
 watchTelegramTheme();
+watchSystemTheme();
 
 /*
  * Boshlang'ich ekranni index.html chizadi va u DARHOL ko'rinadi.

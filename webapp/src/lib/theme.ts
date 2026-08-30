@@ -17,7 +17,7 @@
  * Endi bitta funksiya ikkalasini birga qiladi: qaysi mavzu
  * qo'llanilsa, Telegram ramkasi ham o'sha rangda bo'ladi.
  */
-import { tg } from './telegram';
+import { inTelegram, tg } from './telegram';
 
 export type Theme = 'auto' | 'light' | 'dark';
 
@@ -29,11 +29,19 @@ const BG: Record<'light' | 'dark', string> = {
   dark: '#0c1817',
 };
 
+/*
+ * Sukut bo'yicha YORUG'.
+ *
+ * Ilgari `auto` edi va ilova telefon sozlamasiga ergashardi. Amalda
+ * ko'p odamning telefoni qorong'i, lekin ilova yorug' rejimda
+ * o'ylangan — tibbiy matn, hujjat va narx jadvallari yorug' fonda
+ * ancha tiniq. Qorong'ini xohlagan odam sozlamalardan tanlaydi.
+ */
 export function savedTheme(): Theme {
   try {
-    return (localStorage.getItem(KEY) as Theme | null) ?? 'auto';
+    return (localStorage.getItem(KEY) as Theme | null) ?? 'light';
   } catch {
-    return 'auto';
+    return 'light';
   }
 }
 
@@ -44,7 +52,18 @@ export function savedTheme(): Theme {
  */
 function resolve(theme: Theme): 'light' | 'dark' {
   if (theme !== 'auto') return theme;
-  if (tg?.colorScheme) return tg.colorScheme === 'dark' ? 'dark' : 'light';
+
+  /*
+   * Telegram sxemasiga FAQAT haqiqatan Telegram ichida bo'lsak
+   * ishonamiz.
+   *
+   * Telegram ko'prigi skripti (`telegram-web-app.js`) oddiy brauzerda
+   * ham yuklanadi va `colorScheme` ni 'light' deb beradi. Ilgari
+   * shunchaki `tg?.colorScheme` tekshirilardi — natijada klinika
+   * kabineti brauzerda ochilganda `auto` hech qachon tizim
+   * sozlamasiga ergashmasdi, doim 'light' chiqardi.
+   */
+  if (inTelegram && tg?.colorScheme) return tg.colorScheme === 'dark' ? 'dark' : 'light';
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
@@ -58,11 +77,19 @@ export function applyTheme(theme: Theme = savedTheme()) {
   const actual = resolve(theme);
 
   /*
-   * `auto` da belgi qo'yilmaydi: shunda CSS `prefers-color-scheme` ga
-   * qarab ishlaydi va tizim sozlamasi o'zgarganda ilova o'zi ergashadi.
+   * HAL QILINGAN qiymat belgilanadi — `auto` bo'lganda ham.
+   *
+   * Ilgari `auto` da belgi olib tashlanardi va CSS `prefers-color-scheme`
+   * ga qarardi. Lekin yuqoridagi `resolve` avval TELEGRAM sxemasini
+   * oladi. Ikkalasi farq qilsa (Telegram qorong'i, telefonning o'zi
+   * yorug') natija bo'linardi: `html` qorong'i bo'yaladi, CSS esa
+   * yorug' ranglarni beradi — ekranning bir qismi qora, qolgani oq.
+   *
+   * Endi bitta qiymat ham belgiga, ham fonga ketadi, ya'ni ular
+   * hech qachon farq qila olmaydi. Tizim o'zgarishiga ergashish
+   * `watchSystemTheme` bilan qo'lda qilinadi.
    */
-  if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.setAttribute('data-theme', actual);
 
   const bg = BG[actual];
 
@@ -101,6 +128,20 @@ export function setTheme(theme: Theme) {
  */
 export function watchTelegramTheme() {
   tg?.onEvent?.('themeChanged', () => {
+    if (savedTheme() === 'auto') applyTheme('auto');
+  });
+}
+
+/**
+ * Tizim mavzusi o'zgarganda ergashamiz — faqat `auto` bo'lsa.
+ *
+ * Bu ilgari CSS `prefers-color-scheme` orqali o'zi bo'lardi. Endi
+ * mavzu belgisi doim qo'yilgani uchun (yuqoridagi izohga qarang)
+ * o'zgarishni qo'lda eshitamiz.
+ */
+export function watchSystemTheme() {
+  const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+  mq?.addEventListener?.('change', () => {
     if (savedTheme() === 'auto') applyTheme('auto');
   });
 }

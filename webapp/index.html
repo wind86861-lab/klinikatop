@@ -48,8 +48,15 @@
         Bu uslub sahifa ichida: alohida fayl yana bitta so'rov
         bo'lardi va maqsadni yo'qotardi.
       */
+      /*
+        Fon SUKUT bo'yicha yorug'. Qorong'i faqat `data-theme="dark"`
+        qo'yilganda — uni quyidagi kichik skript birinchi bo'yashdan
+        oldin qo'yadi. Ilgari bu yerda `prefers-color-scheme` turardi
+        va telefoni qorong'i odam yorug' ilovaga kirishda qora
+        ekranni bir lahza ko'rib qolardi.
+      */
       html { background: #eaf0ee; }
-      @media (prefers-color-scheme: dark) { html { background: #0c1817; } }
+      html[data-theme='dark'] { background: #0c1817; }
 
       body { margin: 0; }
 
@@ -81,6 +88,37 @@
         .boot__mark { animation: none; opacity: 1; }
       }
     </style>
+
+    <!--
+      Mavzu birinchi bo'yashdan OLDIN qo'yiladi.
+
+      React ulanguncha `lib/theme.ts` ishga tushmaydi, ya'ni bu
+      skriptsiz qorong'ini tanlagan odam avval yorug' ekranni ko'rib,
+      keyin qorong'iga sakrardi. Mantiq `lib/theme.ts` dagi bilan bir
+      xil bo'lishi SHART — u yerda o'zgarsa, bu yerda ham o'zgarsin.
+    -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('klinikatop.theme') || 'light';
+          var actual = saved;
+          if (saved === 'auto') {
+            // Ko'prik skripti brauzerda ham yuklanadi va 'light' beradi —
+            // shuning uchun `initData` bor-yo'qligi tekshiriladi
+            var tg = window.Telegram && window.Telegram.WebApp;
+            if (tg && !tg.initData) tg = null;
+            actual = tg && tg.colorScheme
+              ? (tg.colorScheme === 'dark' ? 'dark' : 'light')
+              : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          }
+          document.documentElement.setAttribute('data-theme', actual);
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', actual === 'dark' ? '#0c1817' : '#eaf0ee');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root">
