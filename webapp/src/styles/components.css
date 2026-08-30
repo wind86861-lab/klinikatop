@@ -4152,10 +4152,20 @@
 .row--gap {
   gap: var(--s-2);
   align-items: center;
+  /*
+   * Panelda maydon kengligi matn uzunligidan kelib chiqadi (.admin .input
+   * uchun 420px). Bu qatorda yonma-yon ikkita maydon bor, shuning uchun
+   * chegara ikki barobar emas, bir oz kengroq — aks holda ular kartaga
+   * cho'zilib, qolgan maydonlardan ajralib qolardi.
+   */
+  max-width: 560px;
 }
 
-.row--gap > * {
+.row--gap > .input {
   flex: 1;
+  /* Yuqoridagi umumiy 420px chegarasi bu yerda o'rinsiz — qator o'zi chegaralangan */
+  max-width: none;
+  min-width: 0;
 }
 
 .row--gap > button {

@@ -61,6 +61,27 @@ if (process.env.INIT_SCRIPT) {
 await send('Page.navigate', { url });
 await new Promise((r) => setTimeout(r, +waitMs));
 
+/*
+ * CLICK_TEXT — sahifa yuklangach matni bo'yicha tugmani bosadi.
+ * Admin panelidagi bo'limlar URL bilan emas, holat bilan almashadi,
+ * shuning uchun ularni suratga olishning boshqa yo'li yo'q.
+ */
+if (process.env.CLICK_TEXT) {
+  const clicked = await send('Runtime.evaluate', {
+    expression: `(() => {
+      const want = ${JSON.stringify(process.env.CLICK_TEXT)};
+      const el = [...document.querySelectorAll('button, a')]
+        .find((n) => (n.textContent || '').trim().includes(want));
+      if (!el) return 'topilmadi';
+      el.click();
+      return 'bosildi';
+    })()`,
+    returnByValue: true,
+  });
+  logs.push('[click] ' + clicked.result.value);
+  await new Promise((r) => setTimeout(r, 2500));
+}
+
 const info = await send('Runtime.evaluate', {
   expression: 'JSON.stringify({h: document.body.scrollHeight, kids: document.getElementById("root").children.length})',
   returnByValue: true,

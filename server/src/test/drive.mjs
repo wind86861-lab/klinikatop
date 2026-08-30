@@ -64,6 +64,43 @@ await send('Emulation.setDeviceMetricsOverride', {
  *
  *   INIT_SCRIPT="window.Telegram = {...}" node drive.mjs ...
  */
+/*
+ * TG_INIT_DATA — bemor ilovasini brauzerda ochish uchun Telegram stubi.
+ *
+ * Diqqat: obyekt MUZLATILADI. Sahifadagi haqiqiy Telegram SDK skripti
+ * yuklangach `window.Telegram.WebApp` ni o'zinikiga almashtiradi va
+ * uning `initData` si brauzerda bo'sh bo'ladi — natijada ilova o'zini
+ * Telegramdan tashqarida deb hisoblab, veb sahifasini ko'rsatadi.
+ * Muzlatilgan obyektni almashtirib bo'lmaydi.
+ *
+ *   TG_INIT_DATA="$(npx tsx src/test/sign.ts 12345)" node drive.mjs …
+ *
+ * Bemorning `onboardedAt` i ham to'ldirilgan bo'lishi kerak, aks holda
+ * ilova `/onboarding` ga yo'naltiradi:
+ *   curl -X POST -H "x-init-data: $ID" localhost:8080/api/me/onboarded
+ */
+if (process.env.TG_INIT_DATA) {
+  const webApp = {
+    initData: process.env.TG_INIT_DATA,
+    initDataUnsafe: { user: { id: 1, first_name: 'Sinov', language_code: 'uz' } },
+    colorScheme: 'light',
+    themeParams: {},
+    viewportHeight: 800,
+    MainButton: {}, BackButton: {}, HapticFeedback: {},
+  };
+  const noop = ['ready', 'expand', 'close', 'setBackgroundColor', 'setHeaderColor', 'onEvent', 'offEvent', 'openLink', 'openTelegramLink'];
+  const source = `Object.defineProperty(window, 'Telegram', {
+    value: Object.freeze({ WebApp: Object.assign(${JSON.stringify(webApp)}, {
+      ${noop.map((n) => `${n}(){}`).join(',')},
+      MainButton: { show(){}, hide(){}, setText(){}, onClick(){}, offClick(){} },
+      BackButton: { show(){}, hide(){}, onClick(){}, offClick(){} },
+      HapticFeedback: { impactOccurred(){}, selectionChanged(){}, notificationOccurred(){} },
+    }) }),
+    writable: false, configurable: false,
+  });`;
+  await send('Page.addScriptToEvaluateOnNewDocument', { source });
+}
+
 if (process.env.INIT_SCRIPT) {
   await send('Page.addScriptToEvaluateOnNewDocument', { source: process.env.INIT_SCRIPT });
 }
