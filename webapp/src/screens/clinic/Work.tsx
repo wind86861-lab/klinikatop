@@ -516,7 +516,9 @@ function TemplateSheet({
   const [operationId, setOperationId] = useState<number | null>(null);
   const [price, setPrice] = useState('');
   const [includes, setIncludes] = useState<string[]>(['']);
+  const [advantages, setAdvantages] = useState<string[]>(['']);
   const [leadTimeDays, setLeadTimeDays] = useState(7);
+  const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [seeded, setSeeded] = useState<number | 'new' | null>(null);
 
@@ -528,7 +530,9 @@ function TemplateSheet({
     setOperationId(tpl?.operationId ?? null);
     setPrice(tpl?.priceUzs ? groupDigits(tpl.priceUzs) : '');
     setIncludes(tpl?.includes.length ? tpl.includes : ['']);
+    setAdvantages(tpl?.advantages.length ? tpl.advantages : ['']);
     setLeadTimeDays(tpl?.leadTimeDays ?? 7);
+    setNote(tpl?.note ?? '');
   }
 
   const save = async () => {
@@ -538,9 +542,9 @@ function TemplateSheet({
       operationId,
       priceUzs: Number(price.replace(/\D/g, '')) || null,
       includes: includes.map((s) => s.trim()).filter(Boolean),
-      advantages: [],
+      advantages: advantages.map((s) => s.trim()).filter(Boolean),
       leadTimeDays,
-      note: null,
+      note: note.trim() || null,
     };
     try {
       if (tpl) await clinicApi.updateTemplate(tpl.id, body);
@@ -588,16 +592,44 @@ function TemplateSheet({
           />
         </Field>
 
-        <LineEditor label={t('ob.includes')} lines={includes} onChange={setIncludes} addLabel={t('ob.addLine')} />
+        {/*
+          Shablon taklif formasidagi HAMMA takrorlanadigan maydonni
+          qamrab olishi kerak. Ilgari afzaliklar va izoh bu yerda yo'q
+          edi, lekin shablon qo'llanganda ular formaga YOZILARDI — ya'ni
+          shablon tanlash klinikaning qo'lda yozgan afzaliklarini
+          o'chirib yuborardi.
+
+          Sanalar va budjetdan oshish izohi ataylab yo'q: ular
+          shablonlanmaydi, chunki har bemorning oynasi va budjeti
+          boshqacha.
+        */}
+        <LineEditor
+          label={t('ob.includes')}
+          hint={t('ob.includesHint')}
+          lines={includes}
+          onChange={setIncludes}
+          addLabel={t('ob.addLine')}
+        />
+
+        <LineEditor
+          label={t('ob.advantages')}
+          lines={advantages}
+          onChange={setAdvantages}
+          addLabel={t('ob.addLine')}
+        />
 
         <Field label={t('ob.leadTime')}>
-          <div className="row" style={{ gap: 6 }}>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
             {[3, 7, 14, 30].map((d) => (
               <Chip key={d} size="sm" active={leadTimeDays === d} onClick={() => setLeadTimeDays(d)}>
-                {d}
+                {d} {t('common.days')}
               </Chip>
             ))}
           </div>
+        </Field>
+
+        <Field label={t('ob.note')}>
+          <Textarea rows={3} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
         </Field>
 
         <Button block loading={saving} disabled={title.trim().length < 2} onClick={save}>
