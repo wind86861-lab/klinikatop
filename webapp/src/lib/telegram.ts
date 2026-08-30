@@ -72,28 +72,38 @@ export function currentScheme(): 'light' | 'dark' {
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/*
+ * Ixtiyoriy zanjir HAR BO'G'INDA turishi shart.
+ *
+ * Ilgari faqat `tg?` bor edi: `tg?.HapticFeedback.impactOccurred(...)`.
+ * Telegram 6.0 da (va ba'zi mijozlarda) `HapticFeedback` umuman yo'q —
+ * u holda bu qator "Cannot read properties of undefined" bilan
+ * yiqilardi. Tebranish — bezak, u ilovani to'xtatmasligi kerak.
+ */
 export const haptic = {
-  tap: () => !reducedMotion() && tg?.HapticFeedback.impactOccurred('light'),
-  press: () => !reducedMotion() && tg?.HapticFeedback.impactOccurred('medium'),
-  strong: () => !reducedMotion() && tg?.HapticFeedback.impactOccurred('heavy'),
-  select: () => !reducedMotion() && tg?.HapticFeedback.selectionChanged(),
-  success: () => !reducedMotion() && tg?.HapticFeedback.notificationOccurred('success'),
-  warning: () => !reducedMotion() && tg?.HapticFeedback.notificationOccurred('warning'),
-  error: () => !reducedMotion() && tg?.HapticFeedback.notificationOccurred('error'),
+  tap: () => !reducedMotion() && tg?.HapticFeedback?.impactOccurred?.('light'),
+  press: () => !reducedMotion() && tg?.HapticFeedback?.impactOccurred?.('medium'),
+  strong: () => !reducedMotion() && tg?.HapticFeedback?.impactOccurred?.('heavy'),
+  select: () => !reducedMotion() && tg?.HapticFeedback?.selectionChanged?.(),
+  success: () => !reducedMotion() && tg?.HapticFeedback?.notificationOccurred?.('success'),
+  warning: () => !reducedMotion() && tg?.HapticFeedback?.notificationOccurred?.('warning'),
+  error: () => !reducedMotion() && tg?.HapticFeedback?.notificationOccurred?.('error'),
 };
 
 /* ── Telegram tugmalari ── */
 
 export function useTelegramBackButton(onBack: (() => void) | null) {
-  if (!tg) return;
+  // Eski mijozlarda `BackButton` bo'lmasligi mumkin — xuddi haptic kabi
+  const back = tg?.BackButton;
+  if (!back) return;
   if (onBack) {
-    tg.BackButton.show();
-    tg.BackButton.onClick(onBack);
+    back.show?.();
+    back.onClick?.(onBack);
   } else {
-    tg.BackButton.hide();
+    back.hide?.();
   }
   return () => {
-    if (onBack) tg.BackButton.offClick(onBack);
+    if (onBack) back.offClick?.(onBack);
   };
 }
 

@@ -44,6 +44,37 @@ watchTelegramTheme();
 watchSystemTheme();
 
 /*
+ * Eskirgan qobiqdan tiklanish.
+ *
+ * Har deploy'da JS fayllar yangi hash bilan yoziladi va eskilari
+ * o'chiriladi. Brauzerda eski `index.html` keshda qolib ketsa, u
+ * allaqachon yo'q bo'lgan bo'lakni so'raydi — ilova ochilmaydi
+ * (foydalanuvchi qora ekran ko'radi).
+ *
+ * nginx endi `index.html` ni keshlamaydi, lekin ALLAQACHON keshda
+ * qolganlarga bu yordam bermaydi. Shuning uchun bo'lak yuklanmasa
+ * sahifani bir marta qayta yuklaymiz — yangi qobiq keladi va ilova
+ * ochiladi.
+ *
+ * Bir marta: `sessionStorage` belgisi cheksiz aylanishga yo'l
+ * qo'ymaydi. Agar qayta yuklashdan keyin ham xato bo'lsa, demak
+ * sabab boshqa va uni yashirish emas, ko'rsatish kerak.
+ */
+const RELOAD_KEY = 'klinikatop.chunkReload';
+window.addEventListener('vite:preloadError', (event) => {
+  let reloadedOnce = false;
+  try {
+    reloadedOnce = sessionStorage.getItem(RELOAD_KEY) === '1';
+    if (!reloadedOnce) sessionStorage.setItem(RELOAD_KEY, '1');
+  } catch {
+    /* shaxsiy rejimda saqlash yopiq bo'lishi mumkin — bir marta urinib ko'ramiz */
+  }
+  if (reloadedOnce) return;
+  event.preventDefault();
+  window.location.reload();
+});
+
+/*
  * Boshlang'ich ekranni index.html chizadi va u DARHOL ko'rinadi.
  * React ulangach uni almashtiramiz — shunda oq ekran bo'lmaydi.
  */
