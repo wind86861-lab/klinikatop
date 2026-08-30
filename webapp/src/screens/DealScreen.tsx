@@ -227,12 +227,18 @@ export function DealScreen() {
             </div>
           )}
 
+          {/* To'lov bildirilgan, navbat klinikada — ikkala tomon ham buni bilsin */}
+          {deal.status === 'PAID' && (
+            <Notice>{t(isClinicSide ? 'deal.awaitingReceiptClinic' : 'deal.awaitingReceipt')}</Notice>
+          )}
+
           <DealActions
             deal={deal}
             isClinicSide={isClinicSide}
             onSchedule={() => setSheet('schedule')}
             onPerformed={() => act(() => api.markPerformed(dealId))}
             onConfirm={() => setSheet('confirm')}
+            onReceipt={() => act(() => api.confirmReceipt(dealId))}
             onReview={() => setSheet('review')}
             onDispute={() => setSheet('dispute')}
           />
@@ -319,7 +325,7 @@ export function DealScreen() {
         open={sheet === 'confirm'}
         deal={deal}
         onClose={() => setSheet(null)}
-        onConfirm={(amount) => act(() => api.confirmDeal(dealId, amount))}
+        onConfirm={(amount) => act(() => api.declarePayment(dealId, amount))}
         onReject={(reason) => act(() => api.disputeDeal(dealId, reason))}
       />
 
@@ -359,6 +365,7 @@ function DealActions({
   onSchedule,
   onPerformed,
   onConfirm,
+  onReceipt,
   onReview,
   onDispute,
 }: {
@@ -367,6 +374,7 @@ function DealActions({
   onSchedule: () => void;
   onPerformed: () => void;
   onConfirm: () => void;
+  onReceipt: () => void;
   onReview: () => void;
   onDispute: () => void;
 }) {
@@ -393,7 +401,20 @@ function DealActions({
   if (deal.status === 'PERFORMED' && !isClinicSide) {
     buttons.push(
       <Button key="confirm" size="sm" block onClick={onConfirm}>
-        {t('deal.confirm')}
+        {t('deal.declarePayment')}
+      </Button>,
+    );
+  }
+
+  /*
+   * To'lov bildirilgach navbat KLINIKAda: u pulni olganini
+   * tasdiqlashi kerak. Bemor tomonida bu bosqichda tugma yo'q —
+   * u faqat kutadi (holat matni buni aytadi).
+   */
+  if (deal.status === 'PAID' && isClinicSide) {
+    buttons.push(
+      <Button key="receipt" size="sm" block onClick={onReceipt}>
+        {t('deal.confirmReceipt')}
       </Button>,
     );
   }

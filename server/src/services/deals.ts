@@ -11,9 +11,11 @@ import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { mapClinicPublic, mapDeal, mapOffer } from '../lib/mappers';
 import {
   DEAL_TRANSITIONS,
+  PAYMENT_METHODS,
   type DealDetail,
   type DealPriceChange,
   type DealStatus,
+  type PaymentMethod,
 } from '../../../shared/types';
 import { bus, ch } from './events';
 import { notify, notifyClinic } from './notifications';
@@ -170,44 +172,118 @@ export function markPerformed(dealId: number, clinicId: number): DealDetail {
 }
 
 /**
- * 9.1–9.2: bemor tasdiqlaydi → komissiya hisoblanadi, bemorga bonus.
- * Real to'langan summa narx statistikasining yagona manbai.
+ * 9.1: bemor to'lovni bildiradi → `PAID`.
+ *
+ * Bu bitimni YOPMAYDI. Ilgari shunday edi: bemor summani aytishi bilan
+ * bitim `CONFIRMED` bo'lib, komissiya hisoblanardi. Klinika pulni
+ * haqiqatan olganini hech kim tasdiqlamasdi — ya'ni unga faqat
+ * bemorning gapiga asoslanib komissiya yozilardi.
+ *
+ * Summani AYNAN bemor aytadi va bu ataylab: summa komissiya bazasi,
+ * shuning uchun klinikaga uni pasaytirish foydali bo'lardi, bemorda
+ * esa oshirishga sabab yo'q. Klinika rozi bo'lmasa nizo ochadi.
  */
-export function confirmDeal(dealId: number, patientId: number, amountUzs: number): DealDetail {
+export function declarePayment(
+  dealId: number,
+  patientId: number,
+  amountUzs: number,
+  method: PaymentMethod | null = null,
+): DealDetail {
   const deal = getDeal(dealId);
   if (deal.patientId !== patientId) throw forbidden('Bu bitim sizniki emas');
   if (deal.status !== 'PERFORMED' && deal.status !== 'AGREED') {
-    throw conflict('not_confirmable', 'Bu bitimni hozir tasdiqlab bo‘lmaydi');
+    throw conflict('not_payable', 'Bu bitim bo‘yicha hozir to‘lov bildirib bo‘lmaydi');
   }
   if (!Number.isFinite(amountUzs) || amountUzs < 100_000 || amountUzs > 2_000_000_000) {
     throw badRequest('invalid_amount', 'Summa noto‘g‘ri');
   }
+  if (method !== null && !PAYMENT_METHODS.includes(method)) {
+    throw badRequest('invalid_method', 'To‘lov usuli noto‘g‘ri');
+  }
 
+  db.prepare(
+    `UPDATE deals SET status = 'PAID', confirmed_amount_uzs = ?, payment_method = ?,
+                      paid_at = ? WHERE id = ?`,
+  ).run(Math.round(amountUzs), method, nowSql(), dealId);
+
+  systemMessage(dealId, `Bemor to‘lovni bildirdi: ${Math.round(amountUzs).toLocaleString('uz-UZ')} so‘m. Klinikaning tasdig‘i kutilmoqda.`);
+  bus.publish(ch.deal(dealId), { type: 'deal:status', dealId, status: 'PAID' });
+  notifyClinic(deal.clinicId, 'payment_declared', { dealId }, `/clinic/deals/${dealId}`);
+
+  return getDeal(dealId);
+}
+
+/**
+ * 9.2: klinika pulni olganini tasdiqlaydi → `CONFIRMED`.
+ *
+ * Shu yerda va faqat shu yerda komissiya hisoblanadi, bitim yopiladi
+ * va bemor bonus oladi.
+ *
+ * Klinika SUMMANI o'zgartira olmaydi — u faqat "oldim" deydi. Rozi
+ * bo'lmasa nizo ochadi va moderator qaraydi.
+ */
+export function confirmReceipt(dealId: number, clinicId: number): DealDetail {
+  const deal = getDeal(dealId);
+  if (deal.clinicId !== clinicId) throw forbidden('Bu bitim sizniki emas');
+  if (deal.status !== 'PAID') {
+    throw conflict('not_confirmable', 'Bu bitimni hozir tasdiqlab bo‘lmaydi');
+  }
+
+  const amount = deal.confirmedAmountUzs;
+  if (amount == null) throw conflict('no_amount', 'To‘lov summasi yo‘q');
+
+  closeDeal(dealId, amount, deal.clinicId, deal.requestId, deal.patientId, { bonus: true });
+  systemMessage(dealId, 'Klinika to‘lovni olganini tasdiqladi. Bitim yopildi.');
+  notify(deal.patientId, 'payment_confirmed', { clinic: deal.clinic.name }, `/deal/${dealId}`);
+
+  return getDeal(dealId);
+}
+
+/**
+ * Bitimni yopish — komissiya, statistika va bonus bitta joyda.
+ *
+ * Uch joydan chaqiriladi (klinika tasdig'i va ikkita avtomatik yopish),
+ * shuning uchun mantiq takrorlanmasligi kerak: komissiya foizi qanday
+ * olinishi va nima yangilanishi bitta joyda tursin.
+ */
+function closeDeal(
+  dealId: number,
+  amountUzs: number,
+  clinicId: number,
+  requestId: number,
+  patientId: number,
+  opts: { bonus: boolean; auto?: boolean },
+): void {
   // Foiz shu klinika uchun amaldagi qiymatdan olinadi va bitimga YOZIB
   // qo'yiladi — keyin admin foizni o'zgartirsa eski bitim qayta hisoblanmaydi
-  const percent = commissionPercentFor(deal.clinicId);
+  const percent = commissionPercentFor(clinicId);
   const commission = Math.round((amountUzs * percent) / 100);
 
   tx(() => {
     db.prepare(
       `UPDATE deals SET status = 'CONFIRMED', confirmed_amount_uzs = ?, commission_uzs = ?,
-                        commission_percent = ?, confirmed_at = ? WHERE id = ?`,
-    ).run(Math.round(amountUzs), commission, percent, nowSql(), dealId);
+                        commission_percent = ?, confirmed_at = ?, receipt_confirmed_at = ?,
+                        auto_confirmed = ?
+        WHERE id = ?`,
+    ).run(Math.round(amountUzs), commission, percent, nowSql(), nowSql(), opts.auto ? 1 : 0, dealId);
 
-    db.prepare(`UPDATE requests SET status = 'COMPLETED' WHERE id = ?`).run(deal.requestId);
-    db.prepare(`UPDATE clinics SET deals_count = deals_count + 1 WHERE id = ?`).run(deal.clinicId);
-    // 9.3: tasdiqlaganlik uchun rag'bat
-    db.prepare(`UPDATE users SET bonus_points = bonus_points + ? WHERE id = ?`).run(
-      config.rules.confirmBonusPoints,
-      patientId,
-    );
+    db.prepare(`UPDATE requests SET status = 'COMPLETED' WHERE id = ?`).run(requestId);
+    db.prepare(`UPDATE clinics SET deals_count = deals_count + 1 WHERE id = ?`).run(clinicId);
+
+    // 9.3: tasdiqlaganlik uchun rag'bat — avtomatik yopishda berilmaydi
+    if (opts.bonus) {
+      db.prepare(`UPDATE users SET bonus_points = bonus_points + ? WHERE id = ?`).run(
+        config.rules.confirmBonusPoints,
+        patientId,
+      );
+    }
   });
 
   bus.publish(ch.deal(dealId), { type: 'deal:status', dealId, status: 'CONFIRMED' });
-  bus.publish(ch.request(deal.requestId), { type: 'request:status', requestId: deal.requestId, status: 'COMPLETED' });
-  notify(patientId, 'bonus_earned', { points: config.rules.confirmBonusPoints }, `/deal/${dealId}`);
-
-  return getDeal(dealId);
+  bus.publish(ch.request(requestId), { type: 'request:status', requestId, status: 'COMPLETED' });
+  if (opts.bonus) {
+    notify(patientId, 'bonus_earned', { points: config.rules.confirmBonusPoints }, `/deal/${dealId}`);
+  }
 }
 
 /** Bemor "yo'q" desa yoki kelishmovchilik bo'lsa → NIZO, moderatorga. */
@@ -298,8 +374,14 @@ export function remindPendingConfirmations(): number {
  */
 export function autoConfirmStaleDeals(): number {
   const settings = listSettings();
+  const cutoff = `-${settings.autoConfirmDays} days`;
+  let closed = 0;
 
-  const rows = db
+  /*
+   * 1-oyoq: bemor to'lovni bildirmadi.
+   * Summa KELISHILGAN narxdan olinadi — klinika aytganidan emas.
+   */
+  const silentPatients = db
     .prepare(
       `SELECT id, clinic_id, request_id, agreed_price_uzs, patient_id
          FROM deals
@@ -307,28 +389,41 @@ export function autoConfirmStaleDeals(): number {
           AND performed_at IS NOT NULL
           AND performed_at <= datetime('now', ?)`,
     )
-    .all(`-${settings.autoConfirmDays} days`) as any[];
+    .all(cutoff) as any[];
 
-  let closed = 0;
-
-  for (const row of rows) {
-    const percent = commissionPercentFor(row.clinic_id);
-    const amount = row.agreed_price_uzs;
-    const commission = Math.round((amount * percent) / 100);
-
-    tx(() => {
-      db.prepare(
-        `UPDATE deals
-            SET status = 'CONFIRMED', confirmed_amount_uzs = ?, commission_uzs = ?,
-                commission_percent = ?, confirmed_at = ?, auto_confirmed = 1
-          WHERE id = ? AND status = 'PERFORMED'`,
-      ).run(amount, commission, percent, nowSql(), row.id);
-
-      db.prepare(`UPDATE requests SET status = 'COMPLETED' WHERE id = ?`).run(row.request_id);
-      db.prepare(`UPDATE clinics SET deals_count = deals_count + 1 WHERE id = ?`).run(row.clinic_id);
+  for (const row of silentPatients) {
+    closeDeal(row.id, row.agreed_price_uzs, row.clinic_id, row.request_id, row.patient_id, {
+      bonus: false,
+      auto: true,
     });
+    notify(row.patient_id, 'deal_auto_confirmed', { dealId: row.id }, `/deal/${row.id}`);
+    notifyClinic(row.clinic_id, 'deal_auto_confirmed', { dealId: row.id }, `/clinic/deals/${row.id}`);
+    closed += 1;
+  }
 
-    // Ikkala tomon ham xabardor bo'lishi shart — bemor hali ham nizo ocha oladi
+  /*
+   * 2-oyoq: bemor to'ladi, lekin klinika tasdiqlamadi.
+   *
+   * Busiz jim turish klinikaga FOYDALI bo'lardi: tasdiqlamasa
+   * komissiya ham hisoblanmasdi. Shuning uchun soat bu yerda ham
+   * ishlaydi va summa bemor aytgan qiymatdan olinadi.
+   */
+  const silentClinics = db
+    .prepare(
+      `SELECT id, clinic_id, request_id, confirmed_amount_uzs, patient_id
+         FROM deals
+        WHERE status = 'PAID'
+          AND paid_at IS NOT NULL
+          AND paid_at <= datetime('now', ?)`,
+    )
+    .all(cutoff) as any[];
+
+  for (const row of silentClinics) {
+    if (row.confirmed_amount_uzs == null) continue;
+    closeDeal(row.id, row.confirmed_amount_uzs, row.clinic_id, row.request_id, row.patient_id, {
+      bonus: false,
+      auto: true,
+    });
     notify(row.patient_id, 'deal_auto_confirmed', { dealId: row.id }, `/deal/${row.id}`);
     notifyClinic(row.clinic_id, 'deal_auto_confirmed', { dealId: row.id }, `/clinic/deals/${row.id}`);
     closed += 1;

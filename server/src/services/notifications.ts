@@ -35,8 +35,24 @@ const PUSH: Record<NotificationType, Record<Lang, (p: Params) => string>> = {
     ru: (p) => `✉️ <b>${p.from}</b>\n${p.preview}`,
   },
   confirm_prompt: {
-    uz: (p) => `❓ <b>Operatsiya bo'ldimi?</b>\n${p.clinic} bilan bitim. Bo'lgan bo'lsa, qancha to'laganingizni tasdiqlang — bu boshqa bemorlarga real narxni ko'rsatadi.`,
-    ru: (p) => `❓ <b>Операция состоялась?</b>\nСделка с «${p.clinic}». Подтвердите сумму — это покажет реальную цену другим пациентам.`,
+    uz: (p) => `❓ <b>Operatsiya bo'ldimi?</b>\n${p.clinic} bilan bitim. Bo'lgan bo'lsa, qancha to'laganingizni yozing — bu boshqa bemorlarga real narxni ko'rsatadi.`,
+    ru: (p) => `❓ <b>Операция состоялась?</b>\nСделка с «${p.clinic}». Укажите сумму — это покажет реальную цену другим пациентам.`,
+  },
+  payment_declared: {
+    uz: () => `💵 <b>Bemor to'lovni bildirdi</b>\nSummani tekshirib, pulni olganingizni tasdiqlang.`,
+    ru: () => `💵 <b>Пациент указал оплату</b>\nПроверьте сумму и подтвердите получение.`,
+  },
+  commission_confirmed: {
+    uz: (p) => `✅ <b>Komissiya to'lovi tasdiqlandi</b>\n${p.amount} so'm hisobga olindi.`,
+    ru: (p) => `✅ <b>Оплата комиссии подтверждена</b>\n${p.amount} сум зачтено.`,
+  },
+  commission_rejected: {
+    uz: (p) => `⚠️ <b>Komissiya to'lovi qaytarildi</b>\n${p.note || 'Sabab ko\'rsatilmagan'}. Iltimos, tekshirib qayta yuboring.`,
+    ru: (p) => `⚠️ <b>Оплата комиссии отклонена</b>\n${p.note || 'Причина не указана'}. Проверьте и отправьте снова.`,
+  },
+  payment_confirmed: {
+    uz: (p) => `✅ <b>To'lov tasdiqlandi</b>\n${p.clinic} pulni olganini tasdiqladi. Bitim yopildi.`,
+    ru: (p) => `✅ <b>Оплата подтверждена</b>\n«${p.clinic}» подтвердила получение. Сделка закрыта.`,
   },
   request_expiring: {
     uz: (p) => `⏳ So'rovingiz muddati 1 soatdan keyin tugaydi (${p.operation}). Takliflarni ko'rib chiqing.`,

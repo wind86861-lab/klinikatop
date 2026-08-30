@@ -4267,3 +4267,35 @@
     justify-content: flex-start;
   }
 }
+
+/* Komissiya to'lovlari navbati */
+.payRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.payRow__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.payRow__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.payRow__meta {
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.payRow__actions {
+  display: flex;
+  gap: var(--s-2);
+  flex-shrink: 0;
+}

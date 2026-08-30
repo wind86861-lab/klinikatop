@@ -239,8 +239,16 @@ check "bemor 'bajarildi' deya olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$
 STATUS=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/performed" | jqv '.status')
 check "klinika bajarilganini belgiladi" "$([ "$STATUS" = "PERFORMED" ] && echo 1)" "$STATUS"
 
-COMMISSION=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/confirm" -d '{"amountUzs":10500000}' | jqv '.commissionUzs')
-check "komissiya hisoblandi (5%)" "$([ "$COMMISSION" = "525000" ] && echo 1)" "$COMMISSION"
+# To'lov ikki qadam: bemor bildiradi -> klinika olganini tasdiqlaydi
+PAID=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/paid" -d '{"amountUzs":10500000}' | jqv '.status')
+check "bemor to'lovni bildirdi" "$([ "$PAID" = "PAID" ] && echo 1)" "$PAID"
+
+# Bemor o'zi yopa olmaydi — bu klinikaning ishi
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/receipt")
+check "bemor to'lovni tasdiqlay olmaydi (403)" "$([ "$code" = "403" ] && echo 1)" "$code"
+
+COMMISSION=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/receipt" | jqv '.commissionUzs')
+check "klinika tasdiqlagach komissiya hisoblandi (5%)" "$([ "$COMMISSION" = "525000" ] && echo 1)" "$COMMISSION"
 
 AVG=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/review" \
   -d '{"quality":5,"attitude":4,"cleanliness":5,"result":4,"body":"Yaxshi"}' | jqv '.average')
@@ -367,9 +375,22 @@ code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/clinic/commission/pay" \
 check "qarzdan ortiq to'lov rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
 if [ "$OUT" -gt 0 ] 2>/dev/null; then
-  PAID=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/clinic/commission/pay" \
-    -d "{\"amountUzs\":$OUT,\"method\":\"bank\",\"reference\":\"TXN-001\"}" | jqv '.outstandingUzs')
-  check "to'lovdan keyin qarz nolga tushdi" "$([ "$PAID" = 0 ] && echo 1)" "$PAID"
+  # Klinika TOPSHIRADI — qarz hali kamaymaydi, admin tasdig'i kutiladi
+  PENDING=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/clinic/commission/pay" \
+    -d "{\"amountUzs\":$OUT,\"method\":\"bank\",\"reference\":\"TXN-001\"}" | jqv '.pendingCommissionUzs')
+  check "topshirilgan summa tekshiruvda" "$([ "$PENDING" = "$OUT" ] && echo 1)" "$PENDING"
+
+  STILL=$(curl -s "${CLINIC[@]}" "$API/clinic/revenue" | jqv '.outstandingUzs')
+  check "tasdiqlanmaguncha qarz kamaymaydi" "$([ "$STILL" = "$OUT" ] && echo 1)" "$STILL"
+
+  # Admin navbatda ko'radi va tasdiqlaydi
+  PAY_ID=$(curl -s "${MOD[@]}" "$API/admin/commission-payments" | jqv '[0].id')
+  check "admin navbatida ko'rinadi" "$([ -n "$PAY_ID" ] && echo 1)" "$PAY_ID"
+
+  curl -s "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/commission-payments/$PAY_ID" \
+    -d '{"decision":"confirmed"}' > /dev/null
+  PAID=$(curl -s "${CLINIC[@]}" "$API/clinic/revenue" | jqv '.outstandingUzs')
+  check "admin tasdiqlagach qarz nolga tushdi" "$([ "$PAID" = 0 ] && echo 1)" "$PAID"
 
   HIST=$(curl -s "${CLINIC[@]}" "$API/clinic/revenue" | jqv '.commissionPayments.length')
   check "to'lov tarixga yozildi" "$([ "$HIST" -ge 1 ] 2>/dev/null && echo 1)" "$HIST ta"

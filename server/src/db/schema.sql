@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS deals (
   agreed_price_uzs     INTEGER NOT NULL,
   scheduled_at         TEXT,
   status               TEXT NOT NULL DEFAULT 'SELECTED'
-                       CHECK (status IN ('SELECTED','AGREED','PERFORMED','CONFIRMED','CANCELLED','DISPUTED')),
+                       CHECK (status IN ('SELECTED','AGREED','PERFORMED','PAID','CONFIRMED','CANCELLED','DISPUTED')),
   confirmed_amount_uzs INTEGER,
   commission_uzs       INTEGER,
   commission_percent   REAL,
@@ -173,7 +173,13 @@ CREATE TABLE IF NOT EXISTS deals (
   performed_at         TEXT,
   confirm_prompted_at  TEXT,
   dispute_reason       TEXT,
-  created_at           TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+  auto_confirmed       INTEGER NOT NULL DEFAULT 0,
+  /* Bemor to'lovni bildirgan payt va usuli */
+  paid_at              TEXT,
+  payment_method       TEXT CHECK (payment_method IS NULL OR payment_method IN ('cash','card','transfer')),
+  /* Klinika to'lovni olganini tasdiqlagan payt */
+  receipt_confirmed_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_deals_patient ON deals(patient_id, status);

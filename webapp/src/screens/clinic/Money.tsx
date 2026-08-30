@@ -472,11 +472,23 @@ export function Revenue() {
                   </span>
                   <strong className="num">{money(rev.outstandingUzs, lang)}</strong>
                 </div>
+                {/*
+                  Topshirilgan, lekin admin hali tasdiqlamagan summa alohida
+                  ko'rsatiladi — aks holda klinika "to'ladim, nega qarz
+                  kamaymadi?" deb o'ylaydi.
+                */}
+                {rev.pendingCommissionUzs > 0 && (
+                  <div className="between">
+                    <span className="tiny">{t('rev.pending')}</span>
+                    <span className="num tiny">{money(rev.pendingCommissionUzs, lang)}</span>
+                  </div>
+                )}
                 <Button
                   size="sm"
                   block
+                  disabled={rev.outstandingUzs - rev.pendingCommissionUzs <= 0}
                   onClick={() => {
-                    setAmount(String(rev.outstandingUzs));
+                    setAmount(String(rev.outstandingUzs - rev.pendingCommissionUzs));
                     setPaying(true);
                   }}
                 >
@@ -503,6 +515,9 @@ export function Revenue() {
                       <span className="tiny">
                         {t(`rev.method.${payment.method}` as any)}
                         {payment.reference ? ` · ${payment.reference}` : ''}
+                        {payment.status === 'declared' && ` · ${t('rev.st.declared')}`}
+                        {payment.status === 'rejected' &&
+                          ` · ${t('rev.st.rejected')}${payment.reviewNote ? `: ${payment.reviewNote}` : ''}`}
                       </span>
                       <span className="num">{money(payment.amountUzs, lang)}</span>
                     </div>
@@ -540,7 +555,7 @@ export function Revenue() {
                 <Button
                   block
                   loading={sending}
-                  disabled={amountNumber <= 0 || amountNumber > rev.outstandingUzs}
+                  disabled={amountNumber <= 0 || amountNumber > rev.outstandingUzs - rev.pendingCommissionUzs}
                   onClick={pay}
                 >
                   {t('rev.pay')}

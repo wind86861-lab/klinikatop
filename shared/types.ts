@@ -31,10 +31,23 @@ export const OFFER_STATUSES = ['SENT', 'CHOSEN', 'REJECTED', 'EXPIRED', 'WITHDRA
 export type OfferStatus = (typeof OFFER_STATUSES)[number];
 
 /** Bitim: TANLANGAN → KELISHILGAN → BAJARILGAN → TASDIQLANGAN | BEKOR | NIZO */
-export const DEAL_STATUSES = ['SELECTED', 'AGREED', 'PERFORMED', 'CONFIRMED', 'CANCELLED', 'DISPUTED'] as const;
+export const DEAL_STATUSES = [
+  'SELECTED',
+  'AGREED',
+  'PERFORMED',
+  /** Bemor to'lovni bildirdi — klinikaning tasdig'i kutilmoqda */
+  'PAID',
+  'CONFIRMED',
+  'CANCELLED',
+  'DISPUTED',
+] as const;
 export type DealStatus = (typeof DEAL_STATUSES)[number];
 
-export const DEAL_STEPS: DealStatus[] = ['SELECTED', 'AGREED', 'PERFORMED', 'CONFIRMED'];
+export const DEAL_STEPS: DealStatus[] = ['SELECTED', 'AGREED', 'PERFORMED', 'PAID', 'CONFIRMED'];
+
+/** To'lov usuli — bemor bildirganda tanlaydi, ixtiyoriy. */
+export const PAYMENT_METHODS = ['cash', 'card', 'transfer'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 /** Ruxsat etilgan o'tishlar — server tomonda majburlanadi. */
 export const REQUEST_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
@@ -47,8 +60,14 @@ export const REQUEST_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
 
 export const DEAL_TRANSITIONS: Record<DealStatus, DealStatus[]> = {
   SELECTED: ['AGREED', 'CANCELLED', 'DISPUTED'],
-  AGREED: ['PERFORMED', 'CANCELLED', 'DISPUTED'],
-  PERFORMED: ['CONFIRMED', 'DISPUTED'],
+  /*
+   * `AGREED → PAID` ham bor: bemor klinika "bajarildi" deb
+   * belgilashidan oldin to'lagan bo'lishi mumkin. Uni kutib
+   * o'tirishga majburlash mantiqsiz.
+   */
+  AGREED: ['PERFORMED', 'PAID', 'CANCELLED', 'DISPUTED'],
+  PERFORMED: ['PAID', 'CONFIRMED', 'DISPUTED'],
+  PAID: ['CONFIRMED', 'DISPUTED'],
   CONFIRMED: ['DISPUTED'],
   CANCELLED: [],
   DISPUTED: ['CONFIRMED', 'CANCELLED'],
@@ -430,6 +449,11 @@ export interface Deal {
    */
   commissionPercent: number | null;
   confirmedAt: string | null;
+  /** Bemor to'lovni bildirgan payt */
+  paidAt: string | null;
+  paymentMethod: PaymentMethod | null;
+  /** Klinika pulni olganini tasdiqlagan payt */
+  receiptConfirmedAt: string | null;
   disputeReason: string | null;
   createdAt: string;
 }
@@ -488,6 +512,14 @@ export const NOTIFICATION_TYPES = [
   'bonus_earned',
   /** Bemor javob bermagani uchun bitim avtomatik yopildi */
   'deal_auto_confirmed',
+  /** Bemor to'lovni bildirdi — klinika olganini tasdiqlashi kerak */
+  'payment_declared',
+  /** Klinika to'lovni olganini tasdiqladi — bitim yopildi */
+  'payment_confirmed',
+  /** Admin klinikaning komissiya to'lovini tasdiqladi */
+  'commission_confirmed',
+  /** Admin komissiya to'lovini rad etdi */
+  'commission_rejected',
   /** Ikkinchi tomon narxni o'zgartirishni taklif qildi */
   'price_change_proposed',
   'price_change_accepted',
@@ -747,6 +779,20 @@ export interface ClinicAnalytics {
 }
 
 /** Daromad va platforma komissiyasi. */
+export const COMMISSION_PAYMENT_STATUSES = ['declared', 'confirmed', 'rejected'] as const;
+export type CommissionPaymentStatus = (typeof COMMISSION_PAYMENT_STATUSES)[number];
+
+/** Admin navbatidagi komissiya to'lovi. */
+export interface PendingCommissionPayment {
+  id: number;
+  clinicId: number;
+  clinicName: string;
+  amountUzs: number;
+  method: string;
+  reference: string | null;
+  createdAt: string;
+}
+
 export interface ClinicRevenue {
   commissionPercent: number;
   totals: {
@@ -765,13 +811,19 @@ export interface ClinicRevenue {
   }[];
   /** Hali to'lanmagan komissiya */
   outstandingUzs: number;
-  /** To'langan komissiya — hisob-kitob tarixi bilan */
+  /** Tasdiqlangan komissiya to'lovlari — faqat shular qarzni kamaytiradi */
   paidCommissionUzs: number;
+  /** Topshirilgan, lekin admin hali ko'rmagan summa */
+  pendingCommissionUzs: number;
   commissionPayments: {
     id: number;
     amountUzs: number;
     method: string;
     reference: string | null;
+    status: CommissionPaymentStatus;
+    /** Rad etilgan bo'lsa — sababi */
+    reviewNote: string | null;
+    reviewedAt: string | null;
     createdAt: string;
   }[];
   subscription: {

@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { forbidden } from '../lib/errors';
+import { PAYMENT_METHODS } from '../../../shared/types';
 import {
   agreeSchedule,
   cancelDeal,
-  confirmDeal,
+  confirmReceipt,
+  declarePayment,
   getDeal,
   listPatientDeals,
   listPriceChanges,
@@ -83,10 +85,25 @@ dealsRouter.post('/:id/performed', (req, res) => {
   res.json(markPerformed(Number(req.params.id), clinicId));
 });
 
-/** 9.1: bemor tasdiqlaydi — real summa narx statistikasiga tushadi. */
-dealsRouter.post('/:id/confirm', (req, res) => {
-  const body = z.object({ amountUzs: z.number().int().positive() }).parse(req.body);
-  res.json(confirmDeal(Number(req.params.id), req.user!.id, body.amountUzs));
+/**
+ * 9.1: bemor to'lovni bildiradi. Bitim YOPILMAYDI — klinikaning
+ * tasdig'i kutiladi (quyidagi `/receipt`).
+ */
+dealsRouter.post('/:id/paid', (req, res) => {
+  const body = z
+    .object({
+      amountUzs: z.number().int().positive(),
+      method: z.enum(PAYMENT_METHODS).nullable().optional(),
+    })
+    .parse(req.body);
+  res.json(declarePayment(Number(req.params.id), req.user!.id, body.amountUzs, body.method ?? null));
+});
+
+/** 9.2: klinika pulni olganini tasdiqlaydi — komissiya shu yerda hisoblanadi. */
+dealsRouter.post('/:id/receipt', (req, res) => {
+  const clinicId = clinicOf(req);
+  if (!clinicId) throw forbidden('Bu amalni klinika bajaradi');
+  res.json(confirmReceipt(Number(req.params.id), clinicId));
 });
 
 dealsRouter.post('/:id/dispute', (req, res) => {

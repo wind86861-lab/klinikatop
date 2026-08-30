@@ -36,6 +36,7 @@ import { AdminShell, type AdminSection } from './AdminShell';
 import { Applications } from './Applications';
 import { CatalogSync } from './CatalogSync';
 import { RequestStepsScreen } from './RequestSteps';
+import { CommissionPayments } from './CommissionPayments';
 import { Security } from '../web/Security';
 import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
 import type { AdminMetrics, ChatMessage, Clinic, ClinicDocument, Deal, DealDetail } from '@shared/types';
@@ -142,6 +143,7 @@ export function AdminHome() {
     { id: 'clinics', label: t('admin.tabClinics'), render: () => <AdminClinics /> },
     { id: 'metrics', label: t('admin.metrics'), render: () => <MetricsPanel metrics={metrics} /> },
     { id: 'catalog', label: 'Katalog', render: () => <CatalogSync /> },
+    { id: 'commission', label: 'Komissiya to‘lovlari', render: () => <CommissionPayments /> },
     { id: 'steps', label: 'So‘rov bosqichlari', render: () => <RequestStepsScreen /> },
     { id: 'settings', label: t('admin.tabSettings'), render: () => <PlatformSettingsScreen /> },
     /*

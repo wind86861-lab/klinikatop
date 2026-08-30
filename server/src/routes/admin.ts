@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { STEP_KINDS } from '../../../shared/types';
 import { listSteps, saveSteps } from '../services/requestSteps';
+import { listPendingCommissionPayments, reviewCommissionPayment } from '../services/clinicCabinet';
 import { listSyncLog, planSync, runSync, sourceConfigured } from '../services/catalogSync';
 import { rateLimit } from '../middleware/rateLimit';
 import { forbidden } from '../lib/errors';
@@ -360,4 +361,35 @@ adminRouter.put('/request-steps', (req, res) => {
   logModeration(req.user!.id, 'platform', 0, 'request-steps:update', JSON.stringify({ before, after }));
 
   res.json(after);
+});
+
+/* ═════════════════  Komissiya to'lovlari  ═════════════════ */
+
+/**
+ * Klinikalar topshirgan, lekin hali tasdiqlanmagan to'lovlar.
+ *
+ * Qarz FAQAT admin tasdiqlagach kamayadi — shuning uchun bu navbat
+ * bo'sh turishi kerak emas.
+ */
+adminRouter.get('/commission-payments', (_req, res) => {
+  res.json(listPendingCommissionPayments());
+});
+
+adminRouter.post('/commission-payments/:id', (req, res) => {
+  const body = z
+    .object({
+      decision: z.enum(['confirmed', 'rejected']),
+      note: z.string().trim().max(300).nullable().default(null),
+    })
+    .parse(req.body);
+
+  const list = reviewCommissionPayment(Number(req.params.id), req.user!.id, body.decision, body.note);
+  logModeration(
+    req.user!.id,
+    'platform',
+    Number(req.params.id),
+    `commission:${body.decision}`,
+    body.note ?? '',
+  );
+  res.json(list);
 });

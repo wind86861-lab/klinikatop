@@ -1050,6 +1050,153 @@ export const MIGRATIONS: Migration[] = [
       BUILTIN.forEach(([key, required, locked], i) => seed.run(key, i * 10, required, locked));
     },
   },
+  {
+    /**
+     * To'lov bosqichi: bemor to'ladi → klinika olganini tasdiqlaydi.
+     *
+     * Ilgari oqim `PERFORMED` dan to'g'ridan-to'g'ri `CONFIRMED` ga
+     * o'tardi: bemor qancha to'laganini aytishi bilan bitim yopilib,
+     * komissiya hisoblanardi. Klinika pulni HAQIQATAN olganini hech
+     * kim tasdiqlamasdi — ya'ni klinikaga faqat bemorning gapiga
+     * asoslanib komissiya yozilardi.
+     *
+     * Endi oraliqda `PAID` turadi:
+     *   PERFORMED -> bemor to'lovni bildiradi -> PAID
+     *   PAID      -> klinika olganini tasdiqlaydi -> CONFIRMED
+     *
+     * Summani BEMOR aytadi, klinika esa faqat "oldim" deydi. Sabab
+     * rag'bat: summa komissiya bazasi, shuning uchun klinikaga uni
+     * pasaytirish foydali bo'lardi; bemorda esa oshirishga sabab yo'q.
+     * Rozi bo'lmasa klinika nizo ochadi.
+     *
+     * SQLite CHECK cheklovini o'zgartirishga ruxsat bermaydi —
+     * jadval qayta quriladi (009 dagi kabi).
+     */
+    id: '019_deal_payment_step',
+    up: (db) => {
+      const current = db
+        .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'deals'`)
+        .get() as { sql: string } | undefined;
+
+      // Allaqachon qo'llangan bo'lsa qayta qurmaymiz
+      if (!current || current.sql.includes("'PAID'")) return;
+
+      db.pragma('foreign_keys = OFF');
+      db.exec(`
+        CREATE TABLE deals_new (
+          id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+          request_id           INTEGER NOT NULL UNIQUE REFERENCES requests(id) ON DELETE CASCADE,
+          offer_id             INTEGER NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+          patient_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          clinic_id            INTEGER NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+          agreed_price_uzs     INTEGER NOT NULL,
+          scheduled_at         TEXT,
+          status               TEXT NOT NULL DEFAULT 'SELECTED'
+                               CHECK (status IN ('SELECTED','AGREED','PERFORMED','PAID','CONFIRMED','CANCELLED','DISPUTED')),
+          confirmed_amount_uzs INTEGER,
+          commission_uzs       INTEGER,
+          commission_percent   REAL,
+          confirmed_at         TEXT,
+          performed_at         TEXT,
+          confirm_prompted_at  TEXT,
+          dispute_reason       TEXT,
+          created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+          auto_confirmed       INTEGER NOT NULL DEFAULT 0,
+          paid_at              TEXT,
+          payment_method       TEXT CHECK (payment_method IS NULL OR payment_method IN ('cash','card','transfer')),
+          receipt_confirmed_at TEXT
+        );
+
+        INSERT INTO deals_new
+          (id, request_id, offer_id, patient_id, clinic_id, agreed_price_uzs, scheduled_at, status,
+           confirmed_amount_uzs, commission_uzs, commission_percent, confirmed_at, performed_at,
+           confirm_prompted_at, dispute_reason, created_at, auto_confirmed)
+        SELECT
+           id, request_id, offer_id, patient_id, clinic_id, agreed_price_uzs, scheduled_at, status,
+           confirmed_amount_uzs, commission_uzs, commission_percent, confirmed_at, performed_at,
+           confirm_prompted_at, dispute_reason, created_at, auto_confirmed
+        FROM deals;
+
+        DROP TABLE deals;
+        ALTER TABLE deals_new RENAME TO deals;
+
+        CREATE INDEX IF NOT EXISTS idx_deals_patient ON deals(patient_id, status);
+        CREATE INDEX IF NOT EXISTS idx_deals_clinic  ON deals(clinic_id, status);
+      `);
+      db.pragma('foreign_keys = ON');
+
+      /*
+       * Yopilgan bitimlarda to'lov vaqti noma'lum — tasdiqlangan paytni
+       * qo'yamiz, aks holda eski bitimlarda bosqich bo'sh ko'rinardi.
+       */
+      db.exec(`UPDATE deals SET paid_at = confirmed_at, receipt_confirmed_at = confirmed_at
+                WHERE status = 'CONFIRMED' AND confirmed_at IS NOT NULL`);
+    },
+  },
+  {
+    /**
+     * Komissiya to'lovi ham ikki qadam: klinika topshiradi, admin tasdiqlaydi.
+     *
+     * Ilgari klinika o'zi to'lov yozar va u SHU ZAHOTI "to'langan" deb
+     * hisoblanardi — qarz kamayardi, hech kim tekshirmasdi. Ya'ni
+     * klinika istalgan summani yozib qarzini nolga tushira olardi.
+     *
+     * Endi:
+     *   klinika topshiradi -> `declared` (qarz KAMAYMAYDI)
+     *   admin tasdiqlaydi  -> `confirmed` (qarz kamayadi)
+     *   admin rad etadi    -> `rejected` (izoh bilan)
+     *
+     * Mavjud yozuvlar `confirmed` bo'ladi: ular allaqachon to'langan
+     * deb hisoblangan, ularni endi qarzga qaytarish noto'g'ri bo'lardi.
+     *
+     * SQLite CHECK qo'shishga ruxsat bermaydi — jadval qayta quriladi.
+     */
+    id: '020_commission_payment_review',
+    up: (db) => {
+      const current = db
+        .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'commission_payments'`)
+        .get() as { sql: string } | undefined;
+      if (!current || current.sql.includes("'declared'")) return;
+
+      db.pragma('foreign_keys = OFF');
+      db.exec(`
+        CREATE TABLE commission_payments_new (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          clinic_id    INTEGER NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+          amount_uzs   INTEGER NOT NULL CHECK (amount_uzs > 0),
+          method       TEXT NOT NULL DEFAULT 'manual',
+          reference    TEXT,
+          period       TEXT,
+          status       TEXT NOT NULL DEFAULT 'declared'
+                       CHECK (status IN ('declared','confirmed','rejected')),
+          /*
+           * ON DELETE SET NULL: bu audit maydoni, u foydalanuvchini
+           * o'chirishni TO'SMASLIGI kerak. Oddiy FK bo'lsa, bir marta
+           * to'lov tasdiqlagan admin hisobini keyin o'chirib bo'lmasdi.
+           */
+          reviewed_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          reviewed_at  TEXT,
+          review_note  TEXT,
+          created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        INSERT INTO commission_payments_new
+          (id, clinic_id, amount_uzs, method, reference, period, status, reviewed_at, created_at)
+        SELECT
+           id, clinic_id, amount_uzs, method, reference, period, 'confirmed', created_at, created_at
+        FROM commission_payments;
+
+        DROP TABLE commission_payments;
+        ALTER TABLE commission_payments_new RENAME TO commission_payments;
+
+        CREATE INDEX IF NOT EXISTS idx_commission_payments_clinic
+          ON commission_payments(clinic_id);
+        CREATE INDEX IF NOT EXISTS idx_commission_payments_status
+          ON commission_payments(status, created_at);
+      `);
+      db.pragma('foreign_keys = ON');
+    },
+  },
 ];
 
 /**

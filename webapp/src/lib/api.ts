@@ -49,6 +49,8 @@ import type {
   User,
   ChatMessage,
   WizardStep,
+  PaymentMethod,
+  PendingCommissionPayment,
   RequestStep,
   StepOption,
   StepKind,
@@ -363,7 +365,11 @@ export const api = {
   readMessages: (id: number) => post<{ marked: number }>(`/deals/${id}/messages/read`),
   schedule: (id: number, scheduledAt: string) => post<DealDetail>(`/deals/${id}/schedule`, { scheduledAt }),
   markPerformed: (id: number) => post<DealDetail>(`/deals/${id}/performed`),
-  confirmDeal: (id: number, amountUzs: number) => post<DealDetail>(`/deals/${id}/confirm`, { amountUzs }),
+  /** Bemor to'lovni bildiradi — bitim yopilmaydi, klinika tasdig'i kutiladi */
+  declarePayment: (id: number, amountUzs: number, method: PaymentMethod | null = null) =>
+    post<DealDetail>(`/deals/${id}/paid`, { amountUzs, method }),
+  /** Klinika pulni olganini tasdiqlaydi — komissiya shu yerda hisoblanadi */
+  confirmReceipt: (id: number) => post<DealDetail>(`/deals/${id}/receipt`),
   disputeDeal: (id: number, reason: string) => post<DealDetail>(`/deals/${id}/dispute`, { reason }),
   cancelDeal: (id: number, reason: string) => post<DealDetail>(`/deals/${id}/cancel`, { reason }),
   review: (
@@ -429,6 +435,11 @@ export const api = {
   platformSettings: () => get<PlatformSettings>('/admin/settings'),
 
   /** So'rov bosqichlari — admin ko'rinishi (o'chirilganlari bilan) */
+  /** Komissiya to'lovlari navbati — klinika topshirgan, admin tasdiqlaydi */
+  pendingCommissionPayments: () => get<PendingCommissionPayment[]>('/admin/commission-payments'),
+  reviewCommissionPayment: (id: number, decision: 'confirmed' | 'rejected', note: string | null) =>
+    post<PendingCommissionPayment[]>(`/admin/commission-payments/${id}`, { decision, note }),
+
   adminRequestSteps: () => get<RequestStep[]>('/admin/request-steps'),
   saveRequestSteps: (steps: StepDraft[]) => put<RequestStep[]>('/admin/request-steps', { steps }),
   savePlatformSettings: (body: Partial<PlatformSettings>) =>

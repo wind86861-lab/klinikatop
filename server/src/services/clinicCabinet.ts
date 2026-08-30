@@ -26,8 +26,10 @@ import type {
   NotificationPrefs,
   OfferTemplate,
   OperatorRole,
+  PendingCommissionPayment,
 } from '../../../shared/types';
 import { DEFAULT_NOTIFICATION_PREFS, REQUIRED_DOC_KINDS } from '../../../shared/types';
+import { notifyClinic } from './notifications';
 
 const iso = (v: string | null) => (v ? new Date(v.replace(' ', 'T') + 'Z').toISOString() : null);
 const json = <T>(raw: string | null, fallback: T): T => {
@@ -577,13 +579,28 @@ export function getRevenue(clinicId: number): ClinicRevenue {
     .prepare(`SELECT COALESCE(SUM(amount_uzs), 0) AS n FROM subscription_payments WHERE clinic_id = ?`)
     .get(clinicId) as { n: number };
 
+  /*
+   * Qarzni faqat TASDIQLANGAN to'lov kamaytiradi. Klinika topshirgan,
+   * lekin admin hali ko'rmagan summa alohida ko'rsatiladi — aks holda
+   * klinika istalgan raqamni yozib qarzini nolga tushira olardi.
+   */
   const paidCommission = db
-    .prepare(`SELECT COALESCE(SUM(amount_uzs), 0) AS n FROM commission_payments WHERE clinic_id = ?`)
+    .prepare(
+      `SELECT COALESCE(SUM(amount_uzs), 0) AS n FROM commission_payments
+        WHERE clinic_id = ? AND status = 'confirmed'`,
+    )
+    .get(clinicId) as { n: number };
+
+  const pendingCommission = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount_uzs), 0) AS n FROM commission_payments
+        WHERE clinic_id = ? AND status = 'declared'`,
+    )
     .get(clinicId) as { n: number };
 
   const payments = db
     .prepare(
-      `SELECT id, amount_uzs, method, reference, created_at
+      `SELECT id, amount_uzs, method, reference, status, review_note, reviewed_at, created_at
          FROM commission_payments WHERE clinic_id = ?
         ORDER BY created_at DESC LIMIT 24`,
     )
@@ -607,11 +624,16 @@ export function getRevenue(clinicId: number): ClinicRevenue {
     // Hisoblangan komissiyadan to'langani ayiriladi; manfiy bo'lmaydi
     outstandingUzs: Math.max(0, totals.commission - paidCommission.n),
     paidCommissionUzs: paidCommission.n,
+    /** Topshirilgan, lekin admin hali tasdiqlamagan summa */
+    pendingCommissionUzs: pendingCommission.n,
     commissionPayments: payments.map((p) => ({
       id: p.id,
       amountUzs: p.amount_uzs,
       method: p.method,
       reference: p.reference ?? null,
+      status: p.status,
+      reviewNote: p.review_note ?? null,
+      reviewedAt: iso(p.reviewed_at ?? null),
       createdAt: iso(p.created_at)!,
     })),
     subscription: {
@@ -664,7 +686,7 @@ export function setNotificationPrefs(userId: number, patch: Partial<Notification
  * qancha, qaysi usulda, qaysi hujjat bo'yicha. Shlyuz ulanganda uning
  * tasdig'i shu funksiyani chaqiradi, qolgan hisob-kitob o'zgarmaydi.
  */
-export function recordCommissionPayment(input: {
+export function declareCommissionPayment(input: {
   clinicId: number;
   amountUzs: number;
   method: string;
@@ -673,17 +695,87 @@ export function recordCommissionPayment(input: {
   const revenue = getRevenue(input.clinicId);
 
   if (input.amountUzs <= 0) throw badRequest('bad_amount', 'Summa noldan katta bo‘lishi kerak');
-  // Qarzdan ortiq to'lovni qabul qilmaymiz — aks holda balans manfiy ko'rinadi
-  if (input.amountUzs > revenue.outstandingUzs) {
+
+  /*
+   * Qarzdan ortiq topshirib bo'lmaydi. Hisobga TEKSHIRUVDAGI summa ham
+   * kiradi: aks holda klinika bir qarzni ikki marta topshirib, admin
+   * ikkalasini tasdiqlab yuborishi mumkin edi.
+   */
+  const room = revenue.outstandingUzs - revenue.pendingCommissionUzs;
+  if (input.amountUzs > room) {
     throw badRequest('overpayment', 'Summa to‘lanmagan komissiyadan katta');
   }
 
   db.prepare(
-    `INSERT INTO commission_payments (clinic_id, amount_uzs, method, reference, period)
-     VALUES (?, ?, ?, ?, strftime('%Y-%m', 'now'))`,
+    `INSERT INTO commission_payments (clinic_id, amount_uzs, method, reference, period, status)
+     VALUES (?, ?, ?, ?, strftime('%Y-%m', 'now'), 'declared')`,
   ).run(input.clinicId, input.amountUzs, input.method.slice(0, 40), input.reference?.slice(0, 120) || null);
 
   return getRevenue(input.clinicId);
+}
+
+/** Admin uchun — tekshiruv kutayotgan komissiya to'lovlari. */
+export function listPendingCommissionPayments(): PendingCommissionPayment[] {
+  return (
+    db
+      .prepare(
+        `SELECT p.id, p.clinic_id, c.name AS clinic_name, p.amount_uzs, p.method,
+                p.reference, p.created_at
+           FROM commission_payments p
+           JOIN clinics c ON c.id = p.clinic_id
+          WHERE p.status = 'declared'
+          ORDER BY p.created_at ASC`,
+      )
+      .all() as any[]
+  ).map((r) => ({
+    id: r.id,
+    clinicId: r.clinic_id,
+    clinicName: r.clinic_name,
+    amountUzs: r.amount_uzs,
+    method: r.method,
+    reference: r.reference ?? null,
+    createdAt: iso(r.created_at)!,
+  }));
+}
+
+/**
+ * Admin komissiya to'lovini tasdiqlaydi yoki rad etadi.
+ *
+ * Faqat shu yerda qarz kamayadi. Rad etilgan yozuv O'CHIRILMAYDI —
+ * klinika nima yuborganini va nima uchun qaytarilganini ko'rishi kerak.
+ */
+export function reviewCommissionPayment(
+  paymentId: number,
+  adminId: number,
+  decision: 'confirmed' | 'rejected',
+  note: string | null,
+): PendingCommissionPayment[] {
+  const row = db
+    .prepare(`SELECT clinic_id, status, amount_uzs FROM commission_payments WHERE id = ?`)
+    .get(paymentId) as { clinic_id: number; status: string; amount_uzs: number } | undefined;
+
+  if (!row) throw notFound('To‘lov topilmadi');
+  if (row.status !== 'declared') {
+    throw conflict('already_reviewed', 'Bu to‘lov allaqachon ko‘rib chiqilgan');
+  }
+  if (decision === 'rejected' && !note?.trim()) {
+    throw badRequest('note_required', 'Rad etish sababini yozing');
+  }
+
+  db.prepare(
+    `UPDATE commission_payments
+        SET status = ?, reviewed_by = ?, reviewed_at = datetime('now'), review_note = ?
+      WHERE id = ?`,
+  ).run(decision, adminId, note?.trim().slice(0, 300) || null, paymentId);
+
+  notifyClinic(
+    row.clinic_id,
+    decision === 'confirmed' ? 'commission_confirmed' : 'commission_rejected',
+    { amount: row.amount_uzs, note: note ?? '' },
+    '/clinic/revenue',
+  );
+
+  return listPendingCommissionPayments();
 }
 
 /* ═════════════════  10. Moderator: hujjat tekshiruvi  ═════════════════ */

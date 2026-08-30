@@ -203,6 +203,9 @@ export function mapDeal(r: any): Deal {
     commissionUzs: r.commission_uzs,
     commissionPercent: r.commission_percent ?? null,
     confirmedAt: iso(r.confirmed_at),
+    paidAt: iso(r.paid_at ?? null),
+    paymentMethod: r.payment_method ?? null,
+    receiptConfirmedAt: iso(r.receipt_confirmed_at ?? null),
     disputeReason: r.dispute_reason,
     createdAt: isoReq(r.created_at),
   };

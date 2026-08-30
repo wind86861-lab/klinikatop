@@ -34,7 +34,7 @@ import {
   setSlot,
   updateDoctor,
   updateTemplate,
-  recordCommissionPayment,
+  declareCommissionPayment,
   verificationChecklist,
 } from '../services/clinicCabinet';
 import { CLINIC_DOC_KINDS } from '../../../shared/types';
@@ -362,7 +362,7 @@ clinicRouter.post('/commission/pay', (req, res) => {
     .parse(req.body);
 
   res.status(201).json(
-    recordCommissionPayment({
+    declareCommissionPayment({
       clinicId,
       amountUzs: body.amountUzs,
       method: body.method,

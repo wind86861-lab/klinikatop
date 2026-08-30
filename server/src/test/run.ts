@@ -466,8 +466,21 @@ async function main() {
   deals.markPerformed(deal.id, clinic.id);
   check('BAJARILGAN holatiga o‘tdi', deals.getDeal(deal.id).status === 'PERFORMED');
 
-  const confirmed = deals.confirmDeal(deal.id, patient.id, 10_500_000);
+  // To'lov ikki qadam: bemor bildiradi → klinika olganini tasdiqlaydi
+  const paid = deals.declarePayment(deal.id, patient.id, 10_500_000, 'cash');
+  check('TO‘LANDI holatiga o‘tdi', paid.status === 'PAID');
+  check('summa yozildi', paid.confirmedAmountUzs === 10_500_000);
+  check('to‘lov usuli yozildi', paid.paymentMethod === 'cash');
+  check('bemor to‘lagani bilan komissiya hali yo‘q', paid.commissionUzs === null);
+  check('so‘rov hali yakunlanmagan', requests.getRequest(request.id).status !== 'COMPLETED');
+
+  throws('begona klinika to‘lovni tasdiqlay olmaydi', () =>
+    deals.confirmReceipt(deal.id, clinic.id + 999),
+  );
+
+  const confirmed = deals.confirmReceipt(deal.id, clinic.id);
   check('TASDIQLANGAN holatiga o‘tdi', confirmed.status === 'CONFIRMED');
+  check('klinika tasdig‘i yozildi', confirmed.receiptConfirmedAt !== null);
   check('komissiya 5% hisoblandi', confirmed.commissionUzs === 525_000, confirmed.commissionUzs);
   check('so‘rov YAKUNLANGAN', requests.getRequest(request.id).status === 'COMPLETED');
   check(
@@ -546,7 +559,8 @@ async function main() {
   );
   deals.agreeSchedule(deal2.id, patient.id, null, new Date(Date.now() + 86_400_000).toISOString());
   deals.markPerformed(deal2.id, clinic.id);
-  deals.confirmDeal(deal2.id, patient.id, 13_000_000);
+  deals.declarePayment(deal2.id, patient.id, 13_000_000);
+  deals.confirmReceipt(deal2.id, deals.getDeal(deal2.id).clinicId);
 
   stats = priceStats.getPriceStats(gallbladder.id, tashkent.id);
   check('yetarli bitimdan keyin real statistikaga o‘tdi', stats.source === 'deals', stats.source);
@@ -1707,7 +1721,8 @@ async function main() {
 
   deals.agreeSchedule(priceDeal.id, patient.id, null, futureDate(5) + 'T10:00:00.000Z');
   deals.markPerformed(priceDeal.id, clinic.id);
-  const priceConfirmed = deals.confirmDeal(priceDeal.id, patient.id, 10_500_000);
+  deals.declarePayment(priceDeal.id, patient.id, 10_500_000);
+  const priceConfirmed = deals.confirmReceipt(priceDeal.id, deals.getDeal(priceDeal.id).clinicId);
 
   const percent = priceConfirmed.commissionPercent;
   check('komissiya foizi yozildi', typeof percent === 'number' && percent > 0, percent);
@@ -2167,6 +2182,236 @@ async function main() {
     null,
   );
   check('sinovdan keyin tiklandi', steps.listSteps().length === 9 && steps.validateAnswers({}) === null);
+
+  /* ══════════════  To'lov bosqichi  ══════════════ */
+
+  section("To'lov bosqichi");
+
+  /*
+   * Bu blok fayl oxirida turadi — katalog sinxronizatsiyasi sinovlari
+   * seed qilingan operatsiyalarni o'chirgan bo'lishi mumkin. Shuning
+   * uchun operatsiya SHU YERDA, amaldagi ro'yxatdan olinadi.
+   */
+  const payOp = db
+    .prepare(
+      `SELECT o.id FROM clinic_operations co
+         JOIN operations o ON o.id = co.operation_id
+        WHERE co.clinic_id = ? AND o.active = 1
+        LIMIT 1`,
+    )
+    .get(clinic.id) as { id: number };
+
+  {
+    // Yangi to'liq oqim: so'rov → taklif → tanlov → sana → bajarildi
+    const p2 = upsertUser({ id: 778001, first_name: 'To‘lov', language_code: 'uz' });
+    db.prepare(
+      `UPDATE users SET last_name = 'Sinov', city_id = ?, birth_year = 1990, gender = 'male' WHERE id = ?`,
+    ).run(tashkent.id, p2.id);
+    const r2 = requests.createRequest({
+      patientId: p2.id, operationId: payOp.id, cityId: tashkent.id, budgetUzs: 12_000_000,
+      conditionText: 'To‘lov bosqichini sinash uchun holat tavsifi', note: null,
+      urgency: 'normal', attachments: [], otherRegionsOk: false,
+      dateFrom: null, dateTo: null, dateFlexible: true, aiSuggested: false, acceptTerms: true,
+    });
+    const o2 = offers.createOffer({
+      requestId: r2.id,
+      clinicId: clinic.id,
+      priceUzs: 12_000_000,
+      includes: ['Operatsiya', 'Narkoz', 'Palata'],
+      advantages: ['Sinov'],
+      leadTimeDays: 5,
+      note: null,
+    });
+    const d2 = deals.chooseOffer(r2.id, o2.id, p2.id);
+    deals.agreeSchedule(d2.id, p2.id, clinic.id, new Date(Date.now() + 86400_000).toISOString());
+    deals.markPerformed(d2.id, clinic.id);
+
+    // ── Klinika to'lovdan OLDIN tasdiqlay olmaydi ──
+    throws('to‘lovsiz tasdiqlab bo‘lmaydi', () => deals.confirmReceipt(d2.id, clinic.id));
+
+    // ── Noto'g'ri summa ──
+    throws('juda kichik summa rad etiladi', () => deals.declarePayment(d2.id, p2.id, 1000));
+    throws('begona odam to‘lov bildira olmaydi', () => deals.declarePayment(d2.id, patient.id, 12_000_000));
+
+    // ── Bemor to'lovni bildiradi ──
+    const paid2 = deals.declarePayment(d2.id, p2.id, 11_000_000, 'card');
+    check('holat PAID', paid2.status === 'PAID');
+    check('to‘lov vaqti yozildi', paid2.paidAt !== null);
+    check('komissiya hali hisoblanmagan', paid2.commissionUzs === null);
+    check('klinika hisobiga hali qo‘shilmagan', requests.getRequest(r2.id).status !== 'COMPLETED');
+
+    // ── Ikki marta bildirib bo'lmaydi ──
+    throws('ikkinchi marta to‘lov bildirilmaydi', () => deals.declarePayment(d2.id, p2.id, 11_000_000));
+
+    // ── Klinika tasdiqlaydi ──
+    const done2 = deals.confirmReceipt(d2.id, clinic.id);
+    check('holat CONFIRMED', done2.status === 'CONFIRMED');
+    /*
+     * Foiz qattiq yozilmaydi: yuqoridagi sinovlar platforma qiymatini
+     * o'zgartiradi. Muhimi — komissiya BEMOR aytgan summadan olinishi.
+     */
+    check(
+      'komissiya bemor aytgan summadan',
+      done2.commissionUzs === Math.round((11_000_000 * done2.commissionPercent!) / 100),
+      { commission: done2.commissionUzs, percent: done2.commissionPercent },
+    );
+    check('summa o‘zgarmadi', done2.confirmedAmountUzs === 11_000_000);
+    check('so‘rov yakunlandi', requests.getRequest(r2.id).status === 'COMPLETED');
+    check('qo‘lda yopilganda avto belgisi yo‘q', deals.getDeal(d2.id).status === 'CONFIRMED');
+
+    // ── Yopilgach qayta tasdiqlab bo'lmaydi ──
+    throws('yopilgan bitim qayta tasdiqlanmaydi', () => deals.confirmReceipt(d2.id, clinic.id));
+  }
+
+  {
+    /*
+     * Klinika jim qolsa — avtomatik yopiladi.
+     *
+     * Busiz jim turish klinikaga foydali bo'lardi: tasdiqlamasa
+     * komissiya ham hisoblanmasdi.
+     */
+    const p3 = upsertUser({ id: 778002, first_name: 'Jim', language_code: 'uz' });
+    db.prepare(
+      `UPDATE users SET last_name = 'Klinika', city_id = ?, birth_year = 1990, gender = 'male' WHERE id = ?`,
+    ).run(tashkent.id, p3.id);
+    const r3 = requests.createRequest({
+      patientId: p3.id, operationId: payOp.id, cityId: tashkent.id, budgetUzs: 12_000_000,
+      conditionText: 'Klinika tasdiqlamagan holatni sinash uchun tavsif', note: null,
+      urgency: 'normal', attachments: [], otherRegionsOk: false,
+      dateFrom: null, dateTo: null, dateFlexible: true, aiSuggested: false, acceptTerms: true,
+    });
+    const o3 = offers.createOffer({
+      requestId: r3.id,
+      clinicId: clinic.id,
+      priceUzs: 12_000_000,
+      includes: ['Operatsiya', 'Narkoz', 'Palata'],
+      advantages: ['Sinov'],
+      leadTimeDays: 5,
+      note: null,
+    });
+    const d3 = deals.chooseOffer(r3.id, o3.id, p3.id);
+    deals.agreeSchedule(d3.id, p3.id, clinic.id, new Date(Date.now() + 86400_000).toISOString());
+    deals.markPerformed(d3.id, clinic.id);
+    deals.declarePayment(d3.id, p3.id, 9_000_000);
+
+    // Soatni orqaga suramiz — 60 kun oldin to'langan deb
+    db.prepare(`UPDATE deals SET paid_at = datetime('now', '-60 days') WHERE id = ?`).run(d3.id);
+
+    const closed = deals.autoConfirmStaleDeals();
+    check('jim klinika bitimi avtomatik yopildi', closed >= 1, closed);
+    const after3 = deals.getDeal(d3.id);
+    check('holat CONFIRMED', after3.status === 'CONFIRMED');
+    check(
+      'summa BEMOR aytgan qiymatdan olindi',
+      after3.confirmedAmountUzs === 9_000_000,
+      after3.confirmedAmountUzs,
+    );
+    check(
+      'komissiya shu summadan',
+      after3.commissionUzs === Math.round((9_000_000 * after3.commissionPercent!) / 100),
+      { commission: after3.commissionUzs, percent: after3.commissionPercent },
+    );
+    check(
+      'avtomatik yopilgani belgilandi',
+      (db.prepare(`SELECT auto_confirmed FROM deals WHERE id = ?`).get(d3.id) as any).auto_confirmed === 1,
+    );
+    check(
+      'avtomatik yopishda bonus berilmadi',
+      (db.prepare(`SELECT bonus_points FROM users WHERE id = ?`).get(p3.id) as any).bonus_points === 0,
+    );
+  }
+
+  /* ══════════════  Komissiya to'lovi: klinika → admin  ══════════════ */
+
+  section('Komissiya to‘lovi');
+
+  {
+    const cab = require('../services/clinicCabinet');
+    const before = cab.getRevenue(clinic.id);
+    check('qarz bor', before.outstandingUzs > 0, before.outstandingUzs);
+    check('tekshiruvdagi summa hozircha nol', before.pendingCommissionUzs === 0);
+
+    // ── Qarzdan ortiq topshirib bo'lmaydi ──
+    throws('qarzdan ortiq to‘lov rad etiladi', () =>
+      cab.declareCommissionPayment({
+        clinicId: clinic.id,
+        amountUzs: before.outstandingUzs + 1,
+        method: 'bank',
+        reference: null,
+      }),
+    );
+
+    // ── Klinika topshiradi ──
+    const part = Math.floor(before.outstandingUzs / 2);
+    const afterDeclare = cab.declareCommissionPayment({
+      clinicId: clinic.id,
+      amountUzs: part,
+      method: 'bank',
+      reference: 'TXN-1',
+    });
+    check('tekshiruvda turibdi', afterDeclare.pendingCommissionUzs === part, afterDeclare.pendingCommissionUzs);
+    check(
+      'topshirish QARZNI KAMAYTIRMAYDI',
+      afterDeclare.outstandingUzs === before.outstandingUzs,
+      afterDeclare.outstandingUzs,
+    );
+    check('to‘lov ro‘yxatda "declared"', afterDeclare.commissionPayments[0].status === 'declared');
+
+    // ── Ikki marta topshirib qarzni yopib bo'lmaydi ──
+    throws('tekshiruvdagi summa hisobga olinadi', () =>
+      cab.declareCommissionPayment({
+        clinicId: clinic.id,
+        amountUzs: before.outstandingUzs,
+        method: 'bank',
+        reference: 'TXN-2',
+      }),
+    );
+
+    // ── Admin navbatda ko'radi ──
+    const queue = cab.listPendingCommissionPayments();
+    check('admin navbatida ko‘rinadi', queue.length === 1 && queue[0].amountUzs === part);
+    check('klinika nomi bilan keladi', Boolean(queue[0].clinicName));
+
+    // ── Rad etish sababsiz bo'lmaydi ──
+    throws('sababsiz rad etilmaydi', () =>
+      cab.reviewCommissionPayment(queue[0].id, moderator.id, 'rejected', null),
+    );
+
+    // ── Admin tasdiqlaydi ──
+    cab.reviewCommissionPayment(queue[0].id, moderator.id, 'confirmed', null);
+    const afterConfirm = cab.getRevenue(clinic.id);
+    check(
+      'tasdiqlangach qarz kamaydi',
+      afterConfirm.outstandingUzs === before.outstandingUzs - part,
+      afterConfirm.outstandingUzs,
+    );
+    check('tekshiruvdagi summa bo‘shadi', afterConfirm.pendingCommissionUzs === 0);
+    check('to‘langan summaga qo‘shildi', afterConfirm.paidCommissionUzs >= part);
+    check('navbat bo‘shadi', cab.listPendingCommissionPayments().length === 0);
+
+    // ── Ikki marta ko'rib chiqilmaydi ──
+    throws('ikki marta tasdiqlanmaydi', () =>
+      cab.reviewCommissionPayment(queue[0].id, moderator.id, 'confirmed', null),
+    );
+
+    // ── Rad etish oqimi ──
+    const d2 = cab.declareCommissionPayment({
+      clinicId: clinic.id,
+      amountUzs: 100_000,
+      method: 'cash',
+      reference: 'TXN-3',
+    });
+    const q2 = cab.listPendingCommissionPayments();
+    cab.reviewCommissionPayment(q2[0].id, moderator.id, 'rejected', 'Bankdan tushmadi');
+    const afterReject = cab.getRevenue(clinic.id);
+    check('rad etilgach qarz o‘zgarmadi', afterReject.outstandingUzs === afterConfirm.outstandingUzs);
+    check('rad etilgan yozuv saqlanadi', afterReject.commissionPayments.some((p: any) => p.status === 'rejected'));
+    check(
+      'rad etish sababi ko‘rinadi',
+      afterReject.commissionPayments.find((p: any) => p.status === 'rejected')?.reviewNote === 'Bankdan tushmadi',
+    );
+    void d2;
+  }
 
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
