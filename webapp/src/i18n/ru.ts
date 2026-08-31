@@ -150,6 +150,8 @@ export const ru: Record<TranslationKey, string> = {
   'deal.markPerformed': 'Операция выполнена',
   'deal.confirm': 'Подтвердить',
   'deal.declarePayment': 'Я оплатил',
+  'deal.paidAmount': 'Сумма, указанная пациентом',
+  'deal.disputeHint': 'Не согласен с суммой — написать',
   'deal.confirmReceipt': 'Оплату получил',
   'deal.awaitingReceipt': 'Оплата указана. Ожидается подтверждение клиники.',
   'deal.awaitingReceiptClinic': 'Пациент указал оплату. Проверьте сумму и подтвердите.',

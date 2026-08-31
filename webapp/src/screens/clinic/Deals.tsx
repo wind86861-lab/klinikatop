@@ -101,7 +101,12 @@ export function DealsBoard() {
 
 /* ═════════════════  12-ekran: bitim tafsiloti  ═════════════════ */
 
-const DEAL_STEPS = ['SELECTED', 'AGREED', 'PERFORMED', 'CONFIRMED'] as const;
+/*
+ * Bosqichlar bemor ilovasidagi bilan BIR XIL bo'lishi shart. Ilgari
+ * bu yerda `PAID` yo'q edi va klinika bitim qaysi bosqichda ekanini
+ * noto'g'ri ko'rardi.
+ */
+const DEAL_STEPS = ['SELECTED', 'AGREED', 'PERFORMED', 'PAID', 'CONFIRMED'] as const;
 
 export function ClinicDeal() {
   const { t, lang, toast } = useApp();
@@ -214,6 +219,43 @@ export function ClinicDeal() {
               )}
 
               {deal.status === 'PERFORMED' && <Notice tone="info">{t('confirm.subtitle')}</Notice>}
+
+              {/*
+                Bemor to'lovni bildirgach navbat KLINIKAda: u pulni
+                olganini tasdiqlashi kerak va faqat shundan keyin
+                bitim yopilib, komissiya hisoblanadi.
+
+                Bu tugma ilgari faqat bemor ilovasidagi ekranda bor
+                edi — klinika `ClinicDeal` degan boshqa komponentni
+                ishlatadi va u yerda tasdiqlash imkoni umuman yo'q
+                edi. Bitimlar shu sababli `PAID` da qotib qolardi.
+              */}
+              {deal.status === 'PAID' && (
+                <Card className="stack" style={{ gap: 8 }}>
+                  <Notice tone="warning">{t('deal.awaitingReceiptClinic')}</Notice>
+                  <div className="between">
+                    <span className="tiny">{t('deal.paidAmount')}</span>
+                    <strong className="num">
+                      {deal.confirmedAmountUzs ? money(deal.confirmedAmountUzs, lang) : '—'}
+                    </strong>
+                  </div>
+                  <Button block loading={busy} onClick={() => act(() => api.confirmReceipt(dealId))}>
+                    {t('deal.confirmReceipt')}
+                  </Button>
+                  {/*
+                    Summaga rozi bo'lmasa — nizo. Klinika summani
+                    o'zgartira olmaydi: u komissiya bazasi va uni
+                    pasaytirish klinikaga foydali bo'lardi.
+                  */}
+                  <Button
+                    variant="ghost"
+                    block
+                    onClick={() => navigate(`/clinic/deals/${dealId}/chat`)}
+                  >
+                    {t('deal.disputeHint')}
+                  </Button>
+                </Card>
+              )}
 
               <Button
                 variant="secondary"

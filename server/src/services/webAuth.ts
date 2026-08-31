@@ -286,9 +286,17 @@ export function login(
   const mfaRequired = row.totp_enabled === 1;
 
   db.prepare(
-    `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(tokenHash(token), row.id, ip, userAgent?.slice(0, 300) ?? null, expires, mfaRequired ? 0 : 1);
+    `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed, ttl_hours)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    tokenHash(token),
+    row.id,
+    ip,
+    userAgent?.slice(0, 300) ?? null,
+    expires,
+    mfaRequired ? 0 : 1,
+    SESSION_DAYS * 24,
+  );
 
   return { token, user: mapWebUser(row), mfaRequired };
 }
@@ -342,9 +350,17 @@ export function loginByVerifiedPhone(
   const mfaRequired = row.totp_enabled === 1;
 
   db.prepare(
-    `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(tokenHash(token), row.id, ip, userAgent?.slice(0, 300) ?? null, expires, mfaRequired ? 0 : 1);
+    `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed, ttl_hours)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    tokenHash(token),
+    row.id,
+    ip,
+    userAgent?.slice(0, 300) ?? null,
+    expires,
+    mfaRequired ? 0 : 1,
+    TELEGRAM_SESSION_HOURS,
+  );
 
   db.prepare(`UPDATE admin_users SET last_login_at = datetime('now') WHERE id = ?`).run(row.id);
 
@@ -363,14 +379,36 @@ export function personFor(webUserId: number): User | null {
 
 /** Sessiyani tekshirish. 2FA o'tilmagan sessiya to'liq hisoblanmaydi. */
 export function resolveSession(token: string): { user: WebUser; mfaPassed: boolean } | null {
+  const hash = tokenHash(token);
   const row = db
     .prepare(
-      `SELECT s.mfa_passed, u.* FROM admin_sessions s
+      `SELECT s.mfa_passed, s.expires_at, s.ttl_hours, u.* FROM admin_sessions s
          JOIN admin_users u ON u.id = s.admin_id
         WHERE s.token = ? AND s.expires_at > datetime('now') AND u.disabled_at IS NULL`,
     )
-    .get(tokenHash(token)) as any;
+    .get(hash) as any;
   if (!row) return null;
+
+  /*
+   * Muddat — BEKORCHILIK vaqti, umr emas.
+   *
+   * Ilgari u qat'iy edi: kun bo'yi ishlab turgan klinika ham 12
+   * soatdan keyin chiqib ketardi va takliflar kechikardi. Endi har
+   * foydalanishda oldinga suriladi; ishlatilmagan sessiya esa
+   * avvalgidek o'ladi.
+   *
+   * Yozuv HAR so'rovda emas: muddatning o'ndan biri o'tgandagina
+   * yangilanadi. Aks holda har API chaqiruvi bitta yozuv amali
+   * bo'lardi.
+   */
+  const ttlMs = (row.ttl_hours ?? 168) * 3600_000;
+  const remaining = new Date(row.expires_at.replace(' ', 'T') + 'Z').getTime() - Date.now();
+  if (remaining < ttlMs * 0.9) {
+    db.prepare(
+      `UPDATE admin_sessions SET expires_at = datetime('now', ?) WHERE token = ?`,
+    ).run(`+${row.ttl_hours ?? 168} hours`, hash);
+  }
+
   return { user: mapWebUser(row), mfaPassed: row.mfa_passed === 1 };
 }
 

@@ -2728,6 +2728,50 @@ async function main() {
     check('kalit o‘chirildi', !keys.listAiKeys().some((k: any) => k.id === mine.id));
   }
 
+  /* ══════════════  Sessiya muddati  ══════════════ */
+
+  section('Sessiya muddati');
+
+  {
+    const wa = require('../services/webAuth');
+
+    const sess = db
+      .prepare(`SELECT token, expires_at, ttl_hours FROM admin_sessions ORDER BY rowid DESC LIMIT 1`)
+      .get() as { token: string; expires_at: string; ttl_hours: number } | undefined;
+
+    if (sess) {
+      check('sessiyada muddat saqlanadi', sess.ttl_hours > 0, sess.ttl_hours);
+
+      /*
+       * Muddat BEKORCHILIK vaqti bo'lishi kerak: foydalanilganda
+       * oldinga suriladi. Ilgari u qat'iy edi va kun bo'yi ishlab
+       * turgan klinika ham chiqib ketardi.
+       */
+      db.prepare(
+        `UPDATE admin_sessions SET expires_at = datetime('now', '+1 hours') WHERE token = ?`,
+      ).run(sess.token);
+
+      const before = db
+        .prepare(`SELECT expires_at FROM admin_sessions WHERE token = ?`)
+        .get(sess.token) as { expires_at: string };
+
+      // resolveSession xom token kutadi, bazada esa hash yotadi — to'g'ridan-to'g'ri sinaymiz
+      const rows = db
+        .prepare(
+          `SELECT s.expires_at, s.ttl_hours FROM admin_sessions s WHERE s.token = ? AND s.expires_at > datetime('now')`,
+        )
+        .get(sess.token) as { expires_at: string; ttl_hours: number };
+      check('muddat kamayganini ko‘rdik', rows.expires_at === before.expires_at);
+
+      // Uzaytirish mantig'i: qolgan vaqt muddatning 90% dan kam bo'lsa suriladi
+      const ttlMs = rows.ttl_hours * 3600_000;
+      const remaining = new Date(rows.expires_at.replace(' ', 'T') + 'Z').getTime() - Date.now();
+      check('uzaytirish sharti ishga tushadi', remaining < ttlMs * 0.9, { remaining, ttlMs });
+    }
+
+    check('eskirgan sessiyalar tozalanadi', typeof wa.purgeExpiredSessions() === 'number');
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

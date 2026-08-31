@@ -157,6 +157,8 @@ export const uz = {
   'deal.markPerformed': 'Operatsiya bajarildi',
   'deal.confirm': 'Tasdiqlash',
   'deal.declarePayment': 'To‘lov qildim',
+  'deal.paidAmount': 'Bemor bildirgan summa',
+  'deal.disputeHint': 'Summaga rozi emasman — yozish',
   'deal.confirmReceipt': 'To‘lovni oldim',
   'deal.awaitingReceipt': 'To‘lov bildirildi. Klinika tasdiqlashi kutilmoqda.',
   'deal.awaitingReceiptClinic': 'Bemor to‘lovni bildirdi. Summani tekshirib tasdiqlang.',

@@ -1286,6 +1286,30 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    /**
+     * Sessiya foydalanilganda uzayadi.
+     *
+     * Muammo: Telegram orqali kirgan klinika sessiyasi 12 soat edi va
+     * u faoliyatdan QAT'I NAZAR o'lardi. Ya'ni kun bo'yi ishlab
+     * turgan klinika ham kuniga ikki marta chiqib ketardi — bu
+     * to'g'ridan-to'g'ri kechikkan takliflar degani.
+     *
+     * Muddatni shunchaki uzaytirish yechim emas: tashlab ketilgan
+     * sessiya ham o'sha muddat yashardi. To'g'risi — muddatni
+     * BEKORCHILIK vaqti deb hisoblash: har foydalanishda oldinga
+     * suriladi, ishlatilmasa o'ladi.
+     *
+     * `ttl_hours` sessiya bilan birga saqlanadi, chunki parol bilan
+     * kirgan (7 kun) va Telegram orqali kirgan (12 soat) sessiyalar
+     * bir xil emas.
+     */
+    id: '024_session_sliding_expiry',
+    up: (db) => {
+      addColumn(db, 'admin_sessions', 'ttl_hours', 'INTEGER NOT NULL DEFAULT 168');
+      /* Mavjud Telegram sessiyalari qisqa muddatli — ular tabiiy tugaydi */
+    },
+  },
 ];
 
 /**
