@@ -591,6 +591,7 @@ export const ru: Record<TranslationKey, string> = {
   'board.col.SELECTED': 'Выбрано',
   'board.col.AGREED': 'Дата согласована',
   'board.col.PERFORMED': 'Выполнено',
+  'board.col.PAID': 'Оплачено',
   'board.col.CONFIRMED': 'Подтверждено',
   'board.openChat': 'Чат',
   'board.patient': 'Пациент',

@@ -614,6 +614,7 @@ export const uz = {
   'board.col.SELECTED': 'Tanlandi',
   'board.col.AGREED': 'Sana kelishildi',
   'board.col.PERFORMED': 'Bajarildi',
+  'board.col.PAID': 'To‘landi',
   'board.col.CONFIRMED': 'Tasdiqlandi',
   'board.openChat': 'Chat',
   'board.patient': 'Bemor',

@@ -889,9 +889,34 @@ export interface ClinicRevenue {
   };
 }
 
-/** Bitimlar kanban ustunlari — bitim holatiga to'g'ridan-to'g'ri mos keladi. */
-export const DEAL_BOARD_COLUMNS = ['SELECTED', 'AGREED', 'PERFORMED', 'CONFIRMED'] as const;
+/**
+ * Bitimlar kanban ustunlari — bitim holatiga to'g'ridan-to'g'ri mos keladi.
+ *
+ * Bu ro'yxat `DEAL_STEPS` bilan BIR XIL bo'lishi shart. Ilgari
+ * `PAID` bu yerda yo'q edi va to'langan bitim hech qaysi ustunga
+ * tushmay, klinika taxtasidan BUTUNLAY yo'qolib qolardi — klinika
+ * uni ko'rmagani uchun tasdiqlay ham olmasdi.
+ *
+ * Quyidagi tekshiruv shu xatoni qaytarmaslik uchun: yangi holat
+ * qo'shilsa va bu yerga qo'shilmasa, TypeScript xato beradi.
+ */
+export const DEAL_BOARD_COLUMNS = ['SELECTED', 'AGREED', 'PERFORMED', 'PAID', 'CONFIRMED'] as const;
 export type DealBoardColumn = (typeof DEAL_BOARD_COLUMNS)[number];
+
+/** Bekor qilingan va nizodagi bitim taxtada alohida ko'rsatiladi. */
+type DealFlowStatus = Exclude<DealStatus, 'CANCELLED' | 'DISPUTED'>;
+type AssertNever<T extends never> = T;
+
+/*
+ * Har bir oqim holati uchun ustun bo'lishi SHART.
+ *
+ * Bu qator kompilyatsiyada tekshiriladi: yangi holat qo'shilib
+ * `DEAL_BOARD_COLUMNS` ga qo'shilmasa, TypeScript aynan shu yerda
+ * xato beradi. `PAID` bilan bir marta shunday bo'lgan va to'langan
+ * bitim klinika taxtasidan butunlay yo'qolib qolgandi.
+ */
+export type EveryFlowStatusHasColumn = AssertNever<Exclude<DealFlowStatus, DealBoardColumn>>;
+
 
 /* ═══════════════════  Admin: klinikalar boshqaruvi  ═══════════════════ */
 
