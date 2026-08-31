@@ -20,6 +20,8 @@ const offerBody = z.object({
   proposedDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(6).default([]),
   /** Budjetdan yuqori narx uchun izoh — servis majburlaydi */
   aboveBudgetReason: z.string().trim().max(300).nullable().optional(),
+  /** So'rovda operatsiya noma'lum bo'lsa — klinika aniqlagani (servis majburlaydi) */
+  resolvedOperationId: z.number().int().positive().nullable().optional(),
   note: z.string().max(600).nullable().optional(),
 });
 

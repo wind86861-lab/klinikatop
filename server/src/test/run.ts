@@ -2590,6 +2590,144 @@ async function main() {
     check('aniq operatsiyada soha o‘zgartirmaydi', Array.isArray(exact));
   }
 
+  /* ══════════════  Noma'lum operatsiyani klinika aniqlaydi  ══════════════ */
+
+  section("Noma'lum operatsiyani aniqlash");
+
+  {
+    const cat = require('../services/catalog');
+    const unknownOp = cat.getUnknownOperation()!;
+
+    const own = db
+      .prepare(
+        `SELECT co.operation_id AS id FROM clinic_operations co
+           JOIN operations o ON o.id = co.operation_id
+          WHERE co.clinic_id = ? AND o.active = 1 LIMIT 1`,
+      )
+      .get(clinic.id) as { id: number };
+
+    const mkRequest = () =>
+      requests.createRequest({
+        patientId: patient.id,
+        operationId: unknownOp.id,
+        cityId: tashkent.id,
+        budgetUzs: null, // budjet KO'RSATILMAGAN — shunda ham summa aniq bo'lishi kerak
+        conditionText: 'Nimaligini bilmayman, shifokor operatsiya kerak dedi',
+        note: null,
+        urgency: 'normal',
+        attachments: [],
+        aiSuggested: false,
+        acceptTerms: true,
+      });
+
+    const body = (requestId: number, extra: any = {}) => ({
+      requestId,
+      clinicId: clinic.id,
+      priceUzs: 9_000_000,
+      includes: ['Operatsiya', 'Narkoz'],
+      advantages: [],
+      leadTimeDays: 5,
+      note: null,
+      ...extra,
+    });
+
+    // ── Operatsiyasiz taklif RAD ETILADI ──
+    const r1 = mkRequest();
+    throws('noma‘lum so‘rovga operatsiyasiz taklif yuborilmaydi', () => offers.createOffer(body(r1.id)));
+
+    // ── O'zi qilmaydigan operatsiyani ko'rsata olmaydi ──
+    const foreign = db
+      .prepare(
+        `SELECT id FROM operations
+          WHERE active = 1 AND id NOT IN (SELECT operation_id FROM clinic_operations WHERE clinic_id = ?)
+          LIMIT 1`,
+      )
+      .get(clinic.id) as { id: number } | undefined;
+    if (foreign) {
+      throws('o‘zi qilmaydigan operatsiyani ko‘rsata olmaydi', () =>
+        offers.createOffer(body(r1.id, { resolvedOperationId: foreign.id })),
+      );
+    }
+
+    // ── To'g'ri operatsiya bilan o'tadi ──
+    const o1 = offers.createOffer(body(r1.id, { resolvedOperationId: own.id }));
+    check('operatsiya ko‘rsatilgan taklif o‘tdi', o1.status === 'SENT');
+    check('taklifda operatsiya yozildi', o1.resolvedOperationId === own.id, o1.resolvedOperationId);
+
+    // So'rov HALI noma'lum: tanlov qilinmaguncha o'zgarmaydi
+    check(
+      'tanlanmaguncha so‘rov noma‘lumligicha qoladi',
+      requests.getRequest(r1.id).operationId === unknownOp.id,
+    );
+
+    // ── Bemor tanlagach so'rov aniqlanadi ──
+    const deal = deals.chooseOffer(r1.id, o1.id, patient.id);
+    const resolved = requests.getRequest(r1.id);
+    check('tanlovdan keyin so‘rov aniq operatsiyaga o‘tdi', resolved.operationId === own.id, resolved.operationId);
+    check('soha zaxirasi tozalandi', resolved.fallbackCategoryId === null);
+
+    /*
+     * Asosiy maqsad: budjet ko'rsatilmagan bo'lsa ham bitim
+     * summasi ANIQ operatsiyaga yoziladi va narx statistikasi uni
+     * ko'radi. Busiz "bu operatsiya qanchaga ketdi" degan savolga
+     * javob qolmasdi.
+     */
+    deals.agreeSchedule(deal.id, patient.id, clinic.id, new Date(Date.now() + 86400_000).toISOString());
+    deals.markPerformed(deal.id, clinic.id);
+    deals.declarePayment(deal.id, patient.id, 9_500_000);
+    deals.confirmReceipt(deal.id, clinic.id);
+
+    const counted = db
+      .prepare(
+        `SELECT COUNT(*) n FROM deals d JOIN requests r ON r.id = d.request_id
+          WHERE d.status = 'CONFIRMED' AND r.operation_id = ? AND r.city_id = ?`,
+      )
+      .get(own.id, tashkent.id) as { n: number };
+    check('budjetsiz bitim ham aniq operatsiyaga yozildi', counted.n >= 1, counted.n);
+  }
+
+  /* ══════════════  AI kalitlari  ══════════════ */
+
+  section('AI kalitlari');
+
+  {
+    const keys = require('../services/aiKeys');
+
+    check('kalit niqoblanadi', keys.maskKey('AQ.Ab8RN6K4LKfQem0sTNszH9x6uYl') === 'AQ.Ab8…6uYl');
+    check('qisqa kalit butunlay yashiriladi', /^•+$/.test(keys.maskKey('qisqa')));
+
+    const after = keys.addAiKey({ provider: 'gemini', apiKey: 'SINOV-KALIT-1234567890', label: 'Asosiy' });
+    check('kalit qo‘shildi', after.length >= 1);
+    const mine = after.find((k: any) => k.label === 'Asosiy')!;
+    check('to‘liq kalit QAYTARILMAYDI', !JSON.stringify(after).includes('SINOV-KALIT-1234567890'));
+    check('niqob ko‘rinadi', mine.masked.includes('…'));
+
+    throws('bir xil kalit ikki marta qo‘shilmaydi', () =>
+      keys.addAiKey({ provider: 'gemini', apiKey: 'SINOV-KALIT-1234567890', label: null }),
+    );
+    throws('juda qisqa kalit rad etiladi', () =>
+      keys.addAiKey({ provider: 'gemini', apiKey: 'qisqa', label: null }),
+    );
+
+    // Sinash ro'yxatida bo'lishi kerak
+    check('sinash ro‘yxatida bor', keys.keysToTry('gemini').includes('SINOV-KALIT-1234567890'));
+
+    // O'chirilgan kalit sinalmaydi
+    keys.setAiKeyActive(mine.id, false);
+    check('o‘chirilgan kalit sinalmaydi', !keys.keysToTry('gemini').includes('SINOV-KALIT-1234567890'));
+    keys.setAiKeyActive(mine.id, true);
+
+    // Xato belgilanadi va admin ko'radi
+    keys.markKeyResult('SINOV-KALIT-1234567890', 'Gemini 503: high demand');
+    const withErr = keys.listAiKeys().find((k: any) => k.id === mine.id)!;
+    check('xato yozildi', withErr.lastError?.includes('503'), withErr.lastError);
+    keys.markKeyResult('SINOV-KALIT-1234567890', null);
+    check('muvaffaqiyat xatoni tozalaydi', keys.listAiKeys().find((k: any) => k.id === mine.id)!.lastError === null);
+
+    keys.deleteAiKey(mine.id);
+    check('kalit o‘chirildi', !keys.listAiKeys().some((k: any) => k.id === mine.id));
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

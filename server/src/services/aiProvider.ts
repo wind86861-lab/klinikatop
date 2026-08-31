@@ -17,6 +17,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../lib/config';
+import { keysToTry, markKeyResult, maskKey, type AiKeyProvider } from './aiKeys';
 
 export interface CompleteInput {
   system: string;
@@ -228,10 +229,67 @@ function pick(): AiProvider | null {
   return null;
 }
 
+/**
+ * Bir nechta kalitni ketma-ket sinaydigan provayder.
+ *
+ * Prodda ko'rilgan holat: Gemini 503 "high demand" qaytardi va butun
+ * AI heuristikaga tushdi. Bitta provayderning vaqtinchalik yuklamasi
+ * mahsulotning asosiy qismini o'chirmasligi kerak.
+ *
+ * Tartib: admin qo'ygan kalitlar, keyin muhit sozlamasidagi.
+ * Birinchi MUVAFFAQIYATLI javob qaytariladi; hammasi yiqilsa xato
+ * tashlanadi va chaqiruvchi heuristikaga tushadi (avvalgidek).
+ *
+ * Rad javobi (`refused`) xato EMAS: model ataylab javob bermagan,
+ * boshqa kalit ham xuddi shunday qiladi.
+ */
+function failoverProvider(which: AiKeyProvider, model: string): AiProvider | null {
+  const build = which === 'gemini' ? geminiProvider : anthropicProvider;
+
+  return {
+    name: `${which}/${model}`,
+    async complete(req) {
+      const keys = keysToTry(which);
+      if (keys.length === 0) throw new Error('AI kaliti yo‘q');
+
+      let lastError: unknown = null;
+      for (const key of keys) {
+        try {
+          const result = await build(key, model).complete(req);
+          markKeyResult(key, null);
+          return result;
+        } catch (err) {
+          lastError = err;
+          const message = err instanceof Error ? err.message : String(err);
+          markKeyResult(key, message);
+          console.warn(`[ai] kalit ishlamadi (${maskKey(key)}), keyingisiga o‘tildi: ${message}`);
+        }
+      }
+      throw lastError ?? new Error('Barcha AI kalitlari ishlamadi');
+    },
+  };
+}
+
 let cached: AiProvider | null | undefined;
 
 export function aiProvider(): AiProvider | null {
-  return (cached ??= pick());
+  if (cached !== undefined) return cached;
+
+  /*
+   * Qaysi provayder — avvalgidek sozlamadan. Kalitlar esa endi
+   * ro'yxatdan olinadi, shuning uchun natija keshlansa ham yangi
+   * kalit qo'shilganda `resetAiProvider()` chaqiriladi.
+   */
+  const base = pick();
+  if (!base) {
+    // Bazada kalit bo'lishi mumkin — muhitda bo'lmasa ham
+    const which: AiKeyProvider = config.ai.provider === 'anthropic' ? 'anthropic' : 'gemini';
+    cached = keysToTry(which).length > 0 ? failoverProvider(which, config.ai.model) : null;
+    return cached;
+  }
+
+  cached = failoverProvider(base.name.startsWith('anthropic') ? 'anthropic' : 'gemini', config.ai.model);
+  return cached;
 }
 
 export const aiEnabled = () => aiProvider() !== null;

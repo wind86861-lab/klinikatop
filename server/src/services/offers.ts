@@ -7,7 +7,12 @@
  *  - Narxga "nima kiradi" ochiq ko'rsatilishi SHART — yashirin qo'shimcha taqiqlanadi (5.1)
  */
 import { db, dateFromSql, toJson, tx } from '../db';
-import { PLAN_LIMITS, type OfferBadge, type OfferWithClinic } from '../../../shared/types';
+import {
+  PLAN_LIMITS,
+  UNKNOWN_OPERATION_SLUG,
+  type OfferBadge,
+  type OfferWithClinic,
+} from '../../../shared/types';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { formatUzs } from '../lib/format';
 import { mapClinicPublic, mapOffer } from '../lib/mappers';
@@ -27,6 +32,13 @@ export interface CreateOfferInput {
   proposedDates?: string[];
   /** Budjetdan yuqori narx uchun izoh */
   aboveBudgetReason?: string | null;
+  /**
+   * So'rovda operatsiya "noma'lum" bo'lsa — klinika aniqlagan operatsiya.
+   *
+   * Majburiy: usiz bitim hech qaysi operatsiyaga yozilmaydi va
+   * "bu operatsiya qanchaga ketdi" degan savolga javob qolmaydi.
+   */
+  resolvedOperationId?: number | null;
   note: string | null;
 }
 
@@ -226,6 +238,46 @@ function validateOfferBody(
   }
 }
 
+/**
+ * Taklif qaysi operatsiyaga tegishli ekanini aniqlaydi.
+ *
+ * So'rovdagi operatsiya ma'lum bo'lsa — hech narsa kerak emas.
+ * "Noma'lum" bo'lsa klinika aniq operatsiyani KO'RSATISHI SHART:
+ * aks holda bitim yopilganda summa hech qaysi operatsiyaga
+ * yozilmaydi va narx statistikasi bu bitimni ko'rmaydi.
+ *
+ * Klinika faqat O'ZI qiladigan operatsiyani ko'rsata oladi — bu
+ * ham ro'yxatni qisqartiradi, ham "qila olmaydigan ishni taklif
+ * qilish" holatini yopadi.
+ */
+function resolveOperationForOffer(
+  req: { operationId: number },
+  input: CreateOfferInput,
+): number | null {
+  const op = db.prepare(`SELECT slug FROM operations WHERE id = ?`).get(req.operationId) as
+    | { slug: string }
+    | undefined;
+  if (op?.slug !== UNKNOWN_OPERATION_SLUG) return null;
+
+  const id = input.resolvedOperationId;
+  if (!id) {
+    throw badRequest('operation_required', 'Qaysi operatsiyani taklif qilayotganingizni tanlang');
+  }
+
+  const owned = db
+    .prepare(
+      `SELECT 1 FROM clinic_operations co
+         JOIN operations o ON o.id = co.operation_id
+        WHERE co.clinic_id = ? AND co.operation_id = ? AND o.active = 1`,
+    )
+    .get(input.clinicId, id);
+  if (!owned) {
+    throw badRequest('operation_not_owned', 'Bu operatsiya sizning yo‘nalishlaringizda yo‘q');
+  }
+
+  return id;
+}
+
 export function createOffer(input: CreateOfferInput): OfferWithClinic {
   assertClinicCanOffer(input.clinicId);
 
@@ -241,6 +293,8 @@ export function createOffer(input: CreateOfferInput): OfferWithClinic {
     throw forbidden('Bu so‘rov sizning klinikangizga mos kelmaydi');
   }
 
+  const resolvedOperationId = resolveOperationForOffer(req, input);
+
   const existing = db
     .prepare(`SELECT id FROM offers WHERE request_id = ? AND clinic_id = ? AND status IN ('SENT','CHOSEN')`)
     .get(input.requestId, input.clinicId) as { id: number } | undefined;
@@ -253,9 +307,9 @@ export function createOffer(input: CreateOfferInput): OfferWithClinic {
       .prepare(
         `INSERT INTO offers
            (request_id, clinic_id, price_uzs, includes, advantages, lead_time_days,
-            proposed_dates, above_budget_reason, note)
+            proposed_dates, above_budget_reason, note, resolved_operation_id)
          VALUES (@requestId, @clinicId, @priceUzs, @includes, @advantages, @leadTimeDays,
-                 @proposedDates, @aboveBudgetReason, @note)`,
+                 @proposedDates, @aboveBudgetReason, @note, @resolvedOperationId)`,
       )
       .run({
         requestId: input.requestId,
@@ -270,6 +324,7 @@ export function createOffer(input: CreateOfferInput): OfferWithClinic {
             : null,
         leadTimeDays: Math.round(input.leadTimeDays),
         note: input.note,
+        resolvedOperationId,
       });
 
     // "Javob tezligi" ko'rsatkichi — so'rov kelganidan taklifgacha o'tgan daqiqa

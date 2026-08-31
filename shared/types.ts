@@ -365,6 +365,11 @@ export interface Offer {
   id: number;
   requestId: number;
   clinicId: number;
+  /**
+   * So'rovdagi operatsiya "noma'lum" bo'lganda klinika aniqlagan operatsiya.
+   * Bemor shu taklifni tanlasa, so'rov shu operatsiyaga o'tadi.
+   */
+  resolvedOperationId?: number | null;
   priceUzs: number;
   /** Narxga nima kiradi — shaffoflik siyosati bo'yicha majburiy */
   includes: string[];
@@ -659,6 +664,21 @@ export interface BotFace {
   shortDescription: string;
   /** Yozuv maydoni yonidagi tugma matni — ilovani ochadi */
   menuButton: string;
+}
+
+/** Admin panelidagi AI kaliti — to'liq kalit HECH QACHON kelmaydi. */
+export interface AiKeyRow {
+  id: number;
+  provider: 'gemini' | 'anthropic';
+  label: string | null;
+  /** Niqoblangan ko'rinish, masalan `AQ.Ab8…9g` */
+  masked: string;
+  active: boolean;
+  position: number;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  lastOkAt: string | null;
+  createdAt: string;
 }
 
 export interface AdminMetrics {

@@ -93,6 +93,21 @@ export function chooseOffer(requestId: number, offerId: number, patientId: numbe
                  WHERE request_id = ? AND id != ? AND status = 'SENT'`).run(requestId, offerId);
     db.prepare(`UPDATE requests SET status = 'CHOSEN', chosen_offer_id = ? WHERE id = ?`).run(offerId, requestId);
 
+    /*
+     * Operatsiya "noma'lum" bo'lgan so'rov SHU YERDA aniqlanadi.
+     *
+     * Bir necha klinika har xil operatsiya taklif qilgan bo'lishi
+     * mumkin; qaysi biri to'g'ri ekanini bemor tanlovi hal qiladi.
+     * Shundan keyin bitim summasi to'g'ri operatsiyaga yoziladi va
+     * narx statistikasi uni ko'radi — busiz "bu operatsiya qanchaga
+     * ketdi" degan savolga javob qolmasdi.
+     */
+    if (offer.resolved_operation_id) {
+      db.prepare(
+        `UPDATE requests SET operation_id = ?, fallback_category_id = NULL WHERE id = ?`,
+      ).run(offer.resolved_operation_id, requestId);
+    }
+
     const info = db
       .prepare(
         `INSERT INTO deals (request_id, offer_id, patient_id, clinic_id, agreed_price_uzs, status)

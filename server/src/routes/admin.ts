@@ -12,6 +12,8 @@ import {
   SETTING_BOT_SHORT,
 } from '../services/bot';
 import { setTextSetting } from '../services/terms.business';
+import { addAiKey, deleteAiKey, listAiKeys, setAiKeyActive } from '../services/aiKeys';
+import { resetAiProvider } from '../services/aiProvider';
 import { listSyncLog, planSync, runSync, sourceConfigured } from '../services/catalogSync';
 import { rateLimit } from '../middleware/rateLimit';
 import { forbidden } from '../lib/errors';
@@ -447,4 +449,48 @@ adminRouter.put('/bot', async (req, res) => {
   }
 
   res.json({ ...getBotFace(), applied });
+});
+
+/* ═════════════════  AI kalitlari  ═════════════════ */
+
+/**
+ * Kalitlar ro'yxati — NIQOBLANGAN holda.
+ *
+ * To'liq kalit hech qachon qaytarilmaydi: panelga kirish huquqi
+ * kalitni nusxalab olish huquqini bermasligi kerak.
+ */
+adminRouter.get('/ai-keys', requireRole('admin'), (_req, res) => {
+  res.json(listAiKeys());
+});
+
+adminRouter.post('/ai-keys', requireRole('admin'), (req, res) => {
+  const body = z
+    .object({
+      provider: z.enum(['gemini', 'anthropic']),
+      apiKey: z.string().trim().min(12).max(400),
+      label: z.string().trim().max(60).nullable().default(null),
+    })
+    .parse(req.body);
+
+  const list = addAiKey(body);
+  // Yangi kalit darhol ishlatilsin — keshdagi provayder eskirgan
+  resetAiProvider();
+  // Kalitning O'ZI jurnalga tushmaydi
+  logModeration(req.user!.id, 'platform', 0, 'ai-key:add', body.provider);
+  res.status(201).json(list);
+});
+
+adminRouter.post('/ai-keys/:id', requireRole('admin'), (req, res) => {
+  const body = z.object({ active: z.boolean() }).parse(req.body);
+  const list = setAiKeyActive(Number(req.params.id), body.active);
+  resetAiProvider();
+  logModeration(req.user!.id, 'platform', Number(req.params.id), `ai-key:${body.active ? 'on' : 'off'}`, '');
+  res.json(list);
+});
+
+adminRouter.delete('/ai-keys/:id', requireRole('admin'), (req, res) => {
+  const list = deleteAiKey(Number(req.params.id));
+  resetAiProvider();
+  logModeration(req.user!.id, 'platform', Number(req.params.id), 'ai-key:delete', '');
+  res.json(list);
 });

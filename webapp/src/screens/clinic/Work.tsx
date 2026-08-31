@@ -30,14 +30,16 @@ import {
   IconPlus,
   Input,
   Notice,
+  Section,
   Screen,
   Segment,
   Sheet,
   Skeleton,
   Textarea,
 } from '@/ui';
+import { CatalogBrowser, type CatalogBranch } from '@/components/CatalogBrowser';
 import { Async, ClinicTabBar, Meter, useResource } from './shell';
-import type { OfferTemplate, Operation, RequestWithMeta } from '@shared/types';
+import { isUnknownOperation, type OfferTemplate, type Operation, type RequestWithMeta } from '@shared/types';
 
 /* ═════════════════  6-ekran: so'rovlar oqimi  ═════════════════ */
 
@@ -174,7 +176,22 @@ export function OfferBuilder() {
       api.clinicRequest(requestId),
       clinicApi.templates(),
     ]);
-    return { ...detail, templates };
+
+    /*
+     * So'rov "noma'lum" bo'lsa klinika operatsiyani o'zi tanlaydi.
+     * Ro'yxat FAQAT shu klinikaning yo'nalishlaridan iborat: butun
+     * katalogdan qidirish uzoq va u baribir o'zi qilmaydigan
+     * operatsiyani tanlay olmaydi (server rad etadi).
+     *
+     * Ikkita qo'shimcha so'rov faqat kerak bo'lgandagina yuboriladi.
+     */
+    let myTree: CatalogBranch[] = [];
+    if (isUnknownOperation(detail.request.operation)) {
+      const [me, tree] = await Promise.all([api.clinic(), api.catalogTree()]);
+      myTree = narrowTree(tree, new Set(me.operationIds));
+    }
+
+    return { ...detail, templates, myTree };
   }, [requestId]);
 
   const [price, setPrice] = useState('');
@@ -185,10 +202,19 @@ export function OfferBuilder() {
   const [pickTemplate, setPickTemplate] = useState(false);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [sending, setSending] = useState(false);
+  /*
+   * So'rovdagi operatsiya "noma'lum" bo'lsa klinika aniq operatsiyani
+   * KO'RSATISHI shart. Usiz bitim hech qaysi operatsiyaga yozilmaydi
+   * va "bu operatsiya qanchaga ketdi" degan savolga javob qolmaydi.
+   */
+  const [resolvedOperation, setResolvedOperation] = useState<Operation | null>(null);
 
   const priceNumber = Number(price.replace(/\D/g, '')) || 0;
   const clean = (list: string[]) => list.map((s) => s.trim()).filter(Boolean);
-  const canSend = priceNumber > 0 && clean(includes).length > 0;
+  const unknownRequest = res.data ? isUnknownOperation(res.data.request.operation) : false;
+  // Noma'lum so'rovda operatsiya tanlanmaguncha yuborib bo'lmaydi
+  const canSend =
+    priceNumber > 0 && clean(includes).length > 0 && (!unknownRequest || resolvedOperation !== null);
 
   const applyTemplate = (tpl: OfferTemplate) => {
     if (tpl.priceUzs) setPrice(groupDigits(tpl.priceUzs));
@@ -204,6 +230,7 @@ export function OfferBuilder() {
   /** Obuna to'sig'i — server 402 qaytarganda ko'rsatiladi */
   const [paywall, setPaywall] = useState<'subscription_required' | 'offer_limit_reached' | null>(null);
 
+
   const submit = async () => {
     setSending(true);
     try {
@@ -214,6 +241,7 @@ export function OfferBuilder() {
         advantages: clean(advantages),
         leadTimeDays,
         note: note.trim() || null,
+        resolvedOperationId: resolvedOperation?.id ?? null,
       });
 
       // Shablon sifatida saqlash ixtiyoriy — keyingi safar bir tegishda qo'llaniladi
@@ -269,6 +297,33 @@ export function OfferBuilder() {
                   <AttachmentList files={data.request.files} />
                 )}
               </Card>
+
+              {/*
+                Bemor operatsiyani ayta olmagan. Klinika tavsifni o'qidi
+                va nima qilishini biladi — shuning uchun aniqlashni u
+                qiladi. Ro'yxat FAQAT shu klinikaning yo'nalishlaridan
+                iborat, ya'ni soha → bo'lim bo'yicha tez topiladi.
+              */}
+              {unknownRequest && (
+                <Section title={t('ob.pickOperation')}>
+                  <Notice tone={resolvedOperation ? 'info' : 'warning'}>
+                    {resolvedOperation
+                      ? t('ob.pickedOperation', { v: opName(resolvedOperation, lang) })
+                      : t('ob.pickOperationHint')}
+                  </Notice>
+                  <CatalogBrowser
+                    tree={data.myTree ?? []}
+                    lang={lang}
+                    mode="single"
+                    selected={resolvedOperation ? [resolvedOperation.id] : []}
+                    onSelect={(op: Operation) => {
+                      setResolvedOperation(op);
+                      haptic.select();
+                    }}
+                    emptyText={t('ops.noMatch')}
+                  />
+                </Section>
+              )}
 
               {data.templates.length > 0 && (
                 <Button variant="secondary" block onClick={() => setPickTemplate(true)}>
@@ -640,6 +695,25 @@ function TemplateSheet({
       </div>
     </Sheet>
   );
+}
+
+/**
+ * Daraxtni klinikaning yo'nalishlariga qisqartiradi.
+ *
+ * Bo'sh qolgan bo'lim va soha olib tashlanadi — aks holda klinika
+ * o'zida yo'q sohalarni ochib, ichida hech narsa topmasdi.
+ */
+function narrowTree(tree: CatalogBranch[], own: Set<number>): CatalogBranch[] {
+  const out: CatalogBranch[] = [];
+  for (const branch of tree) {
+    const sections = branch.sections
+      .map((s) => ({ ...s, operations: s.operations.filter((o) => own.has(o.id)) }))
+      .filter((s) => s.operations.length > 0);
+    const loose = branch.loose.filter((o) => own.has(o.id));
+    const total = loose.length + sections.reduce((n, s) => n + s.operations.length, 0);
+    if (total > 0) out.push({ ...branch, sections, loose, total });
+  }
+  return out;
 }
 
 /* ═════════════════  10-ekran: mening takliflarim  ═════════════════ */

@@ -1225,6 +1225,67 @@ export const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    /**
+     * Noma'lum operatsiyani KLINIKA aniqlaydi — taklif yuborayotganda.
+     *
+     * Muammo pulda edi. Narx statistikasi `requests.operation_id`
+     * bo'yicha yig'iladi. So'rov "noma'lum" bo'lib qolsa, bitim
+     * tasdiqlangan summasi bilan birga hech qaysi operatsiyaga
+     * yozilmasdi — ya'ni platforma "bu operatsiya qanchaga ketdi"
+     * degan savolga javob bera olmasdi. Aynan shu savol uchun
+     * statistika bor.
+     *
+     * Kim aniqlashi kerak: klinika. U bemorning tavsifini o'qidi va
+     * nima qilishini biladi.
+     *
+     * Nima uchun taklifda, so'rovda emas: bir necha klinika har xil
+     * operatsiya taklif qilishi mumkin. Qaysi biri to'g'ri ekanini
+     * BEMOR tanlovi hal qiladi — shuning uchun so'rov faqat taklif
+     * tanlanganda yangilanadi.
+     */
+    id: '022_offer_resolved_operation',
+    up: (db) => {
+      addColumn(db, 'offers', 'resolved_operation_id', 'INTEGER REFERENCES operations(id)');
+    },
+  },
+  {
+    /**
+     * AI kalitlari — bir nechta, zaxira bilan.
+     *
+     * Prodda ko'rilgan holat: Gemini 503 "high demand" qaytardi va
+     * butun AI heuristikaga tushdi. O'sha paytdagi so'rovlar
+     * operatsiyasiz va sohasiz ketdi — ya'ni bitta provayderning
+     * vaqtinchalik yuklamasi mahsulotning asosiy qismini o'chirardi.
+     *
+     * Endi kalitlar ro'yxati bor: biri ishlamasa keyingisiga
+     * o'tiladi. Admin ularni panelidan qo'shadi — yangi kalit uchun
+     * deploy kerak emas.
+     *
+     * Kalitning O'ZI hech qachon mijozga qaytarilmaydi; panelda
+     * faqat niqoblangan ko'rinishi ko'rsatiladi.
+     */
+    id: '023_ai_keys',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_keys (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          provider    TEXT    NOT NULL CHECK (provider IN ('gemini','anthropic')),
+          api_key     TEXT    NOT NULL,
+          label       TEXT,
+          active      INTEGER NOT NULL DEFAULT 1,
+          /* Tartib: kichik raqam oldin sinaladi */
+          position    INTEGER NOT NULL DEFAULT 0,
+          /* Oxirgi xato — admin qaysi kalit ishlamayotganini ko'rishi uchun */
+          last_error  TEXT,
+          last_error_at TEXT,
+          last_ok_at  TEXT,
+          created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_keys_order ON ai_keys(provider, active, position);
+      `);
+    },
+  },
 ];
 
 /**

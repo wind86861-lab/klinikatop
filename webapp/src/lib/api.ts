@@ -52,6 +52,7 @@ import type {
   PaymentMethod,
   PendingCommissionPayment,
   AdminUserRow,
+  AiKeyRow,
   BotFace,
   Role,
   RequestStep,
@@ -417,6 +418,8 @@ export const api = {
     proposedDates?: string[];
     /** Budjetdan yuqori narx uchun izoh — server majburlaydi */
     aboveBudgetReason?: string | null;
+    /** So'rovda operatsiya noma'lum bo'lsa — klinika aniqlagani */
+    resolvedOperationId?: number | null;
     note: string | null;
   }) => post<OfferWithClinic>('/offers', body),
   updateOffer: (id: number, body: Partial<Omit<Offer, 'id' | 'requestId' | 'clinicId' | 'status'>>) =>
@@ -457,6 +460,13 @@ export const api = {
   /** Botning "yuzi" — /start bosilishidan oldin ko'rinadigan matnlar */
   botFace: () => get<BotFace & { defaults: BotFace }>('/admin/bot'),
   saveBotFace: (body: BotFace) => put<BotFace & { applied: boolean }>('/admin/bot', body),
+
+  /** AI kalitlari — niqoblangan holda keladi */
+  aiKeys: () => get<AiKeyRow[]>('/admin/ai-keys'),
+  addAiKey: (body: { provider: 'gemini' | 'anthropic'; apiKey: string; label: string | null }) =>
+    post<AiKeyRow[]>('/admin/ai-keys', body),
+  setAiKeyActive: (id: number, active: boolean) => post<AiKeyRow[]>(`/admin/ai-keys/${id}`, { active }),
+  deleteAiKey: (id: number) => del<AiKeyRow[]>(`/admin/ai-keys/${id}`),
 
   adminRequestSteps: () => get<RequestStep[]>('/admin/request-steps'),
   saveRequestSteps: (steps: StepDraft[]) => put<RequestStep[]>('/admin/request-steps', { steps }),

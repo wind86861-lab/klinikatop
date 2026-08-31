@@ -177,6 +177,7 @@ export function mapOffer(r: any): Offer {
     id: r.id,
     requestId: r.request_id,
     clinicId: r.clinic_id,
+    resolvedOperationId: r.resolved_operation_id ?? null,
     priceUzs: r.price_uzs,
     includes: parseJson<string[]>(r.includes, []),
     advantages: parseJson<string[]>(r.advantages, []),
