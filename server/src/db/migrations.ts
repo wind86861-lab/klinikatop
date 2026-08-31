@@ -1197,6 +1197,34 @@ export const MIGRATIONS: Migration[] = [
       db.pragma('foreign_keys = ON');
     },
   },
+  {
+    /**
+     * Noma'lum operatsiya uchun SOHA zaxirasi.
+     *
+     * Muammo: bemor shikoyatini yozadi, AI aniq operatsiyani
+     * aniqlay olmaydi va so'rov "noma'lum" bilan ketadi. Shundan
+     * keyin `findMatchingClinics` operatsiya filtrini BUTUNLAY
+     * o'chirar va so'rov shahardagi HAMMA tasdiqlangan klinikaga
+     * borardi — ko'z muammosi stomatologiyaga ham.
+     *
+     * Bu ikki tomonga ham zarar: klinika o'zi qila olmaydigan
+     * so'rovlarni ko'raverib oqimni o'qishni tashlaydi, bemor esa
+     * mos bo'lmagan takliflar oladi yoki umuman javob olmaydi.
+     *
+     * Aslida AI deyarli har doim SOHANI biladi ("bu ko'z bilan
+     * bog'liq"), faqat aniq operatsiyani ayta olmaydi. O'sha bilim
+     * shu ustunda saqlanadi va so'rov shu soha klinikalariga
+     * yo'naltiriladi.
+     */
+    id: '021_request_fallback_category',
+    up: (db) => {
+      addColumn(db, 'requests', 'fallback_category_id', 'INTEGER REFERENCES operation_categories(id)');
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_requests_fallback_category
+           ON requests(fallback_category_id)`,
+      );
+    },
+  },
 ];
 
 /**

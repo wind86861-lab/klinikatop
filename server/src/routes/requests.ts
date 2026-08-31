@@ -60,6 +60,8 @@ const createSchema = z.object({
    * savollarga solishtirib tekshiriladi.
    */
   extraAnswers: z.record(z.unknown()).nullable().optional(),
+  /** Operatsiya noma'lum bo'lsa — AI aniqlagan soha */
+  fallbackCategoryId: z.number().int().positive().nullable().optional(),
 });
 
 requestsRouter.get('/', (req, res) => {
@@ -89,6 +91,7 @@ requestsRouter.post('/', (req, res) => {
     subjectGender: body.subjectGender,
     acceptTerms: body.acceptTerms,
     extraAnswers: body.extraAnswers ?? null,
+    fallbackCategoryId: body.fallbackCategoryId ?? null,
     userAgent: req.header('user-agent') ?? null,
   });
   res.status(201).json(request);

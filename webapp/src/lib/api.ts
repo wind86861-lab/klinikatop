@@ -329,6 +329,8 @@ export const api = {
     acceptTerms: true;
     /** Admin qo'shgan savollarga javoblar */
     extraAnswers?: Record<string, unknown> | null;
+    /** Operatsiya noma'lum bo'lsa — AI aniqlagan soha */
+    fallbackCategoryId?: number | null;
   }) => post<RequestWithMeta>('/requests', body),
 
   /** Tibbiy hujjat yuklash — base64, qo'shimcha kutubxona kerak emas */

@@ -91,6 +91,8 @@ export interface CreateRequestInput {
   subjectBirthYear?: number | null;
   /** Admin qo'shgan savollarga javoblar — kalit: bosqich kaliti */
   extraAnswers?: Record<string, unknown> | null;
+  /** Operatsiya noma'lum bo'lsa — AI aniqlagan soha */
+  fallbackCategoryId?: number | null;
   subjectGender?: 'male' | 'female' | null;
   /** Bemor ommaviy ofertani qabul qilganini tasdiqlaydi — har so'rovda majburiy */
   acceptTerms: boolean;
@@ -206,17 +208,34 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
   // Admin qo'shgan savollar: majburiylari to'ldirilganmi
   const extraAnswers = validateAnswers(input.extraAnswers ?? null);
 
+  /*
+   * Soha zaxirasi FAQAT operatsiya noma'lum bo'lganda ma'noga ega.
+   * Aniq operatsiya tanlangan bo'lsa u kerak emas va saqlanmaydi —
+   * aks holda ikkita manba paydo bo'lib, qaysi biri to'g'ri degan
+   * savol chiqardi.
+   */
+  const unknownOp = (op as { slug: string }).slug === UNKNOWN_OPERATION_SLUG;
+  let fallbackCategoryId: number | null = null;
+  if (unknownOp && input.fallbackCategoryId != null) {
+    const cat = db
+      .prepare(`SELECT id FROM operation_categories WHERE id = ?`)
+      .get(input.fallbackCategoryId);
+    if (cat) fallbackCategoryId = input.fallbackCategoryId;
+  }
+
   const requestId = tx(() => {
     const info = db
       .prepare(
         `INSERT INTO requests (patient_id, operation_id, city_id, budget_uzs, condition_text, note,
                                urgency, attachments, other_regions_ok, date_from, date_to, date_flexible,
                                ai_conversation, status, ai_suggested, expires_at, terms_version, terms_accepted_at,
-                               for_self, subject_name, subject_birth_year, subject_gender, extra_answers)
+                               for_self, subject_name, subject_birth_year, subject_gender, extra_answers,
+                               fallback_category_id)
          VALUES (@patientId, @operationId, @cityId, @budgetUzs, @conditionText, @note,
                  @urgency, @attachments, @otherRegionsOk, @dateFrom, @dateTo, @dateFlexible,
                  @aiConversation, 'NEW', @aiSuggested, @expiresAt, @termsVersion, datetime('now'),
-                 @forSelf, @subjectName, @subjectBirthYear, @subjectGender, @extraAnswers)`,
+                 @forSelf, @subjectName, @subjectBirthYear, @subjectGender, @extraAnswers,
+                 @fallbackCategoryId)`,
       )
       .run({
         patientId: input.patientId,
@@ -242,6 +261,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
         expiresAt: hoursFromNow(config.rules.requestTtlHours),
         termsVersion: TERMS_VERSION,
         extraAnswers,
+        fallbackCategoryId,
       });
 
     const id = Number(info.lastInsertRowid);
@@ -259,6 +279,7 @@ export function broadcast(requestId: number): number {
   const req = getRequest(requestId);
   const clinics = findMatchingClinics(req.operationId, req.cityId, {
     otherRegionsOk: req.otherRegionsOk,
+    fallbackCategoryId: req.fallbackCategoryId,
   });
 
   tx(() => {

@@ -35,6 +35,11 @@ import { UNKNOWN_OPERATION_SLUG, type ClinicPublic } from '../../../shared/types
 export interface MatchOptions {
   /** Viloyatdan tashqaridagi klinikalar ham qatnashadimi */
   otherRegionsOk?: boolean;
+  /**
+   * Operatsiya noma'lum bo'lganda — qaysi soha bo'yicha yuborish.
+   * AI aniq operatsiyani ayta olmasa ham sohani deyarli har doim biladi.
+   */
+  fallbackCategoryId?: number | null;
 }
 
 function isUnknownOperationId(operationId: number): boolean {
@@ -49,8 +54,28 @@ export function findMatchingClinics(
   cityId: number,
   options: MatchOptions = {},
 ): ClinicPublic[] {
-  const anyOperation = isUnknownOperationId(operationId);
+  const unknownOperation = isUnknownOperationId(operationId);
   const anyCity = Boolean(options.otherRegionsOk);
+  const categoryId = options.fallbackCategoryId ?? null;
+
+  /*
+   * Operatsiya noma'lum bo'lsa ham so'rov HAMMAGA yuborilmaydi.
+   *
+   * Ilgari shunday edi: filtr butunlay o'char va ko'z muammosi
+   * stomatologiyaga ham borardi. Klinika o'zi qila olmaydigan
+   * so'rovlarni ko'raverib oqimni o'qishni tashlardi, bemor esa
+   * mos bo'lmagan takliflar olardi.
+   *
+   * Endi uch bosqich:
+   *   1. Aniq operatsiya ma'lum → shu operatsiyani qiladiganlar
+   *   2. Noma'lum, lekin SOHA ma'lum → shu sohada ishlaydiganlar
+   *   3. Ikkalasi ham noma'lum → oxirgi chora, hammasi
+   *
+   * Uchinchi holat kam uchraydi: AI aniq operatsiyani bilmasa ham
+   * sohani deyarli har doim aytadi.
+   */
+  const anyOperation = unknownOperation && categoryId === null;
+  const byCategory = unknownOperation && categoryId !== null;
 
   const rows = db
     .prepare(
@@ -60,9 +85,24 @@ export function findMatchingClinics(
           AND (@anyCity = 1 OR c.city_id = @cityId)
           AND (
             @anyOperation = 1
-            OR EXISTS (
-              SELECT 1 FROM clinic_operations co
-               WHERE co.clinic_id = c.id AND co.operation_id = @operationId
+            OR (
+              @byCategory = 1
+              AND EXISTS (
+                SELECT 1 FROM clinic_operations co
+                  JOIN operations o ON o.id = co.operation_id
+                  JOIN operation_categories oc ON oc.id = o.category_id
+                 WHERE co.clinic_id = c.id
+                   /* Bo'lim tanlangan bo'lsa ota sohasi ham hisoblanadi */
+                   AND (o.category_id = @categoryId OR oc.parent_id = @categoryId)
+              )
+            )
+            OR (
+              @anyOperation = 0
+              AND @byCategory = 0
+              AND EXISTS (
+                SELECT 1 FROM clinic_operations co
+                 WHERE co.clinic_id = c.id AND co.operation_id = @operationId
+              )
             )
           )
         ORDER BY (c.city_id = @cityId) DESC,
@@ -73,7 +113,9 @@ export function findMatchingClinics(
     .all({
       operationId,
       cityId,
+      categoryId,
       anyOperation: anyOperation ? 1 : 0,
+      byCategory: byCategory ? 1 : 0,
       anyCity: anyCity ? 1 : 0,
     }) as any[];
 
@@ -96,13 +138,17 @@ export function clinicMatchesRequest(clinicId: number, requestId: number): boole
   const request = db
     .prepare(
       `SELECT r.operation_id AS operationId, r.city_id AS cityId,
-              r.other_regions_ok AS otherRegionsOk
+              r.other_regions_ok AS otherRegionsOk,
+              r.fallback_category_id AS fallbackCategoryId
          FROM requests r WHERE r.id = ?`,
     )
-    .get(requestId) as { operationId: number; cityId: number; otherRegionsOk: number } | undefined;
+    .get(requestId) as
+    | { operationId: number; cityId: number; otherRegionsOk: number; fallbackCategoryId: number | null }
+    | undefined;
   if (!request) return false;
 
   return findMatchingClinics(request.operationId, request.cityId, {
     otherRegionsOk: Boolean(request.otherRegionsOk),
+    fallbackCategoryId: request.fallbackCategoryId,
   }).some((c) => c.id === clinicId);
 }

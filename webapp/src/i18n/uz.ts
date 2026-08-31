@@ -450,6 +450,7 @@ export const uz = {
   'ai.notThis': 'Bularning hech biri emas — klinika aytsin',
   'ai.cantAnswer': 'Bilmayman — klinika o‘zi aniqlasin',
   'ai.continueUnknown': 'Klinika aniqlasin, davom etish',
+  'ai.clinicWillDecideField': 'So‘rovingiz «{field}» yo‘nalishidagi klinikalarga boradi — ular holatingizga qarab operatsiyani o‘zi aniqlaydi.',
   'ai.clinicWillDecide': 'Yozganingiz klinikaga to‘liq boradi — ular holatingizga qarab operatsiyani o‘zi aniqlaydi.',
   'ai.orCatalog': 'Yoki katalogdan tanlayman',
   'ai.failed': 'Hozircha javob bera olmadim. So‘rovni tavsifingiz bilan yuborsak ham bo‘ladi.',

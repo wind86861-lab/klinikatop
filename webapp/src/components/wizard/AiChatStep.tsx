@@ -26,6 +26,14 @@ export interface AiChatOutcome {
   /** Bemor yozgan matn — klinikaga shu boradi */
   conditionText: string;
   turns: ChatTurn[];
+  /**
+   * Operatsiya aniqlanmaganda — AI aniqlagan soha.
+   *
+   * Busiz so'rov shahardagi HAMMA klinikaga borardi: ko'z muammosi
+   * stomatologiyaga ham. Soha ma'lum bo'lsa so'rov faqat o'sha
+   * yo'nalishdagi klinikalarga boradi.
+   */
+  fallbackCategoryId: number | null;
 }
 
 export function AiChatStep({
@@ -88,6 +96,8 @@ export function AiChatStep({
         suggestions: [],
         urgentWarning: null,
         fallbackToClinic: true,
+        fallbackCategoryId: null,
+        fallbackCategoryName: null,
         disclaimer: t('need.disclaimer'),
       });
     } finally {
@@ -97,7 +107,13 @@ export function AiChatStep({
 
   const finish = (operation: Operation | null) => {
     haptic.press();
-    onDone({ operation, conditionText: patientText(turns), turns });
+    onDone({
+      operation,
+      conditionText: patientText(turns),
+      turns,
+      // Soha faqat operatsiya aniqlanmaganda ma'noga ega
+      fallbackCategoryId: operation ? null : (result?.fallbackCategoryId ?? null),
+    });
   };
 
   const started = turns.length > 0;
@@ -200,7 +216,17 @@ export function AiChatStep({
       <AnimatePresence>
         {result?.fallbackToClinic && unknownOp && (
           <m.div variants={popVariants} initial="initial" animate="animate" exit="exit" className="stack">
-            <Notice tone="info">{t('ai.clinicWillDecide')}</Notice>
+            {/*
+              Soha aniqlangan bo'lsa buni AYTAMIZ: bemor so'rovi
+              qayerga ketishini bilishi kerak. "Klinika aniqlaydi"
+              degan quruq va'da esa so'rov kimga borishi noaniq
+              qolgan holatni yashirardi.
+            */}
+            <Notice tone="info">
+              {result.fallbackCategoryName
+                ? t('ai.clinicWillDecideField', { field: result.fallbackCategoryName })
+                : t('ai.clinicWillDecide')}
+            </Notice>
             <Button block icon={<IconCheck size={16} />} onClick={() => finish(unknownOp)}>
               {t('ai.continueUnknown')}
             </Button>

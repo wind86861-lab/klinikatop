@@ -38,6 +38,8 @@ import { GENDERS, ageFromBirthYear, type ChatTurn, type Gender, type Operation, 
 
 /** Vizard qoralamasi — bitta manba. */
 export interface Draft {
+  /** Operatsiya aniqlanmaganda — AI aniqlagan soha */
+  fallbackCategoryId: number | null;
   operation: Operation | null;
   aiSuggested: boolean;
   conditionText: string;
@@ -99,6 +101,8 @@ export function NewRequest() {
     note: '',
     urgency: 'normal',
     aiConversation: null,
+    /* Operatsiya aniqlanmaganda — AI aniqlagan soha; so'rov shu yo'nalishga boradi */
+    fallbackCategoryId: null,
     forSelf: true,
     subjectName: '',
     subjectBirthYear: null,
@@ -217,6 +221,7 @@ export function NewRequest() {
         subjectBirthYear: draft.forSelf ? null : draft.subjectBirthYear,
         subjectGender: draft.forSelf ? null : draft.subjectGender,
         aiSuggested: draft.aiSuggested,
+        fallbackCategoryId: draft.fallbackCategoryId,
         acceptTerms: true,
         extraAnswers: Object.keys(answers).length ? answers : null,
       });
@@ -282,13 +287,14 @@ export function NewRequest() {
                 haptic.press();
                 window.scrollTo({ top: 0 });
               }}
-              onChatDone={({ operation, conditionText, turns }) => {
+              onChatDone={({ operation, conditionText, turns, fallbackCategoryId }) => {
                 // Bitta matn ikki joyga: AI aniqlagan operatsiya + bemorning o'z so'zlari
                 patch({
                   operation,
                   aiSuggested: operation !== null,
                   conditionText,
                   aiConversation: turns,
+                  fallbackCategoryId,
                 });
                 setDirection(1);
                 setIndex(nextAfter('operation'));

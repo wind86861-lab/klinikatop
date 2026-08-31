@@ -13,8 +13,13 @@
 import { z } from 'zod';
 import { aiProvider } from './aiProvider';
 import { DISCLAIMER, heuristicSuggest } from './ai';
-import { listOperations } from './catalog';
-import { UNKNOWN_OPERATION_SLUG, type Lang, type Operation } from '../../../shared/types';
+import { listCategories, listOperations } from './catalog';
+import {
+  UNKNOWN_OPERATION_SLUG,
+  type Lang,
+  type Operation,
+  type OperationCategory,
+} from '../../../shared/types';
 
 
 
@@ -43,6 +48,14 @@ export interface AiChatResult {
   urgentWarning: string | null;
   /** Aniqlab bo'lmadi — "klinika aytsin" bilan davom etiladi */
   fallbackToClinic: boolean;
+  /**
+   * Aniq operatsiya topilmaganda — AI aniqlagan soha.
+   *
+   * So'rov shu soha klinikalariga yuboriladi. Busiz u shahardagi
+   * HAMMA klinikaga borardi.
+   */
+  fallbackCategoryId: number | null;
+  fallbackCategoryName: string | null;
   disclaimer: string;
 }
 
@@ -50,6 +63,8 @@ const ResponseSchema = z.object({
   reply: z.string().min(1).max(600),
   needs_more_info: z.boolean(),
   urgent_warning: z.string().max(300).nullable().optional(),
+  /** Aniq operatsiya topilmasa ham qaysi soha ekani */
+  field_slug: z.string().nullable().optional(),
   suggestions: z
     .array(
       z.object({
@@ -62,7 +77,7 @@ const ResponseSchema = z.object({
     .default([]),
 });
 
-function outputSchema(operations: Operation[]) {
+function outputSchema(operations: Operation[], categories: { slug: string }[]) {
   return {
     type: 'object',
     additionalProperties: false,
@@ -81,6 +96,17 @@ function outputSchema(operations: Operation[]) {
         type: ['string', 'null'],
         description:
           'Shoshilinch tibbiy yordam kerakligi sezilsa (kuchli og‘riq, qon ketish, nafas qisilishi) — qisqa ogohlantirish, aks holda null',
+      },
+      /*
+       * Aniq operatsiya topilmasa ham SOHA deyarli har doim
+       * ma'lum bo'ladi. Ilgari bu bilim tashlab yuborilardi va
+       * so'rov shahardagi hamma klinikaga borardi.
+       */
+      field_slug: {
+        type: ['string', 'null'],
+        enum: [...categories.map((c) => c.slug), null],
+        description:
+          'Aniq operatsiya topilmasa ham qaysi SOHA ekani. Masalan ko\'z bilan bog\'liq bo\'lsa ko\'z sohasi. Umuman tushunarsiz bo\'lsa null.',
       },
       suggestions: {
         type: 'array',
@@ -101,10 +127,16 @@ function outputSchema(operations: Operation[]) {
   } as const;
 }
 
-function systemPrompt(lang: Lang, operations: Operation[], turnsLeft: number): string {
+function systemPrompt(
+  lang: Lang,
+  operations: Operation[],
+  categories: { slug: string; nameUz: string }[],
+  turnsLeft: number,
+): string {
   const catalog = operations
     .map((o) => `- ${o.slug}: ${o.nameUz} (${o.aliasUz}) | kalit: ${o.keywords.join(', ')}`)
     .join('\n');
+  const fields = categories.map((c) => `- ${c.slug}: ${c.nameUz}`).join('\n');
 
   return `Sen "KlinikaTop" platformasining yordamchisisan. Bemor shikoyatini oddiy tilda yozadi; sen suhbat orqali qaysi operatsiya yo'nalishi kerakligini aniqlaysan.
 
@@ -118,6 +150,14 @@ Suhbat qoidalari:
 - Savol tibbiy atamasiz bo'lsin. Masalan: "Og'riq qayerda — o'ng tomondami yoki chapda?"
 - Ma'lumot yetarli bo'lsa — needs_more_info=false, suggestions to'ldiriladi, reply qisqa xulosa bo'ladi.
 - Sizda yana ${turnsLeft} ta savol imkoni bor. Imkon tugasa — needs_more_info=false qil va bor ma'lumot asosida xulosa ber; hech narsa aniqlanmasa suggestions bo'sh qoladi.
+
+SOHA (field_slug) — buni deyarli HAR DOIM to'ldir:
+- Aniq operatsiyani ayta olmasang ham, tavsif qaysi sohaga tegishli ekani odatda ma'lum bo'ladi: "ko'zim xiralashdi" → ko'z sohasi, "tishim og'riyapti" → stomatologiya.
+- Bu MUHIM: soha ko'rsatilmasa so'rov shahardagi hamma klinikaga boradi va bemor mos bo'lmagan takliflar oladi.
+- Faqat tavsif umuman tushunarsiz bo'lsa null qoldir.
+
+Sohalar:
+${fields}
 - Shoshilinch xavf belgilari (kuchli qorin og'rig'i, ko'krak og'rig'i, qon ketish, nafas qisilishi, hushdan ketish) sezilsa — urgent_warning to'ldir va darhol shifokorga murojaat qilishni ayt.
 
 Til: ${lang === 'ru' ? 'rus tilida yoz' : "o'zbek tilida yoz"}. Qisqa va sodda — bemor tibbiy atamalarni bilmaydi.
@@ -147,6 +187,8 @@ function heuristicChat(turns: ChatTurn[], lang: Lang, operations: Operation[]): 
       suggestions: [],
       urgentWarning: null,
       fallbackToClinic: false,
+      fallbackCategoryId: null,
+      fallbackCategoryName: null,
       disclaimer: DISCLAIMER[lang],
     };
   }
@@ -161,6 +203,8 @@ function heuristicChat(turns: ChatTurn[], lang: Lang, operations: Operation[]): 
       suggestions: [],
       urgentWarning: null,
       fallbackToClinic: true,
+      fallbackCategoryId: null,
+      fallbackCategoryName: null,
       disclaimer: DISCLAIMER[lang],
     };
   }
@@ -180,6 +224,8 @@ function heuristicChat(turns: ChatTurn[], lang: Lang, operations: Operation[]): 
     })),
     urgentWarning: null,
     fallbackToClinic: false,
+    fallbackCategoryId: null,
+    fallbackCategoryName: null,
     disclaimer: DISCLAIMER[lang],
   };
 }
@@ -190,6 +236,8 @@ function heuristicChat(turns: ChatTurn[], lang: Lang, operations: Operation[]): 
  */
 export async function continueChat(turns: ChatTurn[], lang: Lang = 'uz'): Promise<AiChatResult> {
   const operations = listOperations().filter((o) => o.slug !== UNKNOWN_OPERATION_SLUG);
+  // Faqat SOHALAR (ota kategoriyalar) — bo'limlar bu yerda ortiqcha aniqlik
+  const categories = listCategories().filter((c: OperationCategory) => c.parentId === null);
   const asked = turns.filter((t) => t.role === 'assistant').length;
   const turnsLeft = Math.max(0, MAX_TURNS - asked);
 
@@ -200,9 +248,9 @@ export async function continueChat(turns: ChatTurn[], lang: Lang = 'uz'): Promis
 
   try {
     const { text: raw, refused } = await provider.complete({
-      system: systemPrompt(lang, operations, turnsLeft),
+      system: systemPrompt(lang, operations, categories, turnsLeft),
       messages: turns.map((turn) => ({ role: turn.role, content: turn.content })),
-      schema: outputSchema(operations),
+      schema: outputSchema(operations, categories),
     });
 
     if (refused || !raw) return heuristicChat(turns, lang, operations);
@@ -227,12 +275,23 @@ export async function continueChat(turns: ChatTurn[], lang: Lang = 'uz'): Promis
     const exhausted = turnsLeft <= 0;
     const needsMoreInfo = parsed.data.needs_more_info && !exhausted;
 
+    /*
+     * Soha faqat aniq operatsiya topilmaganda kerak. Topilgan bo'lsa
+     * u ortiqcha — so'rov aynan o'sha operatsiyani qiladiganlarga
+     * boradi.
+     */
+    const field = suggestions.length === 0 && parsed.data.field_slug
+      ? categories.find((c: OperationCategory) => c.slug === parsed.data.field_slug) ?? null
+      : null;
+
     return {
       reply: parsed.data.reply,
       needsMoreInfo,
       suggestions,
       urgentWarning: parsed.data.urgent_warning ?? null,
       fallbackToClinic: !needsMoreInfo && suggestions.length === 0,
+      fallbackCategoryId: field?.id ?? null,
+      fallbackCategoryName: field ? (lang === 'ru' ? field.nameRu : field.nameUz) : null,
       disclaimer: DISCLAIMER[lang],
     };
   } catch (err) {

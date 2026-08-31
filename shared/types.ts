@@ -272,6 +272,14 @@ export interface AiChatResult {
   urgentWarning: string | null;
   /** Aniqlab bo'lmadi — "klinika aytsin" bilan davom etiladi */
   fallbackToClinic: boolean;
+  /**
+   * Aniq operatsiya topilmaganda — AI aniqlagan soha.
+   *
+   * So'rov shu soha klinikalariga yuboriladi. Busiz u shahardagi
+   * HAMMA klinikaga borardi: ko'z muammosi stomatologiyaga ham.
+   */
+  fallbackCategoryId: number | null;
+  fallbackCategoryName: string | null;
   disclaimer: string;
 }
 
@@ -297,6 +305,14 @@ export interface MedicalRequest {
   dateFlexible: boolean;
   /** AI bilan bo'lgan suhbat — klinika bemor nima yozganini to'liq ko'radi */
   aiConversation: ChatTurn[] | null;
+  /**
+   * Operatsiya noma'lum bo'lganda — qaysi soha bo'yicha yuborilgan.
+   *
+   * Busiz so'rov shahardagi HAMMA klinikaga borardi: ko'z muammosi
+   * stomatologiyaga ham. AI aniq operatsiyani ayta olmasa ham
+   * sohani deyarli har doim biladi.
+   */
+  fallbackCategoryId: number | null;
   /**
    * Admin qo'shgan savollarga javoblar, xom holida (kalit → qiymat).
    * Yorliqlar bosqichlar ro'yxatidan olinadi, shu sababli bu yerda

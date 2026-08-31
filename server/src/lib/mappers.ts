@@ -155,6 +155,7 @@ export function mapRequest(r: any): MedicalRequest {
     subjectBirthYear: r.subject_birth_year ?? null,
     subjectGender: r.subject_gender ?? null,
     aiConversation: parseJson<any>(r.ai_conversation ?? null, null),
+    fallbackCategoryId: r.fallback_category_id ?? null,
     // Admin qo'shgan savollarga javoblar. Bu yerda XOM holida qoladi:
     // yorliqlarni mijoz bosqichlar ro'yxatidan oladi. Aks holda har bir
     // qatorda `request_steps` o'qilardi — ro'yxatlarda bu N+1 bo'lardi.

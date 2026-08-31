@@ -2528,6 +2528,68 @@ async function main() {
     check('tozalangach zaxira qaytdi', botSvc.getBotFace().description === botSvc.BOT_DEFAULTS.description);
   }
 
+  /* ══════════════  Noma'lum operatsiya: kimga boradi  ══════════════ */
+
+  section("Noma'lum operatsiya yo'nalishi");
+
+  {
+    const match = require('../services/matching');
+    const cat = require('../services/catalog');
+    const unknownOp = cat.getUnknownOperation()!;
+
+    /*
+     * Ilgari noma'lum operatsiyada filtr BUTUNLAY o'char va so'rov
+     * shahardagi hamma klinikaga borardi — ko'z muammosi
+     * stomatologiyaga ham. Bu sinov aynan shuni qo'riqlaydi.
+     */
+    const everyone = match.findMatchingClinics(unknownOp.id, tashkent.id, {});
+    check('sohasiz — hammasiga boradi (oxirgi chora)', everyone.length >= 1, everyone.length);
+
+    // Klinikaning yo'nalishlari qaysi sohada ekanini topamiz
+    const own = db
+      .prepare(
+        `SELECT o.category_id AS categoryId
+           FROM clinic_operations co JOIN operations o ON o.id = co.operation_id
+          WHERE co.clinic_id = ? LIMIT 1`,
+      )
+      .get(clinic.id) as { categoryId: number } | undefined;
+
+    if (own) {
+      const inField = match.findMatchingClinics(unknownOp.id, tashkent.id, {
+        fallbackCategoryId: own.categoryId,
+      });
+      check('o‘z sohasida — klinika qatnashadi', inField.some((c: any) => c.id === clinic.id));
+
+      /*
+       * Boshqa soha — klinika CHIQIB qolishi kerak. Aynan shu
+       * xatti-harakat "ko'z muammosi stomatologiyaga bormasin"
+       * degani.
+       */
+      const other = db
+        .prepare(`SELECT id FROM operation_categories WHERE parent_id IS NULL AND id != ? LIMIT 1`)
+        .get(own.categoryId) as { id: number } | undefined;
+
+      if (other) {
+        const outside = match.findMatchingClinics(unknownOp.id, tashkent.id, {
+          fallbackCategoryId: other.id,
+        });
+        check(
+          'boshqa sohada — klinika chiqib qoladi',
+          !outside.some((c: any) => c.id === clinic.id),
+          outside.length,
+        );
+        check('soha bilan doira toraydi', outside.length < everyone.length, {
+          soha: outside.length,
+          hammasi: everyone.length,
+        });
+      }
+    }
+
+    // Aniq operatsiya berilsa soha e'tiborga olinmaydi
+    const exact = match.findMatchingClinics(gallbladder.id, tashkent.id, { fallbackCategoryId: 99999 });
+    check('aniq operatsiyada soha o‘zgartirmaydi', Array.isArray(exact));
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);
