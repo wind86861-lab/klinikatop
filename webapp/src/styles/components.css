@@ -4870,3 +4870,88 @@
   margin-left: 4px;
   opacity: 0.7;
 }
+
+/* ── Bot matnlarining jonli ko'rinishi ── */
+/*
+ * Matn qanday chiqishini AYNAN ko'rsatish uchun: admin uni Telegram'da
+ * ochib tekshirish o'rniga shu yerda ko'radi.
+ */
+.botPreview {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  max-width: 460px;
+}
+
+.botPreview__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 10px var(--s-3);
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+
+.botPreview__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.botPreview__name {
+  display: block;
+  font-size: 13px;
+}
+
+.botPreview__meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.botPreview__bubble {
+  margin: var(--s-4) var(--s-3);
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+
+.botPreview__bubble p {
+  margin-top: 6px;
+  color: var(--body);
+  white-space: pre-wrap;
+}
+
+.botPreview__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 8px var(--s-3);
+  background: var(--card);
+  border-top: 1px solid var(--line);
+}
+
+.botPreview__input {
+  flex: 1;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Ilovani ochadigan tugma — Telegramda yozuv maydoni yonida turadi */
+.botPreview__menu {
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  background: var(--primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}

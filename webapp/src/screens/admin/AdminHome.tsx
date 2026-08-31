@@ -19,6 +19,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  IconChat,
   IconCheck,
   IconInfo,
   IconSparkle,
@@ -44,6 +45,7 @@ import { CatalogSync } from './CatalogSync';
 import { RequestStepsScreen } from './RequestSteps';
 import { CommissionPayments } from './CommissionPayments';
 import { AdminUsers } from './Users';
+import { BotFaceScreen } from './BotFace';
 import { Empty, Kpi, PageHeader } from './ui';
 import { Security } from '../web/Security';
 import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
@@ -157,6 +159,7 @@ export function AdminHome() {
     { id: 'catalog', label: 'Katalog', group: 'Boshqaruv', icon: <IconStethoscope size={17} />, render: () => <CatalogSync /> },
     { id: 'commission', label: 'Komissiya to‘lovlari', group: 'Pul', icon: <IconWallet size={17} />, render: () => <CommissionPayments /> },
     { id: 'steps', label: 'So‘rov bosqichlari', group: 'Sozlash', icon: <IconSparkle size={17} />, render: () => <RequestStepsScreen /> },
+    { id: 'bot', label: 'Bot matnlari', group: 'Sozlash', icon: <IconChat size={17} />, render: () => <BotFaceScreen /> },
     { id: 'settings', label: t('admin.tabSettings'), group: 'Sozlash', icon: <IconInfo size={17} />, render: () => <PlatformSettingsScreen /> },
     /*
      * Xavfsizlik oxirida, lekin ko'rinadigan joyda. Bu hisob butun

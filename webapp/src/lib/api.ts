@@ -52,6 +52,7 @@ import type {
   PaymentMethod,
   PendingCommissionPayment,
   AdminUserRow,
+  BotFace,
   Role,
   RequestStep,
   StepOption,
@@ -450,6 +451,10 @@ export const api = {
     post<User>(`/admin/users/${userId}/block`, { blocked, note }),
   suspendClinic: (clinicId: number, note = '') =>
     post<{ ok: true }>(`/admin/clinics/${clinicId}/suspend`, { note }),
+
+  /** Botning "yuzi" — /start bosilishidan oldin ko'rinadigan matnlar */
+  botFace: () => get<BotFace & { defaults: BotFace }>('/admin/bot'),
+  saveBotFace: (body: BotFace) => put<BotFace & { applied: boolean }>('/admin/bot', body),
 
   adminRequestSteps: () => get<RequestStep[]>('/admin/request-steps'),
   saveRequestSteps: (steps: StepDraft[]) => put<RequestStep[]>('/admin/request-steps', { steps }),

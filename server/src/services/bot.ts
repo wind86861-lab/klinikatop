@@ -11,6 +11,7 @@
 import { db } from '../db';
 import { clinicStandingByPhone, type ClinicStanding } from './clinicIdentity';
 import { config } from '../lib/config';
+import { textSetting } from './terms.business';
 import { upsertUser } from '../middleware/auth';
 
 const API = () => `https://api.telegram.org/bot${config.telegram.botToken}`;
@@ -369,21 +370,51 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
 
 /* ─────────────────────────  Sozlash  ───────────────────────── */
 
+/* ─────────────────  Botning "yuzi" — admin boshqaradi  ───────────────── */
+
+export const SETTING_BOT_DESCRIPTION = 'bot_description';
+export const SETTING_BOT_SHORT = 'bot_short_description';
+export const SETTING_BOT_MENU = 'bot_menu_button';
+
 /**
- * Botni ishga tayyorlash: menyu tugmasi va buyruqlar ro'yxati.
- * Server ko'tarilganda bir marta chaqiriladi.
+ * Zaxira qiymatlar.
+ *
+ * Bazada hech narsa bo'lmasa shular ishlatiladi — ya'ni yangi
+ * o'rnatishda bot baribir bo'sh qolmaydi.
+ */
+export const BOT_DEFAULTS = {
+  description:
+    'Bitta so‘rov — ko‘p klinika, ko‘p taklif. Operatsiya narxlarini taqqoslang va o‘zingizga qulayini tanlang.',
+  shortDescription: 'Operatsiya narxlarini taqqoslang — bitta so‘rov, ko‘p klinika.',
+  menuButton: 'KlinikaTop',
+};
+
+export interface BotFace {
+  /** Suhbat bo'sh bo'lganda, /start BOSILMASDAN oldin ko'rinadi */
+  description: string;
+  /** Bot profilida ko'rinadi */
+  shortDescription: string;
+  /** Yozuv maydoni yonidagi tugma matni — ilovani ochadi */
+  menuButton: string;
+}
+
+export function getBotFace(): BotFace {
+  return {
+    description: textSetting(SETTING_BOT_DESCRIPTION, BOT_DEFAULTS.description),
+    shortDescription: textSetting(SETTING_BOT_SHORT, BOT_DEFAULTS.shortDescription),
+    menuButton: textSetting(SETTING_BOT_MENU, BOT_DEFAULTS.menuButton),
+  };
+}
+
+/**
+ * Botni ishga tayyorlash: menyu tugmasi, buyruqlar va tavsiflar.
+ *
+ * Matnlar bazadan olinadi — admin ularni panelidan o'zgartiradi va
+ * o'zgarish darhol Telegram'ga yuboriladi (`applyBotFace`). Bu yerda
+ * esa server ko'tarilganda bir marta qo'llanadi.
  */
 export async function configureBot(): Promise<void> {
   if (!config.telegram.botToken || !config.telegram.webappUrl) return;
-
-  // Yozuv maydoni yonidagi doimiy tugma — ilovaga eng qisqa yo'l
-  await call('setChatMenuButton', {
-    menu_button: {
-      type: 'web_app',
-      text: 'KlinikaTop',
-      web_app: { url: config.telegram.webappUrl },
-    },
-  });
 
   await call('setMyCommands', {
     commands: [
@@ -393,8 +424,37 @@ export async function configureBot(): Promise<void> {
     ],
   });
 
-  await call('setMyDescription', {
-    description:
-      'Bitta so‘rov — ko‘p klinika, ko‘p taklif. Operatsiya narxlarini taqqoslang va o‘zingizga qulayini tanlang.',
-  });
+  await applyBotFace(getBotFace());
+}
+
+/**
+ * Matnlarni Telegram'ga yuborish.
+ *
+ * Telegram ularni o'zi keshlaydi: mavjud suhbatlarda o'zgarish
+ * darrov ko'rinmasligi mumkin, yangi (bo'sh) suhbatda esa darhol
+ * chiqadi. Shuning uchun saqlash "ishlamadi" degan taassurot
+ * bermasligi uchun buni admin panelida ham aytamiz.
+ */
+export async function applyBotFace(face: BotFace): Promise<boolean> {
+  if (!config.telegram.botToken || !config.telegram.webappUrl) return false;
+
+  /*
+   * `call` xatoni YUTMAYDI, `false` qaytaradi — shuning uchun natija
+   * tekshiriladi. Aks holda admin panelida "Telegram'ga yuborildi"
+   * deb turar, aslida bot o'zgarmagan bo'lardi.
+   */
+  const results = await Promise.all([
+    // Yozuv maydoni yonidagi doimiy tugma — ilovaga eng qisqa yo'l
+    call('setChatMenuButton', {
+      menu_button: {
+        type: 'web_app',
+        text: face.menuButton.slice(0, 30),
+        web_app: { url: config.telegram.webappUrl },
+      },
+    }),
+    call('setMyDescription', { description: face.description.slice(0, 512) }),
+    call('setMyShortDescription', { short_description: face.shortDescription.slice(0, 120) }),
+  ]);
+
+  return results.every(Boolean);
 }

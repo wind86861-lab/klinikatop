@@ -39,6 +39,30 @@ export function setSetting(key: string, value: number, adminId: number | null): 
   ).run(key, String(value), adminId);
 }
 
+/**
+ * Matnli sozlama.
+ *
+ * `setSetting` faqat raqam qabul qilardi, chunki dastlab bu yerda
+ * faqat foiz va muddat bor edi. Bot matnlari ham shu jadvalda
+ * saqlanadi — ular ham biznes qarori va deploy'siz o'zgarishi kerak.
+ */
+export function textSetting(key: string, fallback: string): string {
+  const row = db.prepare(`SELECT value FROM platform_settings WHERE key = ?`).get(key) as
+    | { value: string }
+    | undefined;
+  return row?.value ?? fallback;
+}
+
+export function setTextSetting(key: string, value: string, adminId: number | null): void {
+  db.prepare(
+    `INSERT INTO platform_settings (key, value, updated_by, updated_at)
+     VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT (key) DO UPDATE SET value = excluded.value,
+                                     updated_by = excluded.updated_by,
+                                     updated_at = excluded.updated_at`,
+  ).run(key, value, adminId);
+}
+
 export function listSettings() {
   return {
     commissionPercent: numericSetting(SETTING_COMMISSION, config.rules.commissionPercent),

@@ -632,6 +632,19 @@ export interface AdminUserRow extends User {
   clinicName: string | null;
 }
 
+/**
+ * Botning Telegram'dagi "yuzi" — admin panelidan boshqariladi.
+ * Ilgari bu matnlar kodda qattiq yozilgandi.
+ */
+export interface BotFace {
+  /** Suhbat bo'sh bo'lganda, /start BOSILMASDAN oldin ko'rinadi */
+  description: string;
+  /** Bot profilida ko'rinadi */
+  shortDescription: string;
+  /** Yozuv maydoni yonidagi tugma matni — ilovani ochadi */
+  menuButton: string;
+}
+
 export interface AdminMetrics {
   users: number;
   patients: number;

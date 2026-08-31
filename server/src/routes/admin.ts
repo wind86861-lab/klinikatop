@@ -3,6 +3,15 @@ import { z } from 'zod';
 import { STEP_KINDS } from '../../../shared/types';
 import { listSteps, saveSteps } from '../services/requestSteps';
 import { listPendingCommissionPayments, reviewCommissionPayment } from '../services/clinicCabinet';
+import {
+  applyBotFace,
+  BOT_DEFAULTS,
+  getBotFace,
+  SETTING_BOT_DESCRIPTION,
+  SETTING_BOT_MENU,
+  SETTING_BOT_SHORT,
+} from '../services/bot';
+import { setTextSetting } from '../services/terms.business';
 import { listSyncLog, planSync, runSync, sourceConfigured } from '../services/catalogSync';
 import { rateLimit } from '../middleware/rateLimit';
 import { forbidden } from '../lib/errors';
@@ -395,4 +404,47 @@ adminRouter.post('/commission-payments/:id', (req, res) => {
     body.note ?? '',
   );
   res.json(list);
+});
+
+/* ═════════════════  Bot matnlari  ═════════════════ */
+
+/**
+ * Botning "yuzi": /start bosilishidan OLDIN ko'rinadigan matn,
+ * profildagi qisqa tavsif va ilovani ochadigan tugma nomi.
+ *
+ * Ilgari ular kodda qattiq yozilgan edi — o'zgartirish uchun deploy
+ * kerak bo'lardi. Bu marketing matni, mahsulot qarori.
+ */
+adminRouter.get('/bot', (_req, res) => {
+  res.json({ ...getBotFace(), defaults: BOT_DEFAULTS });
+});
+
+adminRouter.put('/bot', async (req, res) => {
+  const body = z
+    .object({
+      // Telegram chegaralari: tavsif 512, qisqasi 120, tugma 30 belgi
+      description: z.string().trim().max(512),
+      shortDescription: z.string().trim().max(120),
+      menuButton: z.string().trim().min(1).max(30),
+    })
+    .parse(req.body);
+
+  setTextSetting(SETTING_BOT_DESCRIPTION, body.description, null);
+  setTextSetting(SETTING_BOT_SHORT, body.shortDescription, null);
+  setTextSetting(SETTING_BOT_MENU, body.menuButton, null);
+  logModeration(req.user!.id, 'platform', 0, 'bot:update', JSON.stringify(body));
+
+  /*
+   * Telegram'ga DARHOL yuboriladi. Saqlab qo'yib, keyingi qayta
+   * ishga tushishni kutish — admin uchun "saqladim, lekin
+   * o'zgarmadi" degan holat bo'lardi.
+   */
+  let applied = false;
+  try {
+    applied = await applyBotFace(body);
+  } catch (err) {
+    console.warn('[bot] matnlarni qo\'llab bo\'lmadi:', err);
+  }
+
+  res.json({ ...getBotFace(), applied });
 });

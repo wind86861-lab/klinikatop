@@ -2496,6 +2496,38 @@ async function main() {
     db.prepare(`DELETE FROM clinic_operations WHERE clinic_id = ? AND source = 'banisa'`).run(clinic.id);
   }
 
+  /* ══════════════  Bot matnlari  ══════════════ */
+
+  section('Bot matnlari');
+
+  {
+    const botSvc = require('../services/bot');
+    const terms = require('../services/terms.business');
+
+    const before = botSvc.getBotFace();
+    check('sozlanmagan bo‘lsa zaxira matn keladi', before.description === botSvc.BOT_DEFAULTS.description);
+    check('tugma nomi ham zaxiradan', before.menuButton === botSvc.BOT_DEFAULTS.menuButton);
+
+    terms.setTextSetting(botSvc.SETTING_BOT_DESCRIPTION, 'Yangi tavsif matni', null);
+    terms.setTextSetting(botSvc.SETTING_BOT_MENU, 'Ochish', null);
+
+    const after = botSvc.getBotFace();
+    check('admin yozgani ustun keladi', after.description === 'Yangi tavsif matni');
+    check('tugma nomi o‘zgardi', after.menuButton === 'Ochish');
+    check('tegilmagani zaxirada qoladi', after.shortDescription === botSvc.BOT_DEFAULTS.shortDescription);
+
+    /*
+     * Bo'sh satr ham HAQIQIY qiymat: admin qisqa tavsifni ataylab
+     * o'chirishi mumkin va u zaxiraga qaytmasligi kerak.
+     */
+    terms.setTextSetting(botSvc.SETTING_BOT_SHORT, '', null);
+    check('bo‘sh satr zaxiraga qaytmaydi', botSvc.getBotFace().shortDescription === '');
+
+    // Tozalash
+    db.prepare(`DELETE FROM platform_settings WHERE key LIKE 'bot_%'`).run();
+    check('tozalangach zaxira qaytdi', botSvc.getBotFace().description === botSvc.BOT_DEFAULTS.description);
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);
