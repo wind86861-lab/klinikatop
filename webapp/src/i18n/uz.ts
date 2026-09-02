@@ -415,6 +415,8 @@ export const uz = {
 
   'wz.budget.title': 'Byudjetingiz qancha?',
   'wz.budget.sub': 'Ixtiyoriy. Ko‘rsatmasangiz klinika o‘z narxini beradi',
+  'wz.budget.notSet': 'Ko‘rsatilmagan',
+  'wz.budget.dragHint': 'Byudjetni ko‘rsatish uchun suring — ixtiyoriy',
   'wz.budget.skip': 'Byudjet ko‘rsatmayman',
   'wz.budget.set': 'Byudjet ko‘rsataman',
 

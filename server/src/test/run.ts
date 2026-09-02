@@ -2772,6 +2772,50 @@ async function main() {
     check('eskirgan sessiyalar tozalanadi', typeof wa.purgeExpiredSessions() === 'number');
   }
 
+  /* ══════════════  Telegram ismini ajratish  ══════════════ */
+
+  section('Ism va familiya');
+
+  {
+    const mk = (id: number, first: string, last?: string) =>
+      upsertUser({ id, first_name: first, last_name: last, language_code: 'uz' } as any);
+
+    // Telegram familiya BERGAN — tegilmaydi
+    const a = mk(781001, 'Aziz', 'Karimov');
+    check('familiya berilgan bo‘lsa ajratilmaydi', a.firstName === 'Aziz' && a.lastName === 'Karimov');
+
+    /*
+     * Familiya berilmagan va ismda probel bor — oxirgi so'z familiya.
+     * Ilgari butun matn ism maydoniga tushar, familiya bo'sh qolardi
+     * va forma uni qo'lda qayta yozishga majbur qilardi.
+     */
+    const b = mk(781002, 'Aziz Karimov');
+    check('to‘liq ism ajratildi', b.firstName === 'Aziz' && b.lastName === 'Karimov', {
+      f: b.firstName,
+      l: b.lastName,
+    });
+
+    // Uch so'z — oxirgisi familiya
+    const c = mk(781003, 'Abdulla Qodiriy Zufarovich');
+    check('uch so‘zda oxirgisi familiya', c.lastName === 'Zufarovich' && c.firstName === 'Abdulla Qodiriy');
+
+    // Bitta so'z — ajratilmaydi
+    const d = mk(781004, 'Aziz');
+    check('bitta so‘z ajratilmaydi', d.firstName === 'Aziz' && !d.lastName);
+
+    // Ortiqcha probellar
+    const e = mk(781005, '  Aziz   Karimov  ');
+    check('ortiqcha probel tozalanadi', e.firstName === 'Aziz' && e.lastName === 'Karimov');
+
+    /*
+     * Odam profilini to'ldirgach Telegram unga TEGMAYDI: ism uning
+     * o'z tanlovi. Bu qoida ilgari ham bor edi, sinov uni saqlaydi.
+     */
+    db.prepare(`UPDATE users SET first_name = 'Anvar', last_name = 'Rasulov' WHERE telegram_id = ?`).run(781002);
+    const again = mk(781002, 'Aziz Karimov');
+    check('odam yozgan ism qayta yozilmaydi', again.firstName === 'Anvar' && again.lastName === 'Rasulov');
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

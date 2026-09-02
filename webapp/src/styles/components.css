@@ -4955,3 +4955,31 @@
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* ── Byudjet: hali ko'rsatilmagan holat ── */
+/*
+ * Slayder darhol ko'rinadi, lekin surilmaguncha byudjet
+ * "ko'rsatilmagan" bo'lib turadi. Raqam o'rniga matn chiqadi —
+ * aks holda tegilmagan taklif haqiqiy tanlovdek ko'rinardi.
+ */
+.budget-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.budget-empty__value {
+  font-size: var(--t-lg);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.budget-empty__hint {
+  font-size: var(--t-xs);
+  color: var(--muted);
+}
+
+/* Tegilmagan slayder biroz susroq — u hali tanlov emas */
+.slider.is-untouched {
+  opacity: 0.55;
+}

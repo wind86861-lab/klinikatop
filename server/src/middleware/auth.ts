@@ -18,9 +18,35 @@ declare global {
   }
 }
 
+/**
+ * Telegram ismini ism va familiyaga ajratadi.
+ *
+ * Ko'p odam Telegram profilida butun ismini `first_name` ga yozadi va
+ * `last_name` ni umuman to'ldirmaydi. Natijada ro'yxatdan o'tish
+ * ekranida "Aziz Karimov" BITTA maydonga tushar, familiya esa bo'sh
+ * qolardi — forma familiyani majburiy so'ragani uchun odam uni qo'lda
+ * qayta yozishga majbur bo'lardi.
+ *
+ * Ajratish faqat Telegram FAMILIYA BERMAGANDA qilinadi: bergan bo'lsa
+ * unga ishonamiz. Bir nechta so'z bo'lsa oxirgisi familiya deb
+ * olinadi — o'zbek ismlarida odatda shunday va odam istagan payt
+ * profilda tuzatadi.
+ */
+function splitTelegramName(first: string, last: string | null): { first: string; last: string | null } {
+  const f = (first ?? '').trim();
+  const l = (last ?? '').trim();
+  if (l) return { first: f, last: l };
+
+  const parts = f.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return { first: f, last: null };
+
+  return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] };
+}
+
 /** Telegram foydalanuvchisidan platforma profilini yaratadi yoki oladi (1.1). */
 export function upsertUser(tg: TelegramUser): User {
   const existing = db.prepare(`SELECT * FROM users WHERE telegram_id = ?`).get(tg.id);
+  const name = splitTelegramName(tg.first_name ?? '', tg.last_name ?? null);
 
   if (existing) {
     /*
@@ -43,7 +69,7 @@ export function upsertUser(tg: TelegramUser): User {
               first_name = CASE WHEN first_name IS NULL OR first_name = '' THEN ? ELSE first_name END,
               last_name  = CASE WHEN last_name IS NULL OR last_name = ''  THEN ? ELSE last_name  END
         WHERE telegram_id = ?`,
-    ).run(tg.username ?? null, tg.photo_url ?? null, tg.first_name ?? '', tg.last_name ?? null, tg.id);
+    ).run(tg.username ?? null, tg.photo_url ?? null, name.first, name.last, tg.id);
     return mapUser(db.prepare(`SELECT * FROM users WHERE telegram_id = ?`).get(tg.id));
   }
 
@@ -52,7 +78,7 @@ export function upsertUser(tg: TelegramUser): User {
   db.prepare(
     `INSERT INTO users (telegram_id, username, first_name, last_name, photo_url, lang, roles)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(tg.id, tg.username ?? null, tg.first_name ?? '', tg.last_name ?? null, tg.photo_url ?? null, lang, toJson(['patient']));
+  ).run(tg.id, tg.username ?? null, name.first, name.last, tg.photo_url ?? null, lang, toJson(['patient']));
 
   return mapUser(db.prepare(`SELECT * FROM users WHERE telegram_id = ?`).get(tg.id));
 }

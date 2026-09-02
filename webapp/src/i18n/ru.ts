@@ -396,6 +396,8 @@ export const ru: Record<TranslationKey, string> = {
 
   'wz.budget.title': 'Какой у вас бюджет?',
   'wz.budget.sub': 'Необязательно. Без бюджета клиника предложит свою цену',
+  'wz.budget.notSet': 'Не указан',
+  'wz.budget.dragHint': 'Потяните, чтобы указать бюджет — необязательно',
   'wz.budget.skip': 'Не указывать бюджет',
   'wz.budget.set': 'Указать бюджет',
 

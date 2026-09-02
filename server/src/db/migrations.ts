@@ -1310,6 +1310,44 @@ export const MIGRATIONS: Migration[] = [
       /* Mavjud Telegram sessiyalari qisqa muddatli — ular tabiiy tugaydi */
     },
   },
+  {
+    /**
+     * Telegramdan kelgan to'liq ismni ajratish.
+     *
+     * Ko'p odam Telegram profilida butun ismini `first_name` ga yozadi
+     * va `last_name` ni to'ldirmaydi. Ro'yxatdan o'tish ekranida
+     * "Aziz Karimov" BITTA maydonga tushar, familiya bo'sh qolardi —
+     * forma esa familiyani majburiy so'raydi.
+     *
+     * Ikki chegara bor va ikkalasi ham muhim:
+     *
+     *   `telegram_id > 0` — veb hisoblar (klinika, admin) manfiy
+     *   identifikator bilan saqlanadi va ularning "ismi" aslida
+     *   tashkilot nomi ("Real Medikal"). Uni ajratish xato bo'lardi.
+     *
+     *   `profile_completed_at IS NULL` — odam profilini allaqachon
+     *   to'ldirgan bo'lsa, ismi uning O'Z tanlovi. Unga tegilmaydi.
+     */
+    id: '025_split_telegram_name',
+    up: (db) => {
+      const rows = db
+        .prepare(
+          `SELECT id, first_name FROM users
+            WHERE telegram_id > 0
+              AND profile_completed_at IS NULL
+              AND (last_name IS NULL OR last_name = '')
+              AND first_name LIKE '% %'`,
+        )
+        .all() as { id: number; first_name: string }[];
+
+      const upd = db.prepare(`UPDATE users SET first_name = ?, last_name = ? WHERE id = ?`);
+      for (const r of rows) {
+        const parts = r.first_name.trim().split(/\s+/).filter(Boolean);
+        if (parts.length < 2) continue;
+        upd.run(parts.slice(0, -1).join(' '), parts[parts.length - 1], r.id);
+      }
+    },
+  },
 ];
 
 /**

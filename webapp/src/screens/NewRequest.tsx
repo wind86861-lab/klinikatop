@@ -433,6 +433,13 @@ function RegionStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
 function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {
   const { t, lang } = useApp();
   const [stats, setStats] = useState<PriceStats | null>(null);
+  /*
+   * Statistika operatsiya va shaharga bog'liq. Admin bosqichlarni
+   * qayta tartiblagan bo'lsa byudjet ulardan OLDIN kelishi mumkin —
+   * o'shanda so'rov umuman yuborilmaydi va skelet abadiy aylanib
+   * turardi. Shuning uchun kutish holati alohida belgilanadi.
+   */
+  const canLoadStats = Boolean(draft.operation && draft.cityId);
 
   useEffect(() => {
     if (!draft.operation || !draft.cityId) return;
@@ -453,6 +460,8 @@ function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
   }, [stats]);
 
   const belowRange = draft.budgetUzs != null && stats?.p25 != null && draft.budgetUzs < stats.p25;
+  /* Tegilmagan slayder shu yerda turadi — bu taklif, tanlov emas */
+  const suggested = stats?.median ?? Math.round((range.min + range.max) / 2);
 
   return (
     <>
@@ -463,7 +472,7 @@ function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
         olingan "taxminiy oraliq" bu yerda chiqmaydi: bemor uni haqiqiy narx
         deb o'qib, byudjetini noto'g'ri qo'yib qo'yadi.
       */}
-      {!stats ? (
+      {!canLoadStats ? null : !stats ? (
         <Skeleton h={110} />
       ) : stats.source === 'deals' && stats.median != null ? (
         <Card className="stack">
@@ -482,13 +491,26 @@ function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
         <Notice tone="info">{t('budget.noStats')}</Notice>
       )}
 
-      {draft.budgetUzs == null ? (
-        <Button variant="secondary" block onClick={() => patch({ budgetUzs: stats?.median ?? range.min })}>
-          {t('wz.budget.set')}
-        </Button>
-      ) : (
-        <Card className="stack">
-          <div style={{ textAlign: 'center' }}>
+      {/*
+        Slayder DARHOL ko'rinadi.
+
+        Ilgari avval "Byudjetni ko'rsatish" tugmasini bosish kerak
+        edi va bosmagan odam byudjet bo'limida umuman hech narsa
+        ko'rmasdi — nima qilish kerakligi tushunarsiz edi.
+
+        Endi slayder bor, lekin SURILMAGUNCHA byudjet
+        "ko'rsatilmagan" bo'lib qoladi: tegmasdan o'tib ketsa
+        `budgetUzs` null bo'lib boradi. Ya'ni ko'rsatish ixtiyoriy
+        bo'lib qolaveradi, faqat endi u ko'rinib turadi.
+      */}
+      <Card className="stack">
+        <div style={{ textAlign: 'center' }}>
+          {draft.budgetUzs == null ? (
+            <div className="budget-empty">
+              <span className="budget-empty__value">{t('wz.budget.notSet')}</span>
+              <span className="budget-empty__hint">{t('wz.budget.dragHint')}</span>
+            </div>
+          ) : (
             <div className="num" style={{ fontSize: 'var(--t-3xl)' }}>
               <CountUp value={draft.budgetUzs} format={(n) => groupDigits(n)} />
               <span style={{ fontSize: 'var(--t-md)', color: 'var(--body)' }}>
@@ -496,26 +518,31 @@ function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
                 {lang === 'ru' ? 'сум' : 'so‘m'}
               </span>
             </div>
-          </div>
-          <input
-            className="slider"
-            type="range"
-            min={range.min}
-            max={range.max}
-            step={range.step}
-            value={draft.budgetUzs}
-            onChange={(e) => patch({ budgetUzs: Number(e.target.value) })}
-            aria-label={t('wz.budget.title')}
-          />
-          <div className="between">
-            <span className="tiny">{money(range.min, lang)}</span>
-            <span className="tiny">{money(range.max, lang)}</span>
-          </div>
+          )}
+        </div>
+
+        <input
+          className={`slider ${draft.budgetUzs == null ? 'is-untouched' : ''}`}
+          type="range"
+          min={range.min}
+          max={range.max}
+          step={range.step}
+          /* Tegilmagan holatda taklif qilingan joyda turadi, lekin qiymat null */
+          value={draft.budgetUzs ?? suggested}
+          onChange={(e) => patch({ budgetUzs: Number(e.target.value) })}
+          aria-label={t('wz.budget.title')}
+        />
+        <div className="between">
+          <span className="tiny">{money(range.min, lang)}</span>
+          <span className="tiny">{money(range.max, lang)}</span>
+        </div>
+
+        {draft.budgetUzs != null && (
           <Button variant="ghost" size="sm" onClick={() => patch({ budgetUzs: null })}>
             {t('wz.budget.skip')}
           </Button>
-        </Card>
-      )}
+        )}
+      </Card>
 
       <AnimatePresence>
         {belowRange && (
