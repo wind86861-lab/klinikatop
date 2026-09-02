@@ -13,6 +13,21 @@ SERVER="${SERVER:-root@137.184.103.148}"
 SSH_OPTS="-o StrictHostKeyChecking=no"
 APP=/opt/klinikatop
 
+#
+# Ulanish usuli.
+#
+# Odatda SSH kaliti ishlatiladi. Kalit qo'yilmagan mashinadan deploy
+# qilish kerak bo'lsa, parolni `SSHPASS` muhit o'zgaruvchisiga berish
+# mumkin — u buyruq satrida ham, bu faylda ham qolmaydi:
+#
+#   read -rs SSHPASS && export SSHPASS && bash deploy/deploy.sh
+#
+if [ -n "${SSHPASS:-}" ]; then
+  SSH_CMD="sshpass -e ssh $SSH_OPTS"
+else
+  SSH_CMD="ssh $SSH_OPTS"
+fi
+
 echo "▸ Lokal tekshiruv"
 npx tsc --noEmit -p server/tsconfig.json
 npx tsc --noEmit -p webapp/tsconfig.json
@@ -22,7 +37,7 @@ echo "▸ Build"
 npm run build
 
 echo "▸ Yuborish"
-rsync -az --delete -e "ssh $SSH_OPTS" server/dist/  "$SERVER:$APP/dist/"
+rsync -az --delete -e "$SSH_CMD" server/dist/  "$SERVER:$APP/dist/"
 #
 # Webapp ikki qadamda yuboriladi va bu ATAYLAB.
 #
@@ -36,13 +51,13 @@ rsync -az --delete -e "ssh $SSH_OPTS" server/dist/  "$SERVER:$APP/dist/"
 # to'qnashuv bo'lmaydi, joy esa kam ketadi. Eskilarini quyida
 # tozalaymiz.
 #
-rsync -az --delete --exclude 'assets/' -e "ssh $SSH_OPTS" webapp/dist/ "$SERVER:$APP/webapp/"
-rsync -az                              -e "ssh $SSH_OPTS" webapp/dist/assets/ "$SERVER:$APP/webapp/assets/"
-rsync -az          -e "ssh $SSH_OPTS" package.json package-lock.json "$SERVER:$APP/"
-rsync -az          -e "ssh $SSH_OPTS" server/package.json "$SERVER:$APP/server/"
+rsync -az --delete --exclude 'assets/' -e "$SSH_CMD" webapp/dist/ "$SERVER:$APP/webapp/"
+rsync -az                              -e "$SSH_CMD" webapp/dist/assets/ "$SERVER:$APP/webapp/assets/"
+rsync -az          -e "$SSH_CMD" package.json package-lock.json "$SERVER:$APP/"
+rsync -az          -e "$SSH_CMD" server/package.json "$SERVER:$APP/server/"
 
 echo "▸ Bog'liqliklar va migratsiya"
-ssh $SSH_OPTS "$SERVER" bash -s <<'REMOTE'
+$SSH_CMD "$SERVER" bash -s <<'REMOTE'
 set -e
 cd /opt/klinikatop
 
