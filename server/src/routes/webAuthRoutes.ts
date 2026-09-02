@@ -74,6 +74,13 @@ const loginSchema = z.object({
   /** Telefon raqami. Eski hisoblar uchun email ham qabul qilinadi. */
   login: z.string().trim().min(4).max(160),
   password: z.string().min(1).max(200),
+  /**
+   * Qaysi kirish sahifasidan kelindi.
+   *
+   * Ixtiyoriy: keshda eski qobiq qolgan brauzer uni yubormaydi va
+   * o'shanda eski xulq saqlanadi (webAuth.ts izohiga qarang).
+   */
+  scope: z.enum(['clinic', 'admin']).optional(),
 });
 
 /*
@@ -91,7 +98,13 @@ webAuthRouter.post(
   rateLimit({ name: 'web-login', windowSec: 300, max: 60 }),
   (req, res) => {
     const body = loginSchema.parse(req.body);
-    const result = login(body.login, body.password, req.ip ?? null, req.header('user-agent') ?? null);
+    const result = login(
+      body.login,
+      body.password,
+      req.ip ?? null,
+      req.header('user-agent') ?? null,
+      body.scope,
+    );
     res.json(result);
   },
 );

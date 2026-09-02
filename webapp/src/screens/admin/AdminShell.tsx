@@ -104,7 +104,8 @@ export function AdminShell({
             className="admin__logout"
             onClick={() => {
               setWebToken(null);
-              window.location.href = '/kabinet';
+              // Admin o'z eshigiga qaytadi, klinika kirishiga emas
+              window.location.href = '/admin/login';
             }}
           >
             Chiqish

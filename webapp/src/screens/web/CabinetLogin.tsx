@@ -1,14 +1,23 @@
 /**
- * Veb kabinetga kirish — klinika va admin uchun.
+ * Veb kabinetga kirish.
  *
- * Ikki bosqichli: avval email va parol, keyin (yoqilgan bo'lsa) ilovadagi
- * kod. Ikkinchi bosqich alohida ekran sifatida ko'rsatiladi — parol
- * to'g'ri kelgani allaqachon ma'lum va odam nima kutilayotganini aniq
- * biladi.
+ * IKKI ALOHIDA ESHIK, bitta forma:
+ *   /kabinet      — klinika hisobi
+ *   /admin/login  — platforma administratori
+ *
+ * Nega ajratilgan: bular butunlay boshqa odamlar. Klinika xodimi admin
+ * degan so'zni ko'rishi shart emas, administrator esa klinikalar uchun
+ * yozilgan yordam matnlari orasidan o'z joyini qidirmasligi kerak.
+ * Server ham shu sahifani tekshiradi — noto'g'ri eshikdan kirilmaydi
+ * (webAuth.ts, `LoginScope`).
+ *
+ * Kirishning o'zi ikki bosqichli: avval raqam va parol, keyin (yoqilgan
+ * bo'lsa) ilovadagi kod. Ikkinchi bosqich alohida ekran sifatida
+ * ko'rsatiladi — parol to'g'ri kelgani allaqachon ma'lum va odam nima
+ * kutilayotganini aniq biladi.
  */
 import { useState } from 'react';
 import { m } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
 import { setWebToken } from '@/lib/session';
 import { EASE } from '@/lib/motion';
 import { Button, Field, Input, Notice } from '@/ui';
@@ -29,8 +38,29 @@ async function post(path: string, body: unknown, token?: string) {
   return data;
 }
 
-export function CabinetLogin() {
-  const navigate = useNavigate();
+export type LoginScope = 'clinic' | 'admin';
+
+/** Har eshikning o'z matni. Bitta joyda — ikkalasi bir-biriga qarab yoziladi. */
+const FACE: Record<
+  LoginScope,
+  { title: string; sub: string; hint: string; home: string }
+> = {
+  clinic: {
+    title: 'Kabinetga kirish',
+    sub: 'Klinika hisobingiz bilan',
+    hint: 'Ariza qoldirgan raqamingiz',
+    home: '/clinic',
+  },
+  admin: {
+    title: 'Administrator paneli',
+    sub: 'Platforma xodimlari uchun xizmat sahifasi',
+    hint: 'Hisobingizga biriktirilgan raqam',
+    home: '/admin',
+  },
+};
+
+export function CabinetLogin({ scope = 'clinic' }: { scope?: LoginScope }) {
+  const face = FACE[scope];
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -39,18 +69,33 @@ export function CabinetLogin() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const enter = (token: string, level: string) => {
-    setWebToken(token);
-    navigate(level === 'full' ? '/admin' : '/clinic', { replace: true });
+  /**
+   * Ichkariga kirish — TO'LIQ sahifa yuklash bilan.
+   *
+   * Yo'l bo'yicha o'tish (`navigate`) bu yerda ishlamaydi va ishlamagan
+   * ham: token `localStorage` ga yoziladi, lekin ildiz komponent uni
+   * faqat ilova ochilganda bir marta o'qiydi. Shuning uchun u sessiyani
+   * hali ham yo'q deb bilib, odamni shu zahoti kirish sahifasiga qaytarib
+   * yuborardi — parol to'g'ri, token joyida, lekin ekran o'zgarmasdi.
+   * Odam sahifani qo'lda yangilagandagina ichkariga kirardi.
+   *
+   * To'liq yuklash bu tugunni butunlay yechadi: ilova yangi token bilan
+   * noldan ko'tariladi.
+   */
+  const enter = () => {
+    window.location.replace(face.home);
   };
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
-      const res = await post('/login', { login: login.trim(), password });
+      const res = await post('/login', { login: login.trim(), password, scope });
       if (res.mfaRequired) setPending(res.token);
-      else enter(res.token, res.user.level);
+      else {
+        setWebToken(res.token);
+        enter();
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -64,10 +109,8 @@ export function CabinetLogin() {
     setError(null);
     try {
       await post('/mfa', { code: code.trim() }, pending);
-      const me = await fetch(`${BASE}/api/web/me`, {
-        headers: { authorization: `Bearer ${pending}` },
-      }).then((r) => r.json());
-      enter(pending, me.account.level);
+      setWebToken(pending);
+      enter();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -76,19 +119,22 @@ export function CabinetLogin() {
   };
 
   return (
-    <div className="wa">
+    <div className={`wa wa--${scope}`}>
       <m.div
         className="wa__box"
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: EASE }}
       >
-        <span className="wa__mark">KlinikaTop</span>
+        <span className="wa__mark">
+          KlinikaTop
+          {scope === 'admin' && <em className="wa__badge">xizmat</em>}
+        </span>
 
         {pending === null ? (
           <>
-            <h1 className="wa__title">Kabinetga kirish</h1>
-            <p className="wa__sub">Klinika va administrator hisoblari uchun</p>
+            <h1 className="wa__title">{face.title}</h1>
+            <p className="wa__sub">{face.sub}</p>
 
             <form
               className="wa__form"
@@ -97,7 +143,7 @@ export function CabinetLogin() {
                 if (login.trim() && password) void submit();
               }}
             >
-              <Field label="Telefon raqami" hint="Ariza qoldirgan raqamingiz">
+              <Field label="Telefon raqami" hint={face.hint}>
                 <Input
                   type="tel"
                   inputMode="tel"
@@ -124,9 +170,15 @@ export function CabinetLogin() {
               </Button>
             </form>
 
-            <p className="wa__fine">
-              Hisobingiz yo‘qmi? <a href="/klinika">Klinika sifatida ariza qoldiring</a>
-            </p>
+            {scope === 'clinic' ? (
+              <p className="wa__fine">
+                Hisobingiz yo‘qmi? <a href="/klinika">Klinika sifatida ariza qoldiring</a>
+              </p>
+            ) : (
+              <p className="wa__fine">
+                Klinika xodimimisiz? <a href="/kabinet">Kabinetga kiring</a>
+              </p>
+            )}
           </>
         ) : (
           <>

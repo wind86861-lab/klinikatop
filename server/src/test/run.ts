@@ -1056,6 +1056,59 @@ async function main() {
   webAuth.passMfa(adminSession.token, webAuth.currentTotp(totp.secret));
   check('kod kiritilgach sessiya to‘liq', webAuth.resolveSession(adminSession.token).mfaPassed === true);
 
+  /* ── Kirish eshiklari: klinika va admin alohida ── */
+
+  const doorAcc = webAuth.createAccount({
+    phone: '998900000077',
+    fullName: 'Eshik Sinovi',
+    level: 'clinic_admin',
+    clinicId: clinic.id,
+  });
+  webAuth.completeSetup(doorAcc.setupToken, 'klinika-eshigi-2026');
+
+  check(
+    'klinika hisobi klinika eshigidan kiradi',
+    webAuth.login('998900000077', 'klinika-eshigi-2026', null, null, 'clinic').user.id === doorAcc.user.id,
+  );
+  throws(
+    'klinika hisobi admin eshigidan kirmaydi',
+    () => webAuth.login('998900000077', 'klinika-eshigi-2026', null, null, 'admin'),
+    'forbidden',
+  );
+  throws(
+    'admin hisobi klinika eshigidan kirmaydi',
+    () => webAuth.login('998900000001', 'admin-paroli-2026', null, null, 'clinic'),
+    'forbidden',
+  );
+  check(
+    'admin hisobi admin eshigidan kiradi',
+    webAuth.login('998900000001', 'admin-paroli-2026', null, null, 'admin').mfaRequired === true,
+  );
+
+  // Eshik berilmasa tekshirilmaydi — keshda eski qobiq qolgan brauzer uchun
+  check(
+    'eshik ko‘rsatilmasa eski xulq saqlanadi',
+    webAuth.login('998900000077', 'klinika-eshigi-2026').user.id === doorAcc.user.id,
+  );
+
+  /*
+   * Noto'g'ri eshik — parol xatosi EMAS.
+   *
+   * Aks holda o'z parolini biladigan odam noto'g'ri sahifada bir necha
+   * marta urinib, hisobini 15 daqiqaga qulflab qo'yardi.
+   */
+  for (let i = 0; i < 6; i += 1) {
+    try {
+      webAuth.login('998900000077', 'klinika-eshigi-2026', null, null, 'admin');
+    } catch {
+      /* kutilgan */
+    }
+  }
+  check(
+    'noto‘g‘ri eshik hisobni qulflamaydi',
+    webAuth.login('998900000077', 'klinika-eshigi-2026', null, null, 'clinic').user.id === doorAcc.user.id,
+  );
+
 
   /* ═════ 15. Katalog sinxronizatsiyasi ═════ */
   console.log('\n15. Katalog sinxronizatsiyasi');

@@ -6,9 +6,10 @@
  * turmaydi, shuning uchun bemor ekraniga klinika tugmasi tasodifan
  * chiqib qolishi mumkin emas — u yerda bunday komponent umuman yo'q.
  *
- * Uchta ochiq sahifa bor, qolgani veb sessiya talab qiladi:
+ * Ochiq sahifalar, qolgani veb sessiya talab qiladi:
  *   /klinika        — ariza formasi
- *   /kabinet        — kirish
+ *   /kabinet        — klinika kirishi
+ *   /admin/login    — administrator kirishi (alohida eshik)
  *   /kabinet/parol  — birinchi kirishda parol o'rnatish
  */
 import { useEffect, useState } from 'react';
@@ -45,7 +46,20 @@ export function WebApp() {
   const path = location.pathname;
 
   /** Kirish talab qilmaydigan sahifalar */
-  const open = path === '/klinika' || path === '/ulanish' || path.startsWith('/kabinet');
+  const open =
+    path === '/klinika' ||
+    path === '/ulanish' ||
+    path === '/admin/login' ||
+    path.startsWith('/kabinet');
+
+  /*
+   * Sessiyasiz odam qaysi kirish sahifasiga tushadi.
+   *
+   * Admin paneliga urinib ko'rgan odam klinika kirish sahifasida emas,
+   * o'z eshigida paydo bo'lishi kerak — aks holda u yerda "ariza
+   * qoldiring" degan, unga hech qanday aloqasi yo'q yo'l ko'rsatiladi.
+   */
+  const loginPath = path.startsWith('/admin') ? '/admin/login' : '/kabinet';
 
   /*
    * Token localStorage'da, lekin uni holatda ham ushlaymiz: Telegram
@@ -66,14 +80,15 @@ export function WebApp() {
 
   // Brauzerda sessiya yo'q bo'lsa kirish sahifasiga
   useEffect(() => {
-    if (!open && !token && !insideTelegram) navigate('/kabinet', { replace: true });
-  }, [open, token, insideTelegram, navigate]);
+    if (!open && !token && !insideTelegram) navigate(loginPath, { replace: true });
+  }, [open, token, insideTelegram, loginPath, navigate]);
 
   if (path === '/klinika') return <ClinicSignup />;
   // banisa.uz'dan ulanish — bir bosishda
   if (path === '/ulanish') return <BanisaLink />;
   if (path === '/kabinet/parol') return <SetPassword />;
-  if (path.startsWith('/kabinet')) return <CabinetLogin />;
+  if (path === '/admin/login') return <CabinetLogin scope="admin" />;
+  if (path.startsWith('/kabinet')) return <CabinetLogin scope="clinic" />;
 
   // Telegram ichidamiz va sessiya hali yo'q — raqam bo'yicha kiramiz
   if (!token && insideTelegram) {

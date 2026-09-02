@@ -2940,6 +2940,28 @@
   font-size: var(--t-md);
   color: var(--primary);
   letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+/*
+ * Xizmat sahifasi belgisi.
+ *
+ * Admin kirishi klinika kirishiga tashqi ko'rinishi bilan ham
+ * o'xshamasligi kerak: bir qarashda qaysi eshikda turgani ko'rinsin.
+ */
+.wa__badge {
+  font-family: var(--font-body);
+  font-style: normal;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 2px var(--s-2);
 }
 
 .wa__title {

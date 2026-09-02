@@ -22,7 +22,14 @@ export function SetPassword() {
   const [repeat, setRepeat] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  /*
+   * Parol o'rnatilgach hisob DARAJASI ma'lum bo'ladi va odamni o'z
+   * kirish sahifasiga yuboramiz: admin va klinika alohida eshikdan
+   * kiradi, shuning uchun "Kirish sahifasiga" tugmasi ikki xil joyga
+   * olib boradi.
+   */
+  const [level, setLevel] = useState<string | null>(null);
+  const done = level !== null;
 
   const tooShort = password.length > 0 && password.length < 10;
   const mismatch = repeat.length > 0 && repeat !== password;
@@ -39,7 +46,7 @@ export function SetPassword() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error ?? 'Xatolik yuz berdi');
-      setDone(true);
+      setLevel(data?.level ?? 'clinic_admin');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -72,7 +79,10 @@ export function SetPassword() {
           <>
             <h1 className="wa__title">Parol o‘rnatildi</h1>
             <p className="wa__sub">Endi kabinetingizga kira olasiz.</p>
-            <Button block onClick={() => navigate('/kabinet', { replace: true })}>
+            <Button
+              block
+              onClick={() => navigate(level === 'full' ? '/admin/login' : '/kabinet', { replace: true })}
+            >
               Kirish sahifasiga
             </Button>
           </>

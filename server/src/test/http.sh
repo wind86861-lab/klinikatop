@@ -742,6 +742,27 @@ ALT=$(curl -s "${JSON[@]}" -X POST "$API/web/login" \
   -d "{\"login\":\"+${PHONE}\",\"password\":\"$PWD_NEW\"}" | jqv '.token')
 check "raqam boshqa shaklda ham ishlaydi" "$([ -n "$ALT" ] && echo 1)" ""
 
+# ── Kirish eshiklari: klinika va admin alohida ──
+#
+# Klinika `/kabinet` dan, administrator `/admin/login` dan kiradi.
+# Parol to'g'ri bo'lsa ham, boshqa eshikdan o'tkazilmaydi.
+code=$(status "${JSON[@]}" -X POST "$API/web/login" \
+  -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\",\"scope\":\"admin\"}")
+check "klinika hisobi admin eshigidan kirmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
+DOOR=$(curl -s "${JSON[@]}" -X POST "$API/web/login" \
+  -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\",\"scope\":\"clinic\"}" | jqv '.token')
+check "klinika hisobi o'z eshigidan kiradi" "$([ -n "$DOOR" ] && echo 1)" ""
+
+# Noto'g'ri eshik parol xatosi emas — hisob qulflanmaydi
+for _ in 1 2 3 4 5 6; do
+  curl -s "${JSON[@]}" -X POST "$API/web/login" \
+    -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\",\"scope\":\"admin\"}" > /dev/null
+done
+DOOR=$(curl -s "${JSON[@]}" -X POST "$API/web/login" \
+  -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\",\"scope\":\"clinic\"}" | jqv '.token')
+check "noto'g'ri eshik hisobni qulflamaydi" "$([ -n "$DOOR" ] && echo 1)" ""
+
 # Telegram ko'prigi: imzosiz ochilmaydi
 code=$(status "${JSON[@]}" -X POST "$API/web/telegram" -d '{}')
 check "Telegram ko'prigi imzosiz yopiq (401)" "$([ "$code" = 401 ] && echo 1)" "$code"

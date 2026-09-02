@@ -40,6 +40,32 @@ const ROLE_FOR: Record<WebLevel, Role> = {
 };
 
 /**
+ * Kirish sahifasi — klinika kabineti yoki admin paneli.
+ *
+ * Ikkalasi endi alohida manzilda turadi (`/kabinet` va `/admin/login`) va
+ * har biri faqat o'z hisobini qabul qiladi. Bu xavfsizlik chegarasi EMAS:
+ * huquqni baribir rol tekshiruvi hal qiladi va parolni bilgan odam
+ * so'rovni qo'lda ham yuborishi mumkin. Bu tartib masalasi —
+ * administrator klinika xodimlari kiradigan sahifadan kirmaydi, va
+ * xodim admin sahifasida o'z parolini terib o'tirmaydi.
+ *
+ * Shuning uchun tekshiruv parol TO'G'RI kelgandan keyin bo'ladi: shunda
+ * javob hech kimga qaysi raqam admin ekanini oshkor qilmaydi.
+ */
+export type LoginScope = 'clinic' | 'admin';
+
+const SCOPE_OF: Record<WebLevel, LoginScope> = {
+  full: 'admin',
+  clinic_admin: 'clinic',
+  clinic_operator: 'clinic',
+};
+
+const WRONG_SCOPE: Record<LoginScope, string> = {
+  clinic: 'Administrator hisobi bu sahifadan kirmaydi. /admin/login manzilidan foydalaning.',
+  admin: 'Bu sahifa administratorlar uchun. Klinika kabinetiga /kabinet orqali kiring.',
+};
+
+/**
  * Telefon raqamini solishtirish uchun bir shaklga keltiradi.
  *
  * Bir odam raqamini turlicha yozadi: `+998 90 123 45 67`,
@@ -229,6 +255,12 @@ export function login(
   password: string,
   ip: string | null,
   userAgent: string | null,
+  /*
+   * Qaysi kirish sahifasidan kelgani. Berilmasa tekshirilmaydi —
+   * eski qobiq keshda qolgan brauzer uni yubormaydi va uni
+   * kabinetidan qamab qo'yish noto'g'ri bo'lardi.
+   */
+  scope?: LoginScope,
 ): LoginResult {
   /*
    * Kirish raqam bo'yicha. Email ham qabul qilinadi: eski hisoblar
@@ -273,9 +305,18 @@ export function login(
     throw unauthorized('Raqam yoki parol noto‘g‘ri');
   }
 
-  db.prepare(`UPDATE admin_users SET failed_count = 0, locked_until = NULL, last_login_at = datetime('now') WHERE id = ?`).run(
-    row.id,
-  );
+  /*
+   * Sahifa tekshiruvi shu yerda — parol to'g'ri, lekin sessiya hali
+   * berilmagan. Xato urinishlar hisoblagichi allaqachon nolga tushdi:
+   * bu parol xatosi emas, shunchaki noto'g'ri eshik.
+   */
+  db.prepare(`UPDATE admin_users SET failed_count = 0, locked_until = NULL WHERE id = ?`).run(row.id);
+
+  if (scope && SCOPE_OF[row.level as WebLevel] !== scope) {
+    throw forbidden(WRONG_SCOPE[scope]);
+  }
+
+  db.prepare(`UPDATE admin_users SET last_login_at = datetime('now') WHERE id = ?`).run(row.id);
 
   const token = crypto.randomBytes(32).toString('base64url');
   const expires = new Date(Date.now() + SESSION_DAYS * 24 * 3600_000)

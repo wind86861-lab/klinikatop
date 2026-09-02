@@ -32,16 +32,33 @@ export function RequireRole({
   const { ready, user } = useApp();
   const location = useLocation();
 
+  /*
+   * Qaysi kirish sahifasiga qaytaramiz.
+   *
+   * Admin paneli va klinika kabineti alohida eshikdan kiradi, shuning
+   * uchun qaytarish ham urinilgan manzilga qarab bo'ladi: admin
+   * bo'limidan chiqarilgan odam klinikalar uchun yozilgan sahifada
+   * emas, o'z kirish sahifasida paydo bo'ladi.
+   */
+  const loginPath = location.pathname.startsWith('/admin') ? '/admin/login' : '/kabinet';
+
   // Sessiya hali kelmagan — qaror qabul qilishga erta
   if (!ready) return <Splash />;
 
-  if (!user) return <Navigate to="/kabinet" replace />;
+  if (!user) return <Navigate to={loginPath} replace />;
 
   const allowed = user.roles.some((role) => roles.includes(role));
   if (!allowed) {
-    // Bosh sahifaga qaytaramiz. Qaysi manzilga urinilgani `state` da qoladi —
-    // kerak bo'lsa keyin xabar ko'rsatish uchun.
-    return <Navigate to="/kabinet" replace state={{ denied: location.pathname }} />;
+    /*
+     * Huquqi yetmadi, lekin odam ALLAQACHON kirgan — unga qayta kirish
+     * sahifasini ko'rsatish noto'g'ri bo'lardi. Shuning uchun uni o'z
+     * ish joyiga yuboramiz. Qaysi manzilga urinilgani `state` da qoladi
+     * — kerak bo'lsa keyin xabar ko'rsatish uchun.
+     */
+    const home = user.roles.some((role) => role === 'clinic_admin' || role === 'clinic_operator')
+      ? '/clinic'
+      : loginPath;
+    return <Navigate to={home} replace state={{ denied: location.pathname }} />;
   }
 
   /*
