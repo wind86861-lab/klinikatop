@@ -149,7 +149,6 @@ function mapTemplate(row: any): OfferTemplate {
     priceUzs: row.price_uzs ?? null,
     includes: json<string[]>(row.includes, []),
     advantages: json<string[]>(row.advantages, []),
-    leadTimeDays: row.lead_time_days,
     note: row.note ?? null,
     usedCount: row.used_count,
     createdAt: iso(row.created_at)!,
@@ -174,7 +173,6 @@ export interface TemplateInput {
   priceUzs: number | null;
   includes: string[];
   advantages: string[];
-  leadTimeDays: number;
   note: string | null;
 }
 
@@ -182,8 +180,8 @@ export function createTemplate(clinicId: number, input: TemplateInput): OfferTem
   const info = db
     .prepare(
       `INSERT INTO offer_templates
-         (clinic_id, title, operation_id, price_uzs, includes, advantages, lead_time_days, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (clinic_id, title, operation_id, price_uzs, includes, advantages, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       clinicId,
@@ -192,7 +190,6 @@ export function createTemplate(clinicId: number, input: TemplateInput): OfferTem
       input.priceUzs,
       JSON.stringify(input.includes.slice(0, 12)),
       JSON.stringify(input.advantages.slice(0, 12)),
-      input.leadTimeDays,
       input.note?.trim()?.slice(0, 500) || null,
     );
   return getTemplate(clinicId, Number(info.lastInsertRowid));
@@ -211,7 +208,7 @@ export function updateTemplate(clinicId: number, id: number, input: Partial<Temp
   db.prepare(
     `UPDATE offer_templates
         SET title = ?, operation_id = ?, price_uzs = ?, includes = ?,
-            advantages = ?, lead_time_days = ?, note = ?
+            advantages = ?, note = ?
       WHERE id = ? AND clinic_id = ?`,
   ).run(
     (input.title ?? current.title).trim().slice(0, 120),
@@ -219,7 +216,6 @@ export function updateTemplate(clinicId: number, id: number, input: Partial<Temp
     input.priceUzs !== undefined ? input.priceUzs : current.priceUzs,
     JSON.stringify((input.includes ?? current.includes).slice(0, 12)),
     JSON.stringify((input.advantages ?? current.advantages).slice(0, 12)),
-    input.leadTimeDays ?? current.leadTimeDays,
     input.note !== undefined ? input.note?.trim()?.slice(0, 500) || null : current.note,
     id,
     clinicId,

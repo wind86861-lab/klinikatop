@@ -77,7 +77,7 @@ check "klinika arizasi qabul qilindi" "$([ -n "$CLINIC_ID" ] && echo 1)" "id=$CL
 # Har yugurishda toza holatdan boshlaymiz
 curl -s "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/verifications/$CLINIC_ID" -d '{"status":"rejected","note":"reset"}' > /dev/null 2>&1
 
-code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" -d '{"requestId":1,"priceUzs":9000000,"includes":["Operatsiya"],"leadTimeDays":5}')
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" -d '{"requestId":1,"priceUzs":9000000,"includes":["Operatsiya"]}')
 check "tasdiqlanmagan klinika taklif yubora olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
 
 curl -s "${MOD[@]}" "$API/me" > /dev/null
@@ -197,14 +197,14 @@ check "begona so'rovni ko'rib bo'lmaydi (403)" "$([ "$code" = 403 ] && echo 1)" 
 COND_SEEN=$(curl -s "${CLINIC[@]}" "$API/clinic/requests/$REQ_ID" | jqv '.request.conditionText')
 check "klinika holat tavsifini ko'radi" "$([ -n "$COND_SEEN" ] && echo 1)" "$(echo "$COND_SEEN" | cut -c1-28)…"
 
-code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" -d "{\"requestId\":$REQ_ID,\"priceUzs\":11000000,\"includes\":[],\"leadTimeDays\":5}")
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" -d "{\"requestId\":$REQ_ID,\"priceUzs\":11000000,\"includes\":[]}")
 check "bo'sh 'nima kiradi' rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
 code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" -d '{"requestId":}')
 check "buzuq JSON 400 qaytaradi (500 emas)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
 OFFER_ID=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
-  -d "{\"requestId\":$REQ_ID,\"priceUzs\":11000000,\"includes\":[\"Operatsiya\",\"Narkoz\"],\"advantages\":[\"Oliy toifali jarroh\"],\"leadTimeDays\":5}" | jqv '.id')
+  -d "{\"requestId\":$REQ_ID,\"priceUzs\":11000000,\"includes\":[\"Operatsiya\",\"Narkoz\"],\"advantages\":[\"Oliy toifali jarroh\"]}" | jqv '.id')
 check "taklif yuborildi" "$([ -n "$OFFER_ID" ] && echo 1)" "id=$OFFER_ID"
 
 BADGES=$(curl -s "${PATIENT[@]}" "$API/requests/$REQ_ID" | jqv '.offers[0].badges.join(",")')
@@ -275,7 +275,7 @@ check "verifikatsiya ro'yxati qaytdi" "$([ "$VER_ITEMS" -ge 3 ] 2>/dev/null && e
 
 # Shablon: yaratish → ro'yxat → o'chirish
 TPL=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/clinic/templates" \
-  -d '{"title":"Standart paket","priceUzs":9000000,"includes":["Operatsiya","Yotoq"],"leadTimeDays":7}' | jqv '.id')
+  -d '{"title":"Standart paket","priceUzs":9000000,"includes":["Operatsiya","Yotoq"]}' | jqv '.id')
 check "shablon yaratildi" "$([ -n "$TPL" ] && echo 1)" "id=$TPL"
 
 TPL_N=$(curl -s "${CLINIC[@]}" "$API/clinic/templates" | jqv '.length')
@@ -911,21 +911,21 @@ check "ism uzatilmaydi" "$(echo "$PCASE" | jqv '.patientCase' | grep -qv 'irstNa
 # Budjetdan yuqori narx: sababsiz rad, sabab bilan qabul
 
 code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
-  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":5800000,\"includes\":[\"Operatsiya\"],\"advantages\":[],\"leadTimeDays\":5}")
+  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":5800000,\"includes\":[\"Operatsiya\"],\"advantages\":[]}")
 check "budjetdan yuqori narx sababsiz rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
 # ±20% chegarasi: undan chetga chiqib bo'lmaydi
 code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
-  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":9000000,\"includes\":[\"Operatsiya\"],\"advantages\":[],\"leadTimeDays\":5,\"aboveBudgetReason\":\"Sabab bor lekin chegaradan chiqib boLmaydi\"}")
+  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":9000000,\"includes\":[\"Operatsiya\"],\"advantages\":[],\"aboveBudgetReason\":\"Sabab bor lekin chegaradan chiqib boLmaydi\"}")
 check "20% dan ortiq yuqori narx rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
 code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
-  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":3000000,\"includes\":[\"Operatsiya\"],\"advantages\":[],\"leadTimeDays\":5}")
+  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":3000000,\"includes\":[\"Operatsiya\"],\"advantages\":[]}")
 check "20% dan ortiq past narx rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
 TOMORROW=$(date -d '+3 days' +%Y-%m-%d)
 OVER_OFFER=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
-  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":5800000,\"includes\":[\"Operatsiya\",\"Ozim yozgan xizmat\"],\"advantages\":[\"Oliy toifali jarroh\"],\"leadTimeDays\":5,\"proposedDates\":[\"$TOMORROW\"],\"aboveBudgetReason\":\"Robot yordamida operatsiya va bir kecha yotoq narxga kiradi\"}")
+  -d "{\"requestId\":$OVER_REQ,\"priceUzs\":5800000,\"includes\":[\"Operatsiya\",\"Ozim yozgan xizmat\"],\"advantages\":[\"Oliy toifali jarroh\"],\"proposedDates\":[\"$TOMORROW\"],\"aboveBudgetReason\":\"Robot yordamida operatsiya va bir kecha yotoq narxga kiradi\"}")
 check "sabab bilan qabul qilindi" "$(echo "$OVER_OFFER" | jqv '.priceUzs' | grep -q '5800000' && echo 1)" ""
 check "erkin matnli band saqlandi" "$(echo "$OVER_OFFER" | grep -q 'Ozim yozgan xizmat' && echo 1)" ""
 check "taklif qilingan sana saqlandi" "$(echo "$OVER_OFFER" | grep -q "$TOMORROW" && echo 1)" ""

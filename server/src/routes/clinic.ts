@@ -192,7 +192,6 @@ const templateSchema = z.object({
   priceUzs: z.number().int().positive().nullable().default(null),
   includes: z.array(z.string().trim().min(1).max(120)).max(12).default([]),
   advantages: z.array(z.string().trim().min(1).max(120)).max(12).default([]),
-  leadTimeDays: z.number().int().min(1).max(365).default(7),
   note: z.string().trim().max(500).nullable().default(null),
 });
 

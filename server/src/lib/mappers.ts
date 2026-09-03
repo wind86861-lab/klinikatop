@@ -181,7 +181,6 @@ export function mapOffer(r: any): Offer {
     priceUzs: r.price_uzs,
     includes: parseJson<string[]>(r.includes, []),
     advantages: parseJson<string[]>(r.advantages, []),
-    leadTimeDays: r.lead_time_days,
     proposedDates: parseJson<string[]>(r.proposed_dates, []),
     aboveBudgetReason: r.above_budget_reason ?? null,
     note: r.note,

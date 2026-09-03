@@ -197,7 +197,6 @@ function main() {
       priceUzs: demo.offerPrice,
       includes: ['Operatsiya', 'Narkoz (anesteziya)', 'Palata (2 kun)'],
       advantages: ['Oliy toifali jarroh'],
-      leadTimeDays: 5,
       note: null,
     });
 

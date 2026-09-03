@@ -27,7 +27,6 @@ export interface CreateOfferInput {
   priceUzs: number;
   includes: string[];
   advantages: string[];
-  leadTimeDays: number;
   /** Klinika taklif qilgan aniq sanalar (YYYY-MM-DD) */
   proposedDates?: string[];
   /** Budjetdan yuqori narx uchun izoh */
@@ -105,9 +104,7 @@ function hydrateOffer(row: any, allOffers?: any[]): OfferWithClinic {
   const badges: OfferBadge[] = [];
   if (siblings.length > 1) {
     const cheapest = Math.min(...siblings.map((o) => o.price_uzs));
-    const fastest = Math.min(...siblings.map((o) => o.lead_time_days));
     if (row.price_uzs === cheapest) badges.push('cheapest');
-    if (row.lead_time_days === fastest) badges.push('fastest');
 
     const ratings = siblings.map((o) => {
       const c = db.prepare(`SELECT rating_avg FROM clinics WHERE id = ?`).get(o.clinic_id) as { rating_avg: number };
@@ -119,7 +116,42 @@ function hydrateOffer(row: any, allOffers?: any[]): OfferWithClinic {
   // 5-ekran: oxirgi 15 daqiqada kelgan taklif "Yangi"
   if (Date.now() - dateFromSql(row.created_at).getTime() < 15 * 60_000) badges.push('new');
 
-  return { ...mapOffer(row), clinic: mapClinicPublic(clinicRow), badges };
+  /*
+   * Klinika SHU OPERATSIYANI necha marta bajargan.
+   *
+   * Umumiy bitimlar soni ko'p narsa aytmaydi: 200 ta bitim qilgan
+   * klinika aynan shu operatsiyani birinchi marta qilayotgan
+   * bo'lishi mumkin. Bemor uchun esa muhimi aynan shu son.
+   *
+   * Faqat YOPILGAN bitimlar sanaladi — boshlanganlari hali natija
+   * emas. Taklif o'zi aniqlagan operatsiya bo'lsa (`resolved`),
+   * o'sha hisobga olinadi.
+   */
+  const operationId = row.resolved_operation_id ?? requestOperationId(row.request_id);
+  const done = operationId
+    ? (db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM deals d
+             JOIN requests r ON r.id = d.request_id
+            WHERE d.clinic_id = ? AND d.status = 'CONFIRMED' AND r.operation_id = ?`,
+        )
+        .get(row.clinic_id, operationId) as { n: number })
+    : { n: 0 };
+
+  return {
+    ...mapOffer(row),
+    clinic: mapClinicPublic(clinicRow),
+    badges,
+    operationDealsCount: done.n,
+  };
+}
+
+/** So'rovdagi operatsiya id'si — taklif o'zi aniqlamagan bo'lsa. */
+function requestOperationId(requestId: number): number | null {
+  const r = db.prepare(`SELECT operation_id FROM requests WHERE id = ?`).get(requestId) as
+    | { operation_id: number | null }
+    | undefined;
+  return r?.operation_id ?? null;
 }
 
 export function listRequestOffers(requestId: number): OfferWithClinic[] {
@@ -180,7 +212,7 @@ function assertClinicCanOffer(clinicId: number) {
 }
 
 function validateOfferBody(
-  input: Pick<CreateOfferInput, 'priceUzs' | 'includes' | 'leadTimeDays' | 'aboveBudgetReason'>,
+  input: Pick<CreateOfferInput, 'priceUzs' | 'includes' | 'aboveBudgetReason'>,
   budgetUzs: number | null,
 ) {
   if (!Number.isFinite(input.priceUzs) || input.priceUzs < 100_000 || input.priceUzs > 2_000_000_000) {
@@ -189,9 +221,6 @@ function validateOfferBody(
   // Shaffoflik siyosati: nima kirishi ko'rsatilmasa taklif qabul qilinmaydi
   if (cleanList(input.includes).length === 0) {
     throw badRequest('includes_required', 'Narxga nima kirishini ko‘rsating — bu majburiy');
-  }
-  if (!Number.isFinite(input.leadTimeDays) || input.leadTimeDays < 0 || input.leadTimeDays > 365) {
-    throw badRequest('invalid_lead_time', 'Bajarish muddati noto‘g‘ri');
   }
 
   /*
@@ -306,9 +335,9 @@ export function createOffer(input: CreateOfferInput): OfferWithClinic {
     const info = db
       .prepare(
         `INSERT INTO offers
-           (request_id, clinic_id, price_uzs, includes, advantages, lead_time_days,
+           (request_id, clinic_id, price_uzs, includes, advantages,
             proposed_dates, above_budget_reason, note, resolved_operation_id)
-         VALUES (@requestId, @clinicId, @priceUzs, @includes, @advantages, @leadTimeDays,
+         VALUES (@requestId, @clinicId, @priceUzs, @includes, @advantages,
                  @proposedDates, @aboveBudgetReason, @note, @resolvedOperationId)`,
       )
       .run({
@@ -322,7 +351,6 @@ export function createOffer(input: CreateOfferInput): OfferWithClinic {
           req.budgetUzs && input.priceUzs > req.budgetUzs
             ? (input.aboveBudgetReason ?? '').trim().slice(0, 300)
             : null,
-        leadTimeDays: Math.round(input.leadTimeDays),
         note: input.note,
         resolvedOperationId,
       });
@@ -362,7 +390,7 @@ export function updateOffer(
   patch: Partial<
     Pick<
       CreateOfferInput,
-      'priceUzs' | 'includes' | 'advantages' | 'leadTimeDays' | 'proposedDates' | 'aboveBudgetReason' | 'note'
+      'priceUzs' | 'includes' | 'advantages' | 'proposedDates' | 'aboveBudgetReason' | 'note'
     >
   >,
 ): OfferWithClinic {
@@ -377,7 +405,6 @@ export function updateOffer(
     priceUzs: patch.priceUzs ?? row.price_uzs,
     includes: patch.includes ?? JSON.parse(row.includes),
     advantages: patch.advantages ?? JSON.parse(row.advantages),
-    leadTimeDays: patch.leadTimeDays ?? row.lead_time_days,
     proposedDates: patch.proposedDates ?? JSON.parse(row.proposed_dates ?? '[]'),
     aboveBudgetReason: patch.aboveBudgetReason ?? row.above_budget_reason,
     note: patch.note ?? row.note,
@@ -388,7 +415,7 @@ export function updateOffer(
 
   db.prepare(
     `UPDATE offers SET price_uzs = @priceUzs, includes = @includes, advantages = @advantages,
-                       lead_time_days = @leadTimeDays, proposed_dates = @proposedDates,
+                       proposed_dates = @proposedDates,
                        above_budget_reason = @aboveBudgetReason,
                        note = @note, updated_at = datetime('now')
       WHERE id = @id`,
@@ -397,7 +424,6 @@ export function updateOffer(
     priceUzs: Math.round(next.priceUzs),
     includes: toJson(cleanList(next.includes)),
     advantages: toJson(cleanList(next.advantages)),
-    leadTimeDays: Math.round(next.leadTimeDays),
     proposedDates: toJson(cleanDates(next.proposedDates)),
     // Narx budjetga tushib qolsa izoh ham kerak emas
     aboveBudgetReason: aboveBudget ? (next.aboveBudgetReason ?? '').trim().slice(0, 300) : null,

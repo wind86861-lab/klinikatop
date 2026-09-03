@@ -7,7 +7,7 @@
  * Holat bitta joyda (`draft`) turadi; har qadam faqat o'z bo'lagini o'zgartiradi.
  * Orqaga qaytish hech narsani yo'qotmaydi.
  */
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
@@ -27,6 +27,7 @@ import {
   Chip,
   CountUp,
   Field,
+  IconClock,
   Input,
   Notice,
   Screen,
@@ -557,8 +558,87 @@ function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
 
 /* ─────────────────────────  6. Sana  ───────────────────────── */
 
+/** `2026-09-17` → shu kunga N kun qo'shilgan sana, o'sha shaklda. */
+function isoPlus(days: number): string {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0); // yozgi vaqt siljishi kunni o'zgartirmasin
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Ikki sana orasidagi kunlar soni, ikkalasi ham hisobga olinadi. */
+function daysBetween(from: string, to: string): number {
+  const a = new Date(from + 'T12:00:00Z').getTime();
+  const b = new Date(to + 'T12:00:00Z').getTime();
+  return Math.round((b - a) / 86_400_000) + 1;
+}
+
+/**
+ * Sana maydoni — o'qiladigan ko'rinish, tizim tanlagichi.
+ *
+ * Muammo: `<input type="date">` sanani BRAUZER tilida ko'rsatadi.
+ * Telegram ichida bu ko'pincha amerikacha `09/17/2026` bo'lib
+ * chiqadi va bemor uni 9-sentabr deb o'qiydi — ya'ni noto'g'ri
+ * kunni tanlab, buni sezmaydi ham.
+ *
+ * Shuning uchun maydon o'zimizning matnimizni ko'rsatadi
+ * ("17 sen 2026"), haqiqiy `input` esa ustida shaffof turadi:
+ * bosilganda tizimning o'z tanlagichi ochiladi — telefonda u
+ * eng qulay va tanish narsa. Ya'ni ko'rinish bizniki, tanlash
+ * tizimniki.
+ */
+function DateField({
+  label,
+  value,
+  min,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  min: string;
+  onChange: (v: string | null) => void;
+}) {
+  const { t, lang } = useApp();
+  const ref = useRef<HTMLInputElement>(null);
+
+  return (
+    <label className="datefield">
+      <span className="datefield__label">{label}</span>
+
+      <span className={`datefield__box ${value ? 'is-set' : ''}`}>
+        <IconClock size={15} />
+        <span className="datefield__value">
+          {value ? formatDate(value, lang) : t('wz.date.pick')}
+        </span>
+
+        <input
+          ref={ref}
+          className="datefield__input"
+          type="date"
+          min={min}
+          value={value ?? ''}
+          aria-label={label}
+          onClick={() => {
+            /*
+             * `showPicker()` — kompyuterda bosish tanlagichni ochsin.
+             * Telefonda maydonga fokus tushishining o'zi yetarli;
+             * eski brauzerlarda usul yo'q va xato beradi.
+             */
+            try {
+              ref.current?.showPicker?.();
+            } catch {
+              /* tanlagich baribir fokus orqali ochiladi */
+            }
+          }}
+          onChange={(e) => onChange(e.target.value || null)}
+        />
+      </span>
+    </label>
+  );
+}
+
 function DateStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -613,32 +693,79 @@ function DateStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) =
             transition={{ duration: 0.2, ease: EASE }}
             style={{ overflow: 'hidden' }}
           >
-            <div className="row" style={{ gap: 'var(--s-2)', alignItems: 'flex-end' }}>
-              <Field label={t('wz.date.from')}>
-                <Input
-                  type="date"
+            <div className="stack" style={{ gap: 'var(--s-3)' }}>
+              {/*
+                Tayyor oraliqlar — bemor odatda "ikki hafta ichida"
+                deb o'ylaydi, "17-sentabrdan 24-sentabrgacha" deb
+                emas. Bir bosishda ikkala sana ham to'ladi; aniq kun
+                kerak bo'lsa quyida o'zgartiriladi.
+              */}
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                {(
+                  [
+                    [7, t('wz.date.inWeek')],
+                    [14, t('wz.date.inTwoWeeks')],
+                    [30, t('wz.date.inMonth')],
+                  ] as [number, string][]
+                ).map(([days, label]) => {
+                  const to = isoPlus(days);
+                  return (
+                    <Chip
+                      key={days}
+                      size="sm"
+                      active={draft.dateFrom === today && draft.dateTo === to}
+                      onClick={() => patch({ dateFrom: today, dateTo: to })}
+                    >
+                      {label}
+                    </Chip>
+                  );
+                })}
+              </div>
+
+              <div className="row" style={{ gap: 'var(--s-2)', alignItems: 'flex-end' }}>
+                <DateField
+                  label={t('wz.date.from')}
+                  value={draft.dateFrom}
                   min={today}
-                  value={draft.dateFrom ?? ''}
-                  onChange={(e) => {
-                    // O'tgan sana kiritilsa e'tiborga olinmaydi: kelgusi
-                    // operatsiyani o'tgan kunga belgilab bo'lmaydi
-                    const v = e.target.value;
-                    patch({ dateFrom: v && v >= today ? v : null });
+                  onChange={(v) => {
+                    /*
+                     * Boshlanish oxiridan keyinga surilsa, oxiri
+                     * TOZALANADI. Aks holda ekranda "24-sentabrdan
+                     * 20-sentabrgacha" degan mumkin bo'lmagan oraliq
+                     * qolib ketardi.
+                     */
+                    if (v && draft.dateTo && draft.dateTo < v) patch({ dateFrom: v, dateTo: null });
+                    else patch({ dateFrom: v });
                   }}
                 />
-              </Field>
-              <Field label={t('wz.date.to')}>
-                <Input
-                  type="date"
+                <DateField
+                  label={t('wz.date.to')}
+                  value={draft.dateTo}
                   min={draft.dateFrom ?? today}
-                  value={draft.dateTo ?? ''}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    const floor = draft.dateFrom ?? today;
-                    patch({ dateTo: v && v >= floor ? v : null });
-                  }}
+                  onChange={(v) => patch({ dateTo: v })}
                 />
-              </Field>
+              </div>
+
+              {/*
+                Tanlangan oraliq SO'Z bilan takrorlanadi. Maydonlardagi
+                sana to'g'ri o'qilganini shu yerda ko'rish mumkin va
+                oraliq necha kun ekani darrov ma'lum bo'ladi.
+              */}
+              {draft.dateFrom && draft.dateTo && (
+                <div className="between">
+                  <span className="tiny">
+                    {formatDate(draft.dateFrom, lang)} — {formatDate(draft.dateTo, lang)} ·{' '}
+                    {t('wz.date.days', { n: daysBetween(draft.dateFrom, draft.dateTo) })}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => patch({ dateFrom: null, dateTo: null })}
+                  >
+                    {t('wz.date.clear')}
+                  </Button>
+                </div>
+              )}
             </div>
           </m.div>
         )}

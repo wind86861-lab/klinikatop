@@ -441,7 +441,6 @@ export const api = {
     priceUzs: number;
     includes: string[];
     advantages: string[];
-    leadTimeDays: number;
     /** Klinika taklif qilgan aniq sanalar (YYYY-MM-DD) */
     proposedDates?: string[];
     /** Budjetdan yuqori narx uchun izoh — server majburlaydi */
@@ -663,7 +662,6 @@ export interface TemplateBody {
   priceUzs: number | null;
   includes: string[];
   advantages: string[];
-  leadTimeDays: number;
   note: string | null;
 }
 

@@ -8,7 +8,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { channelFor, onServerEvent, subscribe } from '@/lib/ws';
-import { money, timeLeft } from '@/lib/format';
+import { formatDate, money, responseSpeed, timeLeft } from '@/lib/format';
 import { haptic } from '@/lib/telegram';
 import { incomingVariants, popVariants, spring } from '@/lib/motion';
 import { cityName, opName } from '@/i18n';
@@ -33,7 +33,7 @@ import {
 } from '@/ui';
 import type { OfferWithClinic, PriceStats, RequestWithMeta } from '@shared/types';
 
-type Sort = 'price' | 'rating' | 'speed';
+type Sort = 'price' | 'rating' | 'experience';
 
 export function RequestDetail() {
   const { id } = useParams();
@@ -117,7 +117,7 @@ export function RequestDetail() {
     const list = [...offers];
     if (sort === 'price') list.sort((a, b) => a.priceUzs - b.priceUzs);
     else if (sort === 'rating') list.sort((a, b) => b.clinic.ratingAvg - a.clinic.ratingAvg);
-    else list.sort((a, b) => a.leadTimeDays - b.leadTimeDays);
+    else list.sort((a, b) => b.operationDealsCount - a.operationDealsCount);
     return list;
   }, [offers, sort]);
 
@@ -236,7 +236,7 @@ export function RequestDetail() {
               {t('offers.title')} · {offers.length}
             </h2>
             <div className="row" style={{ gap: 4 }}>
-              {(['price', 'rating', 'speed'] as Sort[]).map((s) => (
+              {(['price', 'rating', 'experience'] as Sort[]).map((s) => (
                 <Chip key={s} size="sm" active={sort === s} onClick={() => setSort(s)}>
                   {t(`offers.sort.${s}` as any)}
                 </Chip>
@@ -327,19 +327,91 @@ export function RequestDetail() {
       <Sheet open={Boolean(choosing)} onClose={() => setChoosing(null)} title={t('offers.chooseTitle')}>
         {choosing && (
           <>
+            {/*
+              Bu oyna QAROR qabul qilinadigan joy, shuning uchun unda
+              qaror uchun kerak bo'lgan hamma narsa turishi kerak.
+
+              Ilgari bu yerda faqat nom, narx va "nima kiradi" bor edi.
+              Bemor esa aynan shu paytda "bu klinika ishonchlimi?"
+              degan savolga javob qidiradi — va u javobni topolmay,
+              orqaga qaytib takliflar ro'yxatini qayta o'qirdi.
+            */}
             <Card variant="flat" className="stack">
               <div className="between">
                 <strong>{choosing.clinic.name}</strong>
                 {choosing.clinic.verified && <Badge tone="verified">{t('offers.verified')}</Badge>}
               </div>
-              <div className="offer__price">{money(choosing.priceUzs, lang)}</div>
-              <div className="offer__includes">
-                {choosing.includes.map((i) => (
-                  <span className="badge badge--neutral" key={i}>
-                    <IconCheck size={11} /> {i}
+
+              {/* Klinika haqida — reyting, tajriba, javob tezligi */}
+              <div className="row tiny" style={{ gap: 'var(--s-3)', flexWrap: 'wrap' }}>
+                {choosing.clinic.ratingCount > 0 ? (
+                  <span>
+                    ★ {choosing.clinic.ratingAvg.toFixed(1)} ·{' '}
+                    {t('offers.reviews', { n: choosing.clinic.ratingCount })}
                   </span>
-                ))}
+                ) : (
+                  <span>{t('offers.noReviews')}</span>
+                )}
+                {choosing.operationDealsCount > 0 && (
+                  <span>{t('offers.doneBefore', { n: choosing.operationDealsCount })}</span>
+                )}
+                {choosing.clinic.dealsCount > 0 && (
+                  <span>{t('offers.dealsTotal', { n: choosing.clinic.dealsCount })}</span>
+                )}
+                {responseSpeed(choosing.clinic.avgResponseMinutes, lang) && (
+                  <span>{responseSpeed(choosing.clinic.avgResponseMinutes, lang)}</span>
+                )}
               </div>
+
+              <div className="offer__price">{money(choosing.priceUzs, lang)}</div>
+
+              <div>
+                <span className="tiny">{t('compare.included')}</span>
+                <div className="offer__includes">
+                  {choosing.includes.map((i) => (
+                    <span className="badge badge--neutral" key={i}>
+                      <IconCheck size={11} /> {i}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Afzalliklar — klinika o'zi yozgan, ilgari bu yerda umuman ko'rinmasdi */}
+              {choosing.advantages.length > 0 && (
+                <div>
+                  <span className="tiny">{t('ob.advantages')}</span>
+                  <div className="offer__includes">
+                    {choosing.advantages.map((a) => (
+                      <span className="badge badge--neutral" key={a}>
+                        <IconCheck size={11} /> {a}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {choosing.proposedDates.length > 0 && (
+                <div>
+                  <span className="tiny">{t('offers.proposedDates')}</span>
+                  <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+                    {choosing.proposedDates.map((d) => (
+                      <span className="badge badge--neutral num" key={d}>
+                        {formatDate(d, lang)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {choosing.note && (
+                <p className="tiny" style={{ color: 'var(--body)' }}>
+                  {choosing.note}
+                </p>
+              )}
+
+              {choosing.aboveBudgetReason && (
+                <Notice tone="warning">{choosing.aboveBudgetReason}</Notice>
+              )}
             </Card>
             <Notice tone="info">{t('offers.chooseText')}</Notice>
             <Button block loading={submitting} onClick={confirmChoice}>
@@ -385,7 +457,7 @@ function CompareTable({
 
   const cheapest = Math.min(...offers.map((o) => o.priceUzs));
   const bestRating = Math.max(...offers.map((o) => o.clinic.ratingAvg));
-  const fastest = Math.min(...offers.map((o) => o.leadTimeDays));
+  const mostDone = Math.max(...offers.map((o) => o.operationDealsCount));
 
   return (
     <>
@@ -420,8 +492,12 @@ function CompareTable({
                   ★ {offer.clinic.ratingAvg > 0 ? offer.clinic.ratingAvg.toFixed(1) : '—'}
                 </CompareRow>
 
-                <CompareRow label={t('compare.time')} best={offer.leadTimeDays === fastest} delay={index * 0.05 + 0.08}>
-                  {t('offers.leadTime', { n: offer.leadTimeDays })}
+                <CompareRow
+                  label={t('compare.experience')}
+                  best={offer.operationDealsCount === mostDone && mostDone > 0}
+                  delay={index * 0.05 + 0.08}
+                >
+                  {t('offers.doneBefore', { n: offer.operationDealsCount })}
                 </CompareRow>
 
                 <CompareRow label={t('compare.included')} delay={index * 0.05 + 0.12}>

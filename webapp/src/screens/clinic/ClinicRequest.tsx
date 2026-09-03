@@ -18,7 +18,6 @@ import {
   Badge,
   Button,
   Card,
-  Chip,
   ErrorState,
   Field,
   IconCheck,
@@ -68,7 +67,6 @@ export function ClinicRequest() {
   const [price, setPrice] = useState(0);
   const [includes, setIncludes] = useState<string[]>(['Operatsiya', 'Narkoz (anesteziya)']);
   const [advantages, setAdvantages] = useState<string[]>([]);
-  const [leadTimeDays, setLeadTimeDays] = useState(7);
   /** Klinika taklif qilgan aniq sanalar */
   const [dates, setDates] = useState<string[]>([]);
   /** Budjetdan yuqori narx uchun izoh */
@@ -111,7 +109,6 @@ export function ClinicRequest() {
         priceUzs: price,
         includes,
         advantages,
-        leadTimeDays,
         proposedDates: dates,
         aboveBudgetReason: aboveReason.trim() || null,
         note: note.trim() || null,
@@ -386,16 +383,6 @@ export function ClinicRequest() {
           windowTo={request.dateTo}
           lang={lang}
         />
-      </Field>
-
-      <Field label={t('clinic.leadTime')}>
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          {[1, 3, 7, 14, 30].map((d) => (
-            <Chip key={d} size="sm" active={leadTimeDays === d} onClick={() => setLeadTimeDays(d)}>
-              {d} {t('common.days')}
-            </Chip>
-          ))}
-        </div>
       </Field>
 
       <Field label={`${t('clinic.offerNote')} · ${t('common.optional')}`}>

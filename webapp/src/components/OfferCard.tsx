@@ -1,7 +1,7 @@
 import { m } from 'framer-motion';
 import { formatDate, money, responseSpeed } from '@/lib/format';
 import { spring } from '@/lib/motion';
-import { Avatar, Badge, Button, Card, IconCheck, IconClock, IconShield } from '@/ui';
+import { Avatar, Badge, Button, Card, IconCheck, IconShield } from '@/ui';
 import { useApp } from '@/store/app';
 import type { OfferWithClinic } from '@shared/types';
 
@@ -131,10 +131,20 @@ export function OfferCard({
 
       {offer.note && <p className="tiny" style={{ color: 'var(--body)' }}>{offer.note}</p>}
 
+      {/*
+        Ilgari bu yerda "necha kun ichida bajaradi" turardi. U bemor
+        so'rovda ko'rsatgan sana oralig'i bilan takrorlanardi va ikkovi
+        zid bo'lsa qaysi biri to'g'ri ekani noaniq qolardi.
+
+        O'rniga TAJRIBA: klinika aynan shu operatsiyani necha marta
+        yakunlagan. Tanlashda bu ancha ko'p narsa aytadi.
+      */}
       <div className="row tiny" style={{ gap: 'var(--s-3)', flexWrap: 'wrap' }}>
-        <span className="row" style={{ gap: 4 }}>
-          <IconClock size={13} /> {t('offers.leadTime', { n: offer.leadTimeDays })}
-        </span>
+        {offer.operationDealsCount > 0 && (
+          <span className="row" style={{ gap: 4 }}>
+            <IconCheck size={13} /> {t('offers.doneBefore', { n: offer.operationDealsCount })}
+          </span>
+        )}
         {speed && <span>{speed}</span>}
       </div>
 

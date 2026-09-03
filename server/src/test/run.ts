@@ -213,7 +213,6 @@ async function main() {
         priceUzs: 10_000_000,
         includes: ['Operatsiya'],
         advantages: [],
-        leadTimeDays: 5,
         note: null,
       }),
     'forbidden',
@@ -239,7 +238,6 @@ async function main() {
         priceUzs: 9_000_000,
         includes: ['Operatsiya'],
         advantages: [],
-        leadTimeDays: 5,
         note: null,
       }),
     'subscription_required',
@@ -354,7 +352,6 @@ async function main() {
         priceUzs: 11_000_000,
         includes: [],
         advantages: [],
-        leadTimeDays: 5,
         note: null,
       }),
     'includes_required',
@@ -366,7 +363,6 @@ async function main() {
     priceUzs: 11_500_000,
     includes: ['Operatsiya', 'Narkoz', 'Palata (2 kun)'],
     advantages: ['Oliy toifali jarroh'],
-    leadTimeDays: 5,
     note: 'Ertaga qabulga kelishingiz mumkin',
   });
   check('taklif yuborildi', offer.status === 'SENT');
@@ -382,7 +378,6 @@ async function main() {
         priceUzs: 11_000_000,
         includes: ['Operatsiya'],
         advantages: [],
-        leadTimeDays: 3,
         note: null,
       }),
     'offer_exists',
@@ -542,7 +537,6 @@ async function main() {
     priceUzs: 13_500_000,
     includes: ['Operatsiya', 'Narkoz'],
     advantages: [],
-    leadTimeDays: 7,
     aboveBudgetReason: 'Narkoz turi murakkabroq va bir kecha yotoq narxga kiradi',
     note: null,
   });
@@ -656,7 +650,6 @@ async function main() {
     priceUzs: 12_000_000,
     includes: ['Operatsiya'],
     advantages: [],
-    leadTimeDays: 5,
     note: null,
   });
   const autoDeal = deals.chooseOffer(autoReq.id, autoOffer.id, patient.id);
@@ -836,7 +829,6 @@ async function main() {
     priceUzs: 8_000_000,
     includes: ['Operatsiya'],
     advantages: [],
-    leadTimeDays: 5,
     note: null,
   });
 
@@ -920,7 +912,6 @@ async function main() {
     priceUzs: 7_500_000,
     includes: ['Operatsiya'],
     advantages: [],
-    leadTimeDays: 5,
     note: null,
   });
   deals.chooseOffer(withDeal.id, dealOffer.id, patient.id);
@@ -1113,6 +1104,45 @@ async function main() {
   check(
     'noto‘g‘ri eshik hisobni qulflamaydi',
     webAuth.login('998900000077', 'klinika-eshigi-2026', null, null, 'clinic').user.id === doorAcc.user.id,
+  );
+
+  /* ── Klinikaga bot orqali xabar: chat raqam bo'yicha topiladi ── */
+
+  const botClinicAcc = webAuth.createAccount({
+    phone: '998900000088',
+    fullName: 'Bot Xabari Sinovi',
+    level: 'clinic_admin',
+    clinicId: clinic.id,
+  });
+
+  /*
+   * `notify()` ichida qator XOM holda o'qiladi (`telegram_id`), shuning
+   * uchun bu yerda ham xuddi shunday shakl beriladi — mapper'dan
+   * o'tgan `telegramId` emas.
+   */
+  const shadow = { telegram_id: -botClinicAcc.user.id };
+  const notif = require('../services/notifications');
+
+  check(
+    'raqam botda tanilmagan bo‘lsa chat yo‘q',
+    notif.telegramChatForTest(shadow) === null,
+  );
+
+  // Klinika egasi botga kontaktini ulashdi — endi haqiqiy chat bor
+  db.prepare(
+    `INSERT INTO users (telegram_id, first_name, roles, phone, onboarded_at)
+     VALUES (?, ?, ?, ?, datetime('now'))`,
+  ).run(556677889, 'Klinika Egasi', JSON.stringify(['patient']), '+998900000088');
+
+  check(
+    'raqam bo‘yicha haqiqiy Telegram chati topildi',
+    notif.telegramChatForTest(shadow) === 556677889,
+    String(notif.telegramChatForTest(shadow)),
+  );
+
+  check(
+    'bemorning o‘z chati o‘zgarmaydi',
+    notif.telegramChatForTest({ telegram_id: 12345 }) === 12345,
   );
 
   /* ── Eshik SESSIYAGA yoziladi va keyin ham amal qiladi ── */
@@ -1651,7 +1681,6 @@ async function main() {
         priceUzs: 12_000_000, // 8 mln dan 50% yuqori
         includes: ['Operatsiya'],
         advantages: [],
-        leadTimeDays: 5,
         aboveBudgetReason: 'Sabab yozilgan bo‘lsa ham chegaradan chiqib bo‘lmaydi',
         note: null,
       }),
@@ -1667,7 +1696,6 @@ async function main() {
         priceUzs: 5_000_000, // 8 mln dan 37% past
         includes: ['Operatsiya'],
         advantages: [],
-        leadTimeDays: 5,
         note: null,
       }),
     'price_too_low',
@@ -1680,7 +1708,6 @@ async function main() {
     priceUzs: 9_600_000, // 8 mln + 20%
     includes: ['Operatsiya'],
     advantages: [],
-    leadTimeDays: 5,
     aboveBudgetReason: 'Robot yordamida operatsiya va bir kecha yotoq narxga kiradi',
     note: null,
   });
@@ -1695,7 +1722,6 @@ async function main() {
         priceUzs: 9_000_000,
         includes: ['Operatsiya'],
         advantages: [],
-        leadTimeDays: 5,
         note: null,
       }),
     'above_budget_reason_required',
@@ -1707,7 +1733,6 @@ async function main() {
     priceUzs: 9_000_000,
     includes: ['Operatsiya', 'Narkoz', 'Bir kecha yotoq'],
     advantages: ['Oliy toifali jarroh'],
-    leadTimeDays: 5,
     proposedDates: [futureDate(7), futureDate(9), futureDate(3)],
     aboveBudgetReason: 'Robot yordamida operatsiya va bir kecha yotoq narxga kiradi',
     note: null,
@@ -1922,7 +1947,6 @@ async function main() {
     priceUzs: 8_000_000,
     includes: ['Operatsiya'],
     advantages: [],
-    leadTimeDays: 5,
     note: null,
   });
   const schedDeal = deals.chooseOffer(dateReq.id, schedOffer.id, patient.id);
@@ -2307,7 +2331,6 @@ async function main() {
       priceUzs: 12_000_000,
       includes: ['Operatsiya', 'Narkoz', 'Palata'],
       advantages: ['Sinov'],
-      leadTimeDays: 5,
       note: null,
     });
     const d2 = deals.chooseOffer(r2.id, o2.id, p2.id);
@@ -2373,7 +2396,6 @@ async function main() {
       priceUzs: 12_000_000,
       includes: ['Operatsiya', 'Narkoz', 'Palata'],
       advantages: ['Sinov'],
-      leadTimeDays: 5,
       note: null,
     });
     const d3 = deals.chooseOffer(r3.id, o3.id, p3.id);
@@ -2712,7 +2734,6 @@ async function main() {
       priceUzs: 9_000_000,
       includes: ['Operatsiya', 'Narkoz'],
       advantages: [],
-      leadTimeDays: 5,
       note: null,
       ...extra,
     });

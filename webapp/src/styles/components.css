@@ -5028,3 +5028,74 @@
 .slider.is-untouched {
   opacity: 0.55;
 }
+
+/* ══════════════════  Sana maydoni  ══════════════════ */
+
+/*
+ * `<input type="date">` sanani BRAUZER tilida ko'rsatadi va Telegram
+ * ichida bu ko'pincha amerikacha `09/17/2026` bo'lib chiqadi. Bemor
+ * uni 9-sentabr deb o'qib, noto'g'ri kunni tanlaydi.
+ *
+ * Yechim: ko'rinish bizniki, tanlash tizimniki. Matnni o'zimiz
+ * chizamiz, haqiqiy `input` esa ustida shaffof turadi va bosilganda
+ * tizimning o'z tanlagichi ochiladi.
+ */
+.datefield {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.datefield__label {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.datefield__box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 46px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+}
+.datefield__box.is-set { color: var(--ink); border-color: var(--line-strong, var(--line)); }
+.datefield__box:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft, rgba(0,0,0,0.05)); }
+
+.datefield__value {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Haqiqiy maydon — ko'rinmas, lekin BOSILADI.
+ *
+ * `opacity: 0` ishlatiladi, `display: none` emas: yashirilgan
+ * maydonni tizim tanlagichi ocholmaydi va klaviatura bilan ham
+ * unga yetib bo'lmaydi.
+ */
+.datefield__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font: inherit;
+  color: transparent;
+  background: transparent;
+}

@@ -8,6 +8,7 @@ import { config } from '../lib/config';
 import { mapNotification } from '../lib/mappers';
 import { sendTelegramMessage } from '../lib/telegram';
 import { bus, ch } from './events';
+import { normalizePhone } from './webAuth';
 import type { Lang, Notification, NotificationType } from '../../../shared/types';
 
 type Params = Record<string, string | number>;
@@ -119,22 +120,12 @@ export function notify(
   // Ichki markaz — darhol (WebSocket)
   bus.publish(ch.user(userId), { type: 'notification', notification });
 
-  /*
-   * Telegram push — fon rejimida, xatolik oqimni to'xtatmaydi.
-   *
-   * Veb hisoblarga (klinika xodimi, administrator) push ketmaydi:
-   * ularning `telegram_id` si MANFIY, chunki u haqiqiy Telegram
-   * identifikatori emas, veb hisob raqamidan yasalgan (webAuth.ts).
-   * Bunday chat mavjud emas va Telegram har safar 400 "chat not
-   * found" qaytarardi — jurnal shu xabar bilan to'lib, haqiqiy
-   * yuborish xatolarini ko'rinmas qilib qo'ygan edi.
-   *
-   * Ular bildirishnomani kabinet ichida oladi (yuqoridagi shina).
-   */
-  const text = user.telegram_id > 0 ? PUSH[type]?.[user.lang]?.(params) : null;
-  if (text) {
+  // Telegram push — fon rejimida, xatolik oqimni to'xtatmaydi
+  const chatId = telegramChatFor(user);
+  const text = chatId ? PUSH[type]?.[user.lang]?.(params) : null;
+  if (text && chatId) {
     const url = link ? `${config.telegram.webappUrl}${link.startsWith('/') ? '' : '/'}${link}` : undefined;
-    void sendTelegramMessage(user.telegram_id, text, {
+    void sendTelegramMessage(chatId, text, {
       link: url,
       linkLabel: user.lang === 'ru' ? 'Открыть' : 'Ochish',
     });
@@ -169,6 +160,54 @@ export function markRead(userId: number, ids?: number[]) {
 }
 
 /** Klinikaning barcha xodimlariga bildirishnoma. */
+/**
+ * Xabar QAYSI Telegram chatiga ketadi.
+ *
+ * Bemorda javob oddiy: uning `telegram_id` si haqiqiy.
+ *
+ * Klinika xodimi va administratorda esa yo'q. Ularning `users`
+ * qatoridagi `telegram_id` MANFIY — u haqiqiy identifikator emas,
+ * veb hisob raqamidan yasalgan (webAuth.ts). Shu sababli ularga
+ * yuborilgan har bir xabar Telegramdan 400 "chat not found" olib
+ * qaytardi, ya'ni klinika botdan HECH QANDAY xabar olmasdi. Yangi
+ * so'rov kelganini u faqat kabinetni ochganda bilardi — takliflar
+ * kechikishining sabablaridan biri shu.
+ *
+ * Bog'lovchi halqa — TELEFON RAQAMI. Klinika egasi botga o'z
+ * kontaktini ulashgan, ya'ni o'sha raqamli haqiqiy Telegram
+ * foydalanuvchisi bazada bor. Shu raqam orqali uning chatini
+ * topamiz.
+ *
+ * `users.phone` xom holda saqlanadi (`+998…`), `admin_users.phone`
+ * esa normallashtirilgan — shuning uchun ikkala shakl ham
+ * so'raladi. Bu indeks bo'yicha qidiruv: jadvalni to'liq ko'rib
+ * chiqmaydi.
+ */
+function telegramChatFor(user: { telegram_id: number }): number | null {
+  if (user.telegram_id > 0) return user.telegram_id;
+
+  const account = db
+    .prepare(`SELECT phone FROM admin_users WHERE id = ?`)
+    .get(-user.telegram_id) as { phone: string | null } | undefined;
+  if (!account?.phone) return null;
+
+  const normalized = normalizePhone(account.phone);
+  if (normalized.length < 9) return null;
+
+  const row = db
+    .prepare(
+      `SELECT telegram_id FROM users
+        WHERE telegram_id > 0 AND phone IN (?, ?)
+        ORDER BY id DESC LIMIT 1`,
+    )
+    .get(normalized, `+${normalized}`) as { telegram_id: number } | undefined;
+
+  return row?.telegram_id ?? null;
+}
+
+/** Testlar uchun ochiq — chat qanday topilishi alohida tekshiriladi. */
+export const telegramChatForTest = telegramChatFor;
+
 export function notifyClinic(
   clinicId: number,
   type: NotificationType,

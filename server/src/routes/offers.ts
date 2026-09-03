@@ -15,7 +15,6 @@ const offerBody = z.object({
    */
   includes: z.array(z.string().min(1).max(120)).min(1).max(12),
   advantages: z.array(z.string().min(1).max(120)).max(12).default([]),
-  leadTimeDays: z.number().int().min(0).max(365),
   /** Klinika taklif qilgan aniq sanalar */
   proposedDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(6).default([]),
   /** Budjetdan yuqori narx uchun izoh — servis majburlaydi */

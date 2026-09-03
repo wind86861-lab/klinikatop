@@ -197,7 +197,6 @@ export function OfferBuilder() {
   const [price, setPrice] = useState('');
   const [includes, setIncludes] = useState<string[]>(['']);
   const [advantages, setAdvantages] = useState<string[]>(['']);
-  const [leadTimeDays, setLeadTimeDays] = useState(7);
   const [note, setNote] = useState('');
   const [pickTemplate, setPickTemplate] = useState(false);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
@@ -220,7 +219,6 @@ export function OfferBuilder() {
     if (tpl.priceUzs) setPrice(groupDigits(tpl.priceUzs));
     setIncludes(tpl.includes.length ? tpl.includes : ['']);
     setAdvantages(tpl.advantages.length ? tpl.advantages : ['']);
-    setLeadTimeDays(tpl.leadTimeDays);
     setNote(tpl.note ?? '');
     setPickTemplate(false);
     haptic.success();
@@ -239,7 +237,6 @@ export function OfferBuilder() {
         priceUzs: priceNumber,
         includes: clean(includes),
         advantages: clean(advantages),
-        leadTimeDays,
         note: note.trim() || null,
         resolvedOperationId: resolvedOperation?.id ?? null,
       });
@@ -252,7 +249,6 @@ export function OfferBuilder() {
           priceUzs: priceNumber,
           includes: clean(includes),
           advantages: clean(advantages),
-          leadTimeDays,
           note: note.trim() || null,
         });
       }
@@ -362,16 +358,6 @@ export function OfferBuilder() {
                 onChange={setAdvantages}
                 addLabel={t('ob.addLine')}
               />
-
-              <Field label={t('ob.leadTime')}>
-                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  {[3, 7, 14, 30].map((d) => (
-                    <Chip key={d} size="sm" active={leadTimeDays === d} onClick={() => setLeadTimeDays(d)}>
-                      {d} {t('common.days')}
-                    </Chip>
-                  ))}
-                </div>
-              </Field>
 
               <Field label={t('ob.note')}>
                 <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
@@ -574,7 +560,6 @@ function TemplateSheet({
   const [price, setPrice] = useState('');
   const [includes, setIncludes] = useState<string[]>(['']);
   const [advantages, setAdvantages] = useState<string[]>(['']);
-  const [leadTimeDays, setLeadTimeDays] = useState(7);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [seeded, setSeeded] = useState<number | 'new' | null>(null);
@@ -588,7 +573,6 @@ function TemplateSheet({
     setPrice(tpl?.priceUzs ? groupDigits(tpl.priceUzs) : '');
     setIncludes(tpl?.includes.length ? tpl.includes : ['']);
     setAdvantages(tpl?.advantages.length ? tpl.advantages : ['']);
-    setLeadTimeDays(tpl?.leadTimeDays ?? 7);
     setNote(tpl?.note ?? '');
   }
 
@@ -600,7 +584,6 @@ function TemplateSheet({
       priceUzs: Number(price.replace(/\D/g, '')) || null,
       includes: includes.map((s) => s.trim()).filter(Boolean),
       advantages: advantages.map((s) => s.trim()).filter(Boolean),
-      leadTimeDays,
       note: note.trim() || null,
     };
     try {
@@ -674,16 +657,6 @@ function TemplateSheet({
           onChange={setAdvantages}
           addLabel={t('ob.addLine')}
         />
-
-        <Field label={t('ob.leadTime')}>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            {[3, 7, 14, 30].map((d) => (
-              <Chip key={d} size="sm" active={leadTimeDays === d} onClick={() => setLeadTimeDays(d)}>
-                {d} {t('common.days')}
-              </Chip>
-            ))}
-          </div>
-        </Field>
 
         <Field label={t('ob.note')}>
           <Textarea rows={3} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
@@ -768,7 +741,6 @@ export function MyOffers() {
 
                   <div className="between">
                     <span className="num" style={{ fontSize: 'var(--t-lg)' }}>{money(offer.priceUzs, lang)}</span>
-                    <span className="tiny">{t('offers.leadTime', { n: offer.leadTimeDays })}</span>
                   </div>
 
                   {offer.includes.length > 0 && <p className="tiny clamp-2">{offer.includes.join(' · ')}</p>}

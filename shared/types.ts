@@ -380,14 +380,14 @@ export interface Offer {
   /** Narxga nima kiradi — shaffoflik siyosati bo'yicha majburiy */
   includes: string[];
   advantages: string[];
-  /** Necha kun ichida bajaradi */
-  leadTimeDays: number;
   /**
    * Klinika taklif qilgan aniq sanalar (YYYY-MM-DD).
    *
-   * "Necha kun ichida" mo'ljal beradi, sana esa qaror qildiradi: bemor
-   * ishdan ta'til olishi, qarindoshini chaqirishi kerak. Bo'sh bo'lsa —
-   * klinika sanani keyin kelishadi.
+   * Ilgari bu yerda "necha kun ichida bajaradi" degan alohida maydon
+   * ham bor edi. U bemor so'rovda ko'rsatgan sana oralig'i bilan
+   * takrorlanardi va ikkovi zid bo'lsa qaysi biri to'g'ri ekani
+   * noaniq qolardi. Endi faqat sana: bemor oraliqni aytadi, klinika
+   * o'sha oraliqdan aniq kun taklif qiladi.
    */
   proposedDates: string[];
   /**
@@ -452,9 +452,17 @@ export interface DealPriceChange {
 export interface OfferWithClinic extends Offer {
   clinic: ClinicPublic;
   badges: OfferBadge[];
+  /**
+   * Shu klinika AYNAN SHU operatsiyani necha marta yakunlagan.
+   *
+   * Umumiy bitimlar soni bemorga kam narsa aytadi: 200 ta bitimi
+   * bor klinika shu operatsiyani birinchi marta qilayotgan bo'lishi
+   * mumkin. Tanlashda muhimi aynan shu son.
+   */
+  operationDealsCount: number;
 }
 
-export type OfferBadge = 'cheapest' | 'top_rated' | 'fastest' | 'new';
+export type OfferBadge = 'cheapest' | 'top_rated' | 'new';
 
 export interface Deal {
   id: number;
@@ -743,7 +751,6 @@ export interface OfferTemplate {
   priceUzs: number | null;
   includes: string[];
   advantages: string[];
-  leadTimeDays: number;
   note: string | null;
   /** Necha marta ishlatilgan — eng foydalisi yuqorida turadi */
   usedCount: number;
