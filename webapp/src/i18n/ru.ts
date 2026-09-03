@@ -103,6 +103,7 @@ export const ru: Record<TranslationKey, string> = {
   'wait.offers': 'Пришло предложений: {n}',
   'wait.timer': 'Срок ожидания ответа',
   'wait.hint': 'Вы получите уведомление о новом предложении. Приложение можно закрыть.',
+  'wait.toHome': 'Вернуться на главную',
 
   'offers.title': 'Предложения',
   'offers.empty': 'Предложений пока нет',

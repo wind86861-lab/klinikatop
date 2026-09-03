@@ -107,6 +107,7 @@ export const uz = {
   'wait.offers': '{n} ta taklif keldi',
   'wait.timer': 'Javob kutish muddati',
   'wait.hint': 'Taklif kelganda bildirishnoma olasiz. Ilovani yopsangiz ham bo‘ladi.',
+  'wait.toHome': 'Bosh sahifaga qaytish',
 
   // Takliflar
   'offers.title': 'Takliflar',

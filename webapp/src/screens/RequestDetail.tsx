@@ -242,6 +242,19 @@ export function RequestDetail() {
           </Card>
 
           <Notice tone="info">{t('wait.hint')}</Notice>
+
+          {/*
+            Bosh sahifaga qaytish.
+
+            Bu ekranda bemor uchun QILADIGAN ish yo'q — u takliflarni
+            kutadi va bildirishnoma o'zi keladi. Lekin chiqib ketish
+            yo'li faqat yuqoridagi kichkina o'q edi, ko'rinadigan
+            yagona tugma esa so'rovni O'CHIRISH bo'lib turardi.
+            Kutishdan charchagan odam aynan o'shani bosishi mumkin.
+          */}
+          <Button block variant="secondary" onClick={() => navigate('/')}>
+            {t('wait.toHome')}
+          </Button>
         </m.div>
       )}
 
