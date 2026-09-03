@@ -203,8 +203,16 @@ check "bo'sh 'nima kiradi' rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "
 code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" -d '{"requestId":}')
 check "buzuq JSON 400 qaytaradi (500 emas)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
+DAY=$(node -e "console.log(new Date(Date.now()+864e5).toISOString().slice(0,10))")
+TOMORROW=$(node -e "console.log(new Date(Date.now()+864e5).toISOString())")
+
+# Aniq kunsiz taklif qabul qilinmaydi — bemor sanani tanlov bilan belgilaydi
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
+  -d "{\"requestId\":$REQ_ID,\"priceUzs\":11000000,\"includes\":[\"Operatsiya\"]}")
+check "kunsiz taklif rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
 OFFER_ID=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
-  -d "{\"requestId\":$REQ_ID,\"priceUzs\":11000000,\"includes\":[\"Operatsiya\",\"Narkoz\"],\"advantages\":[\"Oliy toifali jarroh\"]}" | jqv '.id')
+  -d "{\"requestId\":$REQ_ID,\"priceUzs\":11000000,\"includes\":[\"Operatsiya\",\"Narkoz\"],\"advantages\":[\"Oliy toifali jarroh\"],\"proposedDates\":[\"$DAY\"]}" | jqv '.id')
 check "taklif yuborildi" "$([ -n "$OFFER_ID" ] && echo 1)" "id=$OFFER_ID"
 
 BADGES=$(curl -s "${PATIENT[@]}" "$API/requests/$REQ_ID" | jqv '.offers[0].badges.join(",")')
@@ -215,8 +223,17 @@ echo "6. Tanlov, chat va tasdiqlash"
 code=$(status "${PATIENT[@]}" "$API/deals/999/messages")
 check "mavjud bo'lmagan chat yopiq (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
 
-DEAL_ID=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests/$REQ_ID/choose" -d "{\"offerId\":$OFFER_ID}" | jqv '.id')
+# Klinika taklif qilmagan kun rad etiladi
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests/$REQ_ID/choose" \
+  -d "{\"offerId\":$OFFER_ID,\"scheduledAt\":\"2030-01-01\"}")
+check "taklif qilinmagan kun rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+DEAL=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests/$REQ_ID/choose" \
+  -d "{\"offerId\":$OFFER_ID,\"scheduledAt\":\"$DAY\"}")
+DEAL_ID=$(echo "$DEAL" | jqv '.id')
 check "bitim yaratildi" "$([ -n "$DEAL_ID" ] && echo 1)" "id=$DEAL_ID"
+check "bitim darrov KELISHILGAN" "$([ "$(echo "$DEAL" | jqv '.status')" = "AGREED" ] && echo 1)" "$(echo "$DEAL" | jqv '.status')"
+check "bitimda sana bor" "$([ -n "$(echo "$DEAL" | jqv '.scheduledAt')" ] && echo 1)" "$(echo "$DEAL" | jqv '.scheduledAt')"
 
 REDACTED=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/messages" \
   -d '{"body":"Telefonim +998 90 123 45 67, qongiroq qiling"}' | jqv '.redacted')
@@ -229,9 +246,9 @@ check "narx yashirilmadi" "$([ "$PRICE_OK" = "false" ] && echo 1)" "$PRICE_OK"
 code=$(status "${MOD[@]}" "$API/deals/$DEAL_ID/messages")
 check "uchinchi shaxs chatga kira olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
 
-TOMORROW=$(node -e "console.log(new Date(Date.now()+864e5).toISOString())")
-STATUS=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/schedule" -d "{\"scheduledAt\":\"$TOMORROW\"}" | jqv '.status')
-check "sana kelishildi (AGREED)" "$([ "$STATUS" = "AGREED" ] && echo 1)" "$STATUS"
+# Alohida "sana belgilash" manzili endi yo'q — sana tanlov bilan qo'yiladi
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/schedule" -d "{\"scheduledAt\":\"$TOMORROW\"}")
+check "sana belgilash manzili yo'q (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
 
 # Eski "bajarildi" bosqichi olib tashlandi — endi bunday manzil yo'q
 code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/performed")
@@ -930,36 +947,18 @@ check "sabab bilan qabul qilindi" "$(echo "$OVER_OFFER" | jqv '.priceUzs' | grep
 check "erkin matnli band saqlandi" "$(echo "$OVER_OFFER" | grep -q 'Ozim yozgan xizmat' && echo 1)" ""
 check "taklif qilingan sana saqlandi" "$(echo "$OVER_OFFER" | grep -q "$TOMORROW" && echo 1)" ""
 
-# O'tmish sanasi tashlanadi
-PAST_OFFER=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X PATCH "$API/offers/$(echo "$OVER_OFFER" | jqv '.id')" \
+# Faqat o'tmish kunlari qoldirilsa taklif kunsiz qolardi — rad etiladi
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X PATCH "$API/offers/$(echo "$OVER_OFFER" | jqv '.id')" \
   -d '{"proposedDates":["2020-01-01"]}')
-check "o'tmish sanasi tashlandi" "$(echo "$PAST_OFFER" | grep -qv '2020-01-01' && echo 1)" ""
+check "o'tmish kuni bilan tahrir rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
-# Narx o'zgarishi: ikki tomon roziligi
+# Narx o'zgartirish OLIB TASHLANDI — manzil endi yo'q
 OVER_DEAL=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests/$OVER_REQ/choose" \
-  -d "{\"offerId\":$(echo "$OVER_OFFER" | jqv '.id')}" | jqv '.id')
+  -d "{\"offerId\":$(echo "$OVER_OFFER" | jqv '.id'),\"scheduledAt\":\"$TOMORROW\"}" | jqv '.id')
 
 code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$OVER_DEAL/price-change" \
-  -d '{"newPriceUzs":8000000,"reason":"qisqa"}')
-check "qisqa sabab rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
-
-CHANGE=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$OVER_DEAL/price-change" \
-  -d '{"newPriceUzs":8000000,"reason":"Tekshiruvda qoshimcha churra aniqlandi, uni ham olamiz"}' | jqv '.id')
-check "o'zgarish taklif qilindi" "$([ -n "$CHANGE" ] && echo 1)" ""
-
-# Taklif qilgan tomon o'zi qabul qila olmaydi
-code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/price-change/$CHANGE/respond" -d '{"accept":true}')
-check "taklif qilgan tomon o'zi qabul qilolmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
-
-ACCEPTED=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/price-change/$CHANGE/respond" -d '{"accept":true}' | jqv '.status')
-check "bemor qabul qildi" "$([ "$ACCEPTED" = "accepted" ] && echo 1)" "$ACCEPTED"
-
-NEW_PRICE=$(curl -s "${PATIENT[@]}" "$API/deals/$OVER_DEAL" | jqv '.deal.agreedPriceUzs')
-check "bitim narxi yangilandi" "$([ "$NEW_PRICE" = "8000000" ] && echo 1)" "$NEW_PRICE"
-
-# Uchinchi shaxs tarixni ko'ra olmaydi
-code=$(status "${STRANGER[@]}" "$API/deals/$OVER_DEAL/price-changes")
-check "begona narx tarixini ko'ra olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+  -d '{"newPriceUzs":8000000,"reason":"Tekshiruvda qoshimcha churra aniqlandi"}')
+check "narx o'zgartirish manzili yo'q (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
 
 echo
 echo "19. Sana oralig'i"

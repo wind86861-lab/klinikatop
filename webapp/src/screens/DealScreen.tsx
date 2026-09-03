@@ -32,7 +32,6 @@ import {
   Textarea,
 } from '@/ui';
 import { DEAL_STEPS, REVIEW_ASPECTS, type ChatMessage, type DealDetail, type ReviewAspect } from '@shared/types';
-import { PriceChangePanel } from '@/components/PriceChangePanel';
 
 export function DealScreen() {
   const { id } = useParams();
@@ -243,26 +242,12 @@ export function DealScreen() {
           <DealActions
             deal={deal}
             isClinicSide={isClinicSide}
-            onSchedule={() => setSheet('schedule')}
             onConfirm={() => setSheet('confirm')}
             onReceipt={() => act(() => api.confirmReceipt(dealId))}
             onReview={() => setSheet('review')}
             onDispute={() => setSheet('dispute')}
           />
         </Card>
-
-        {/*
-          Narxni o'zgartirish — ish bajarilgunicha.
-          Bajarilgandan keyin o'zgartirish qilingan ishning narxini
-          keyin ko'tarish bo'lardi; u yerda nizo yo'li bor.
-        */}
-        <PriceChangePanel
-          dealId={deal.id}
-          agreedPriceUzs={deal.agreedPriceUzs}
-          side={isClinicSide ? 'clinic' : 'patient'}
-          editable={deal.status === 'SELECTED' || deal.status === 'AGREED'}
-          onChanged={load}
-        />
       </div>
 
       {/* Chat */}
@@ -322,12 +307,6 @@ export function DealScreen() {
 
       {/* ── Varaqlar ── */}
 
-      <ScheduleSheet
-        open={sheet === 'schedule'}
-        onClose={() => setSheet(null)}
-        onSubmit={(date) => act(() => api.schedule(dealId, date))}
-      />
-
       <ConfirmSheet
         open={sheet === 'confirm'}
         deal={deal}
@@ -369,7 +348,6 @@ export function DealScreen() {
 function DealActions({
   deal,
   isClinicSide,
-  onSchedule,
   onConfirm,
   onReceipt,
   onReview,
@@ -377,7 +355,6 @@ function DealActions({
 }: {
   deal: DealDetail;
   isClinicSide: boolean;
-  onSchedule: () => void;
   onConfirm: () => void;
   onReceipt: () => void;
   onReview: () => void;
@@ -386,14 +363,6 @@ function DealActions({
   const { t } = useApp();
 
   const buttons: React.ReactNode[] = [];
-
-  if (deal.status === 'SELECTED') {
-    buttons.push(
-      <Button key="schedule" size="sm" block onClick={onSchedule}>
-        {t('deal.setDate')}
-      </Button>,
-    );
-  }
 
   /*
    * Sana kelishilgach to'lov navbati bemorda. Ilgari bu tugma
@@ -478,32 +447,6 @@ function Bubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
 }
 
 /* ─────────────────────────  Varaqlar  ───────────────────────── */
-
-function ScheduleSheet({
-  open,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (iso: string) => void;
-}) {
-  const { t } = useApp();
-  const [date, setDate] = useState('');
-
-  const min = new Date().toISOString().slice(0, 10);
-
-  return (
-    <Sheet open={open} onClose={onClose} title={t('deal.setDate')}>
-      <Field label={t('deal.scheduled')}>
-        <Input type="date" min={min} value={date} onChange={(e) => setDate(e.target.value)} />
-      </Field>
-      <Button block disabled={!date} onClick={() => onSubmit(new Date(date).toISOString())}>
-        {t('common.confirm')}
-      </Button>
-    </Sheet>
-  );
-}
 
 function ConfirmSheet({
   open,

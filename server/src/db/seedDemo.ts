@@ -12,7 +12,7 @@ import { config } from '../lib/config';
 import { upsertUser } from '../middleware/auth';
 import { createRequest } from '../services/requests';
 import { createOffer } from '../services/offers';
-import { chooseOffer, agreeSchedule, declarePayment, confirmReceipt } from '../services/deals';
+import { chooseOffer, declarePayment, confirmReceipt } from '../services/deals';
 import { createReview } from '../services/reviews';
 import { activateSubscription } from '../services/clinics';
 
@@ -191,17 +191,20 @@ function main() {
       userAgent: 'seed:demo',
     });
 
+    // Klinika aniq kun taklif qiladi — bemor shuni tanlaydi
+    const when = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+
     const offer = createOffer({
       requestId: request.id,
       clinicId: clinic.id,
       priceUzs: demo.offerPrice,
       includes: ['Operatsiya', 'Narkoz (anesteziya)', 'Palata (2 kun)'],
       advantages: ['Oliy toifali jarroh'],
+      proposedDates: [when],
       note: null,
     });
 
-    const deal = chooseOffer(request.id, offer.id, patient.id);
-    agreeSchedule(deal.id, patient.id, null, new Date(Date.now() - 3 * 86_400_000).toISOString());
+    const deal = chooseOffer(request.id, offer.id, patient.id, when);
     // To'lov birinchi: bemor bildiradi, klinika yakunida tasdiqlaydi
     declarePayment(deal.id, patient.id, demo.paid);
     confirmReceipt(deal.id, deal.clinicId);

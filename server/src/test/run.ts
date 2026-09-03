@@ -214,6 +214,7 @@ async function main() {
         includes: ['Operatsiya'],
         advantages: [],
         note: null,
+        proposedDates: [futureDate(5)],
       }),
     'forbidden',
   );
@@ -239,6 +240,7 @@ async function main() {
         includes: ['Operatsiya'],
         advantages: [],
         note: null,
+        proposedDates: [futureDate(5)],
       }),
     'subscription_required',
   );
@@ -353,6 +355,7 @@ async function main() {
         includes: [],
         advantages: [],
         note: null,
+        proposedDates: [futureDate(5)],
       }),
     'includes_required',
   );
@@ -364,6 +367,7 @@ async function main() {
     includes: ['Operatsiya', 'Narkoz', 'Palata (2 kun)'],
     advantages: ['Oliy toifali jarroh'],
     note: 'Ertaga qabulga kelishingiz mumkin',
+    proposedDates: [futureDate(5)],
   });
   check('taklif yuborildi', offer.status === 'SENT');
   check('klinika ko‘rildi deb belgilandi', requests.getRequest(request.id).viewedCount === 1);
@@ -379,6 +383,7 @@ async function main() {
         includes: ['Operatsiya'],
         advantages: [],
         note: null,
+        proposedDates: [futureDate(5)],
       }),
     'offer_exists',
   );
@@ -393,8 +398,8 @@ async function main() {
     'not_found',
   );
 
-  const deal = deals.chooseOffer(request.id, offer.id, patient.id);
-  check('bitim SELECTED holatida yaratildi', deal.status === 'SELECTED');
+  const deal = deals.chooseOffer(request.id, offer.id, patient.id, offer.proposedDates[0]);
+  check('bitim darrov KELISHILGAN holatda yaratildi', deal.status === 'AGREED', deal.status);
   check('so‘rov CHOSEN holatiga o‘tdi', requests.getRequest(request.id).status === 'CHOSEN');
   check('kelishilgan narx taklifdan olindi', deal.agreedPriceUzs === 10_800_000);
 
@@ -449,7 +454,6 @@ async function main() {
   );
 
   section('7. Bitim bosqichlari va komissiya');
-  deals.agreeSchedule(deal.id, patient.id, null, new Date(Date.now() + 86_400_000).toISOString());
   check('KELISHILGAN holatiga o‘tdi', deals.getDeal(deal.id).status === 'AGREED');
 
   /*
@@ -539,14 +543,22 @@ async function main() {
     advantages: [],
     aboveBudgetReason: 'Narkoz turi murakkabroq va bir kecha yotoq narxga kiradi',
     note: null,
+    proposedDates: [futureDate(5)],
   });
-  const deal2 = deals.chooseOffer(request2.id, offer2.id, patient.id);
+  /*
+   * Taklif qilinmagan kunni tanlab bo'lmaydi: aks holda bemor
+   * ixtiyoriy sana yozib qo'yardi va klinika o'sha kuni band
+   * bo'lishi mumkin edi — bu yana kelishuvga qaytarardi.
+   */
   throws(
-    'sana kelishilmasdan to‘lov bildirib bo‘lmaydi',
-    () => deals.declarePayment(deal2.id, patient.id, 13_000_000),
-    'not_payable',
+    'klinika taklif qilmagan kun rad etiladi',
+    () => deals.chooseOffer(request2.id, offer2.id, patient.id, '2030-01-01'),
+    'date_not_offered',
   );
-  deals.agreeSchedule(deal2.id, patient.id, null, new Date(Date.now() + 86_400_000).toISOString());
+
+  const deal2 = deals.chooseOffer(request2.id, offer2.id, patient.id, offer2.proposedDates[0]);
+  check('bitim darrov KELISHILGAN holatda ochildi', deal2.status === 'AGREED', deal2.status);
+  check('bitimda sana bor', Boolean(deal2.scheduledAt), deal2.scheduledAt);
   deals.declarePayment(deal2.id, patient.id, 13_000_000);
   deals.confirmReceipt(deal2.id, deals.getDeal(deal2.id).clinicId);
 
@@ -651,9 +663,9 @@ async function main() {
     includes: ['Operatsiya'],
     advantages: [],
     note: null,
+    proposedDates: [futureDate(5)],
   });
-  const autoDeal = deals.chooseOffer(autoReq.id, autoOffer.id, patient.id);
-  deals.agreeSchedule(autoDeal.id, patient.id, null, new Date(Date.now() + 86_400_000).toISOString());
+  const autoDeal = deals.chooseOffer(autoReq.id, autoOffer.id, patient.id, autoOffer.proposedDates[0]);
 
   /*
    * To'lovi bildirilmagan bitim avtomatik YOPILMAYDI.
@@ -830,6 +842,7 @@ async function main() {
     includes: ['Operatsiya'],
     advantages: [],
     note: null,
+    proposedDates: [futureDate(5)],
   });
 
   const offerCount = db.prepare('SELECT COUNT(*) c FROM offers WHERE request_id = ?').get(withOffer.id).c;
@@ -913,8 +926,9 @@ async function main() {
     includes: ['Operatsiya'],
     advantages: [],
     note: null,
+    proposedDates: [futureDate(5)],
   });
-  deals.chooseOffer(withDeal.id, dealOffer.id, patient.id);
+  deals.chooseOffer(withDeal.id, dealOffer.id, patient.id, dealOffer.proposedDates[0]);
 
   throws(
     'bitim tuzilgan so‘rov o‘chirilmaydi',
@@ -1683,6 +1697,7 @@ async function main() {
         advantages: [],
         aboveBudgetReason: 'Sabab yozilgan bo‘lsa ham chegaradan chiqib bo‘lmaydi',
         note: null,
+        proposedDates: [futureDate(5)],
       }),
     'price_too_high',
   );
@@ -1697,6 +1712,7 @@ async function main() {
         includes: ['Operatsiya'],
         advantages: [],
         note: null,
+        proposedDates: [futureDate(5)],
       }),
     'price_too_low',
   );
@@ -1710,6 +1726,7 @@ async function main() {
     advantages: [],
     aboveBudgetReason: 'Robot yordamida operatsiya va bir kecha yotoq narxga kiradi',
     note: null,
+    proposedDates: [futureDate(5)],
   });
   check('chegaraning aynan cheti qabul qilindi', edge.priceUzs === 9_600_000);
 
@@ -1723,6 +1740,7 @@ async function main() {
         includes: ['Operatsiya'],
         advantages: [],
         note: null,
+        proposedDates: [futureDate(5)],
       }),
     'above_budget_reason_required',
   );
@@ -1759,110 +1777,14 @@ async function main() {
   check('takror band olib tashlandi', freeText.includes.length === 2, freeText.includes);
   check('erkin matn qabul qilindi', freeText.includes.includes('O‘zim yozgan xizmat'));
 
-  /* ── Narxning o'zgarishi ── */
-
-  const priceDeal = deals.chooseOffer(caseReq.id, pricier.id, patient.id);
-  check('bitim 9 mln bilan ochildi', priceDeal.agreedPriceUzs === 9_000_000);
-
-  throws(
-    'sababsiz o‘zgartirib bo‘lmaydi',
-    () =>
-      deals.proposePriceChange({
-        dealId: priceDeal.id,
-        actorId: clinicUser.id,
-        newPriceUzs: 10_000_000,
-        reason: 'qisqa',
-      }),
-    'reason_required',
-  );
-  throws(
-    'bir xil narx taklif qilinmaydi',
-    () =>
-      deals.proposePriceChange({
-        dealId: priceDeal.id,
-        actorId: clinicUser.id,
-        newPriceUzs: 9_000_000,
-        reason: 'Hech narsa o‘zgargani yo‘q aslida',
-      }),
-    'same_price',
-  );
-
-  const change = deals.proposePriceChange({
-    dealId: priceDeal.id,
-    actorId: clinicUser.id,
-    newPriceUzs: 10_500_000,
-    reason: 'Tekshiruvda qo‘shimcha churra aniqlandi, uni ham bir vaqtda olamiz',
-  });
-  check('o‘zgarish taklif qilindi', change.status === 'pending' && change.toUzs === 10_500_000);
-  check('eski narx yozib qolindi', change.fromUzs === 9_000_000, change.fromUzs);
-
-  throws(
-    'ikkinchi taklif kutayotgani ustiga qo‘shilmaydi',
-    () =>
-      deals.proposePriceChange({
-        dealId: priceDeal.id,
-        actorId: clinicUser.id,
-        newPriceUzs: 11_000_000,
-        reason: 'Yana bir narsa aniqlandi deylik',
-      }),
-    'change_pending',
-  );
-
   /*
-   * Taklif qilgan tomon o'zi qabul qila olmasligi kerak — aks holda
-   * narx bir tomonlama o'zgarardi va jarayonning ma'nosi qolmasdi.
+   * Narxni o'zgartirish OLIB TASHLANDI.
+   *
+   * Bemor taklifni aynan narxiga qarab tanlaydi; tanlangandan keyin
+   * narxni qayta muhokama qilish o'sha tanlovning asosini olib
+   * tashlash bo'lardi. Kelishmovchilik uchun nizo yo'li bor.
    */
-  throws(
-    'taklif qilgan tomon o‘zi qabul qilolmaydi',
-    () => deals.respondToPriceChange(change.id, clinicUser.id, true),
-  );
-
-  const accepted = deals.respondToPriceChange(change.id, patient.id, true);
-  check('bemor qabul qildi', accepted.status === 'accepted');
-  check(
-    'bitim narxi yangilandi',
-    deals.getDeal(priceDeal.id).agreedPriceUzs === 10_500_000,
-    deals.getDeal(priceDeal.id).agreedPriceUzs,
-  );
-
-  throws(
-    'javob berilganiga qayta javob bo‘lmaydi',
-    () => deals.respondToPriceChange(change.id, patient.id, false),
-    'already_decided',
-  );
-
-  /* ── Komissiya YANGI narxdan hisoblanadi ── */
-
-  deals.agreeSchedule(priceDeal.id, patient.id, null, futureDate(5) + 'T10:00:00.000Z');
-  deals.declarePayment(priceDeal.id, patient.id, 10_500_000);
-  const priceConfirmed = deals.confirmReceipt(priceDeal.id, deals.getDeal(priceDeal.id).clinicId);
-
-  const percent = priceConfirmed.commissionPercent;
-  check('komissiya foizi yozildi', typeof percent === 'number' && percent > 0, percent);
-  check(
-    'komissiya YANGI narxdan hisoblandi',
-    priceConfirmed.commissionUzs === Math.round((10_500_000 * percent) / 100),
-    { commission: priceConfirmed.commissionUzs, percent },
-  );
-  check('tasdiqlangan summa yangi narx', priceConfirmed.confirmedAmountUzs === 10_500_000);
-
-  // Tarix nizoda dalil bo'ladi
-  const history = deals.listPriceChanges(priceDeal.id);
-  check('narx tarixi saqlandi', history.length === 1 && history[0].status === 'accepted', history);
-
-  /* ── Bajarilgandan keyin narx qulflanadi ── */
-  throws(
-    'bajarilgan bitim narxi o‘zgarmaydi',
-    () =>
-      deals.proposePriceChange({
-        dealId: priceDeal.id,
-        actorId: clinicUser.id,
-        newPriceUzs: 12_000_000,
-        reason: 'Endi kech, lekin urinib ko‘ramiz',
-      }),
-    'price_locked',
-  );
-
+  check('narx o‘zgartirish amali endi yo‘q', (deals as any).proposePriceChange === undefined);
 
   /* ═════ 20. Sana oralig'i va moslashuvchanlik ═════ */
   console.log('\n20. Sana oralig‘i');
@@ -1948,17 +1870,50 @@ async function main() {
     includes: ['Operatsiya'],
     advantages: [],
     note: null,
+    proposedDates: [futureDate(5)],
   });
-  const schedDeal = deals.chooseOffer(dateReq.id, schedOffer.id, patient.id);
+  /*
+   * Alohida "Sana belgilash" bosqichi yo'q: sana tanlov bilan
+   * birga belgilanadi va o'tmish sanasi taklifga ham tushmaydi
+   * (`cleanDates` uni tashlab yuboradi).
+   */
+  check('sana belgilash amali endi yo‘q', (deals as any).agreeSchedule === undefined);
+
+  const schedDeal = deals.chooseOffer(dateReq.id, schedOffer.id, patient.id, schedOffer.proposedDates[0]);
+  check('bitim kelishilgan sana bilan ochildi', schedDeal.status === 'AGREED' && Boolean(schedDeal.scheduledAt));
+
+  /*
+   * O'tmish kuni taklifga umuman tushmaydi — tanlangan taklifni
+   * tahrirlab bo'lmaydi, shuning uchun yangi taklifda sinaymiz.
+   */
+  const dateReq2 = requests.createRequest({
+    patientId: patient.id,
+    operationId: liveOp,
+    cityId: tashkent.id,
+    budgetUzs: 9_000_000,
+    note: null,
+    urgency: 'normal',
+    attachments: [],
+    aiSuggested: false,
+    conditionText: "Holatim: qorin o'ng tomonida og'riq, tekshiruvda tosh topildi.",
+    acceptTerms: true,
+    dateFlexible: true,
+  });
 
   throws(
-    'bitimni o‘tgan sanaga belgilab bo‘lmaydi',
-    () => deals.agreeSchedule(schedDeal.id, patient.id, null, '2020-01-01T10:00:00.000Z'),
-    'date_in_past',
+    'faqat o‘tmish kunlari taklif qilib bo‘lmaydi',
+    () =>
+      offers.createOffer({
+        requestId: dateReq2.id,
+        clinicId: clinic.id,
+        priceUzs: 8_000_000,
+        includes: ['Operatsiya'],
+        advantages: [],
+        note: null,
+        proposedDates: ['2020-01-01'],
+      }),
+    'dates_required',
   );
-
-  const scheduled = deals.agreeSchedule(schedDeal.id, patient.id, null, futureDate(5) + 'T10:00:00.000Z');
-  check('kelgusi sana qabul qilindi', scheduled.status === 'AGREED');
 
 
   /* ═════ 21. Katalog daraxti: soha → bo'lim ═════ */
@@ -2332,9 +2287,9 @@ async function main() {
       includes: ['Operatsiya', 'Narkoz', 'Palata'],
       advantages: ['Sinov'],
       note: null,
+      proposedDates: [futureDate(5)],
     });
-    const d2 = deals.chooseOffer(r2.id, o2.id, p2.id);
-    deals.agreeSchedule(d2.id, p2.id, clinic.id, new Date(Date.now() + 86400_000).toISOString());
+    const d2 = deals.chooseOffer(r2.id, o2.id, p2.id, o2.proposedDates[0]);
 
     // ── Klinika to'lovdan OLDIN tasdiqlay olmaydi ──
     throws('to‘lovsiz tasdiqlab bo‘lmaydi', () => deals.confirmReceipt(d2.id, clinic.id));
@@ -2397,9 +2352,9 @@ async function main() {
       includes: ['Operatsiya', 'Narkoz', 'Palata'],
       advantages: ['Sinov'],
       note: null,
+      proposedDates: [futureDate(5)],
     });
-    const d3 = deals.chooseOffer(r3.id, o3.id, p3.id);
-    deals.agreeSchedule(d3.id, p3.id, clinic.id, new Date(Date.now() + 86400_000).toISOString());
+    const d3 = deals.chooseOffer(r3.id, o3.id, p3.id, o3.proposedDates[0]);
     deals.declarePayment(d3.id, p3.id, 9_000_000);
 
     // Soatni orqaga suramiz — 60 kun oldin to'langan deb
@@ -2734,6 +2689,7 @@ async function main() {
       priceUzs: 9_000_000,
       includes: ['Operatsiya', 'Narkoz'],
       advantages: [],
+      proposedDates: [futureDate(5)],
       note: null,
       ...extra,
     });
@@ -2768,7 +2724,7 @@ async function main() {
     );
 
     // ── Bemor tanlagach so'rov aniqlanadi ──
-    const deal = deals.chooseOffer(r1.id, o1.id, patient.id);
+    const deal = deals.chooseOffer(r1.id, o1.id, patient.id, o1.proposedDates[0]);
     const resolved = requests.getRequest(r1.id);
     check('tanlovdan keyin so‘rov aniq operatsiyaga o‘tdi', resolved.operationId === own.id, resolved.operationId);
     check('soha zaxirasi tozalandi', resolved.fallbackCategoryId === null);
@@ -2779,7 +2735,6 @@ async function main() {
      * ko'radi. Busiz "bu operatsiya qanchaga ketdi" degan savolga
      * javob qolmasdi.
      */
-    deals.agreeSchedule(deal.id, patient.id, clinic.id, new Date(Date.now() + 86400_000).toISOString());
     deals.declarePayment(deal.id, patient.id, 9_500_000);
     deals.confirmReceipt(deal.id, clinic.id);
 

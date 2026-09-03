@@ -33,7 +33,6 @@ import type {
   OfferWithClinic,
   Operation,
   OperationCategory,
-  DealPriceChange,
   PatientCase,
   PriceStats,
   RequestStatus,
@@ -380,15 +379,11 @@ export const api = {
   cancelRequest: (id: number) => post<RequestWithMeta>(`/requests/${id}/cancel`),
 
   /* ── Bitim narxining o'zgarishi ── */
-  priceChanges: (dealId: number) => get<DealPriceChange[]>(`/deals/${dealId}/price-changes`),
-  proposePriceChange: (dealId: number, newPriceUzs: number, reason: string) =>
-    post<DealPriceChange>(`/deals/${dealId}/price-change`, { newPriceUzs, reason }),
-  respondToPriceChange: (changeId: number, accept: boolean) =>
-    post<DealPriceChange>(`/deals/price-change/${changeId}/respond`, { accept }),
   /** So'rovni butunlay o'chirish — fayllari bilan birga. Qaytarib bo'lmaydi. */
   deleteRequest: (id: number) => del<void>(`/requests/${id}`),
-  chooseOffer: (requestId: number, offerId: number) =>
-    post<DealDetail>(`/requests/${requestId}/choose`, { offerId }),
+  /** Sana ham shu yerda: bemor klinika taklif qilgan kunlardan birini tanlaydi */
+  chooseOffer: (requestId: number, offerId: number, scheduledAt: string) =>
+    post<DealDetail>(`/requests/${requestId}/choose`, { offerId, scheduledAt }),
 
   /* ── Bitim va chat ── */
   deals: () => get<DealDetail[]>('/deals'),
@@ -398,7 +393,6 @@ export const api = {
   sendMessage: (id: number, body: string, attachment?: string | null) =>
     post<ChatMessage>(`/deals/${id}/messages`, { body, attachment: attachment ?? null }),
   readMessages: (id: number) => post<{ marked: number }>(`/deals/${id}/messages/read`),
-  schedule: (id: number, scheduledAt: string) => post<DealDetail>(`/deals/${id}/schedule`, { scheduledAt }),
   /** Bemor to'lovni bildiradi — bitim yopilmaydi, klinika tasdig'i kutiladi */
   declarePayment: (id: number, amountUzs: number, method: PaymentMethod | null = null) =>
     post<DealDetail>(`/deals/${id}/paid`, { amountUzs, method }),

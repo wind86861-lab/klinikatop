@@ -13,7 +13,6 @@ import {
   DEAL_TRANSITIONS,
   PAYMENT_METHODS,
   type DealDetail,
-  type DealPriceChange,
   type DealStatus,
   type PaymentMethod,
 } from '../../../shared/types';
@@ -72,7 +71,24 @@ function assertTransition(from: DealStatus, to: DealStatus) {
  *  - chat AYNAN SHU PAYTDA ochiladi (8.1 — bundan oldin mumkin emas)
  *  - qolgan barcha takliflar avto RAD_ETILDI + klinikalarga bildirishnoma
  */
-export function chooseOffer(requestId: number, offerId: number, patientId: number): DealDetail {
+export function chooseOffer(
+  requestId: number,
+  offerId: number,
+  patientId: number,
+  /**
+   * Operatsiya sanasi — TANLASH PAYTIDA belgilanadi.
+   *
+   * Ilgari bitim sanasiz ochilar, keyin alohida "Sana belgilash"
+   * bosqichi bo'lardi. Ya'ni bemor allaqachon tanlab bo'lgach,
+   * kunni kelishish uchun yana muzokara boshlanardi — va sana
+   * to'g'ri kelmasa bitimni buzishdan boshqa yo'l qolmasdi.
+   *
+   * Endi tartib teskari: klinika taklifida aniq kunlarni beradi,
+   * bemor esa o'ziga qulayini TANLOV BILAN BIRGA belgilaydi.
+   * Bitim boshidanoq kelishilgan sana bilan ochiladi.
+   */
+  scheduledAt: string,
+): DealDetail {
   const req = getRequest(requestId);
   if (req.patientId !== patientId) throw forbidden('Bu so‘rov sizniki emas');
   if (req.status !== 'NEW' && req.status !== 'COLLECTING') {
@@ -82,6 +98,18 @@ export function chooseOffer(requestId: number, offerId: number, patientId: numbe
   const offer = db.prepare(`SELECT * FROM offers WHERE id = ?`).get(offerId) as any;
   if (!offer || offer.request_id !== requestId) throw notFound('Taklif topilmadi');
   if (offer.status !== 'SENT') throw conflict('offer_unavailable', 'Bu taklif endi mavjud emas');
+
+  /*
+   * Sana KLINIKA TAKLIF QILGANLARIDAN bo'lishi shart.
+   *
+   * Aks holda bemor ixtiyoriy kun yozib qo'yardi va klinika o'sha
+   * kuni band bo'lishi mumkin edi — bu esa yana kelishuvga qaytarardi.
+   */
+  const proposed: string[] = JSON.parse(offer.proposed_dates ?? '[]');
+  const day = (scheduledAt ?? '').slice(0, 10);
+  if (!proposed.includes(day)) {
+    throw badRequest('date_not_offered', 'Klinika taklif qilgan kunlardan birini tanlang');
+  }
 
   const rejected = db
     .prepare(`SELECT id, clinic_id FROM offers WHERE request_id = ? AND id != ? AND status = 'SENT'`)
@@ -110,10 +138,11 @@ export function chooseOffer(requestId: number, offerId: number, patientId: numbe
 
     const info = db
       .prepare(
-        `INSERT INTO deals (request_id, offer_id, patient_id, clinic_id, agreed_price_uzs, status)
-         VALUES (?, ?, ?, ?, ?, 'SELECTED')`,
+        `INSERT INTO deals (request_id, offer_id, patient_id, clinic_id, agreed_price_uzs,
+                            status, scheduled_at)
+         VALUES (?, ?, ?, ?, ?, 'AGREED', ?)`,
       )
-      .run(requestId, offerId, patientId, offer.clinic_id, offer.price_uzs);
+      .run(requestId, offerId, patientId, offer.clinic_id, offer.price_uzs, `${day} 09:00:00`);
     return Number(info.lastInsertRowid);
   });
 
@@ -122,11 +151,11 @@ export function chooseOffer(requestId: number, offerId: number, patientId: numbe
   systemMessage(
     dealId,
     `Bemor taklifni tanladi. Kelishilgan narx: ${offer.price_uzs.toLocaleString('ru-RU')} so‘m. ` +
-      `Muloqot faqat shu chat orqali olib boriladi.`,
+      `Operatsiya sanasi: ${day}. Muloqot faqat shu chat orqali olib boriladi.`,
   );
 
   bus.publish(ch.request(requestId), { type: 'request:status', requestId, status: 'CHOSEN' });
-  bus.publish(ch.deal(dealId), { type: 'deal:status', dealId, status: 'SELECTED' });
+  bus.publish(ch.deal(dealId), { type: 'deal:status', dealId, status: 'AGREED' });
 
   notifyClinic(offer.clinic_id, 'offer_chosen', { operation: req.operation.nameUz }, `/clinic/deals/${dealId}`);
   for (const r of rejected) {
@@ -136,38 +165,16 @@ export function chooseOffer(requestId: number, offerId: number, patientId: numbe
   return deal;
 }
 
-/** Sana kelishildi → KELISHILGAN. */
-export function agreeSchedule(dealId: number, userId: number, clinicId: number | null, scheduledAt: string): DealDetail {
-  const deal = assertParticipant(dealId, userId, clinicId);
-  assertTransition(deal.status, 'AGREED');
-
-  const when = new Date(scheduledAt);
-  if (Number.isNaN(when.getTime())) throw badRequest('invalid_date', 'Sana noto‘g‘ri');
-
-  /*
-   * Operatsiya o'tgan kunga belgilanmaydi.
-   *
-   * Ilgari bu tekshirilmasdi va bitimda kechagi sana turib qolardi —
-   * bemor uni ko'rib, o'tkazib yuborganman deb o'ylardi.
-   *
-   * Bugun ruxsat etiladi: shoshilinch holatda operatsiya shu kuni
-   * bo'lishi mumkin va uni kelishib bo'lgach yozib qo'yish kerak.
-   */
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  if (when.getTime() < startOfToday.getTime()) {
-    throw badRequest('date_in_past', 'O‘tgan sanaga operatsiya belgilab bo‘lmaydi');
-  }
-
-  db.prepare(`UPDATE deals SET scheduled_at = ?, status = 'AGREED' WHERE id = ?`).run(
-    when.toISOString().replace('T', ' ').slice(0, 19),
-    dealId,
-  );
-
-  systemMessage(dealId, `Operatsiya sanasi kelishildi: ${when.toLocaleDateString('uz-UZ')}`);
-  bus.publish(ch.deal(dealId), { type: 'deal:status', dealId, status: 'AGREED' });
-  return getDeal(dealId);
-}
+/*
+ * Alohida "Sana belgilash" bosqichi OLIB TASHLANDI.
+ *
+ * U bitim tuzilgandan KEYIN turardi: bemor tanlab bo'lgach, kunni
+ * kelishish uchun yana muzokara boshlanar va sana to'g'ri kelmasa
+ * bitimni buzishdan boshqa yo'l qolmasdi.
+ *
+ * Endi sana tanlov bilan birga belgilanadi (`chooseOffer`), ya'ni
+ * bitim boshidanoq kelishilgan kun bilan ochiladi.
+ */
 
 /**
  * 9.1: bemor to'lovni bildiradi → `PAID`.
@@ -438,176 +445,14 @@ function clinicMemberIds(clinicId: number): number[] {
   ).map((r) => r.id);
 }
 
-/**
- * Bitim narxini o'zgartirish — IKKI TOMON roziligi bilan.
+/*
+ * Narxni o'zgartirish bo'limi OLIB TASHLANDI.
  *
- * ═══ Nima uchun alohida jarayon ═══
+ * U ikki tomon roziligi bilan ishlardi va o'zi to'g'ri qurilgan edi,
+ * lekin oqimda o'rni yo'q: bemor taklifni AYNAN narxiga qarab
+ * tanlaydi. Tanlangandan keyin narxni qayta muhokama qilish — o'sha
+ * tanlovning asosini olib tashlash bo'lardi.
  *
- * Hayotda narx o'zgaradi: tekshiruvda qo'shimcha muammo chiqadi, yoki
- * aksincha, rejalashtirilgan bosqich kerak bo'lmay qoladi. Ilgari bunga
- * yagona yo'l bor edi — tasdiqlash paytida boshqa summa kiritish. U
- * yomon edi:
- *
- *   • kim rozi bo'lgani hech qayerda qolmasdi
- *   • bemor "shunday kelishgandik" deb, klinika "yo'q" deb aytardi va
- *     moderatorda dalil bo'lmasdi
- *   • avtomatik tasdiqlash eski narxda ishlab ketardi
- *
- * Endi o'zgarish taklif qilinadi, ikkinchi tomon qabul qiladi yoki rad
- * etadi, va har qadam yozib boriladi.
- *
- * ═══ Moliyaviy tomoni ═══
- *
- * Komissiya HAR DOIM oxirgi kelishilgan narxdan hisoblanadi. Foiz esa
- * tasdiqlash paytidagi qiymatdan olinadi va bitimga yozib qo'yiladi —
- * admin keyin foizni o'zgartirsa eski bitim qayta hisoblanmaydi.
+ * Kelishmovchilik bo'lsa NIZO yo'li bor: moderator qaraydi.
+ * Tanlashdan oldingi savollar esa chat orqali hal bo'ladi.
  */
-export interface ProposePriceChangeInput {
-  dealId: number;
-  /** Kim taklif qilyapti */
-  actorId: number;
-  newPriceUzs: number;
-  reason: string;
-}
-
-export function proposePriceChange(input: ProposePriceChangeInput): DealPriceChange {
-  const deal = getDeal(input.dealId);
-
-  const isPatient = deal.patientId === input.actorId;
-  const isClinic = clinicMemberIds(deal.clinicId).includes(input.actorId);
-  if (!isPatient && !isClinic) throw forbidden('Bu bitim sizniki emas');
-
-  /*
-   * Narx faqat ish BAJARILGUNCHA o'zgaradi.
-   *
-   * Bajarilgandan keyin o'zgartirish — bu allaqachon qilingan ishning
-   * narxini keyin ko'tarish demak. Agar haqiqatan farq bo'lsa, nizo
-   * ochiladi va moderator hal qiladi.
-   */
-  if (deal.status !== 'SELECTED' && deal.status !== 'AGREED') {
-    throw conflict('price_locked', 'Bu bosqichda narxni o‘zgartirib bo‘lmaydi');
-  }
-
-  const price = Math.round(input.newPriceUzs);
-  if (!Number.isFinite(price) || price < 100_000 || price > 2_000_000_000) {
-    throw badRequest('invalid_price', 'Narx noto‘g‘ri');
-  }
-  if (price === deal.agreedPriceUzs) {
-    throw badRequest('same_price', 'Narx o‘zgarmadi');
-  }
-
-  const reason = (input.reason ?? '').trim();
-  if (reason.length < 10) {
-    throw badRequest('reason_required', 'Nima uchun o‘zgarayotganini tushuntiring');
-  }
-
-  // Bir vaqtda bitta kutilayotgan taklif — aks holda qaysi biri
-  // qabul qilinishi noaniq bo'lardi (bazada ham noyob indeks bor)
-  const pending = db
-    .prepare(`SELECT id FROM deal_price_changes WHERE deal_id = ? AND status = 'pending'`)
-    .get(input.dealId);
-  if (pending) throw conflict('change_pending', 'Avvalgi taklif hali javobsiz');
-
-  const proposedBy = isPatient ? 'patient' : 'clinic';
-
-  const info = db
-    .prepare(
-      `INSERT INTO deal_price_changes (deal_id, from_uzs, to_uzs, reason, proposed_by)
-       VALUES (?, ?, ?, ?, ?)`,
-    )
-    .run(input.dealId, deal.agreedPriceUzs, price, reason.slice(0, 400), proposedBy);
-
-  // Ikkinchi tomonga xabar — javob kutilyapti
-  if (isPatient) {
-    notifyClinic(deal.clinicId, 'price_change_proposed', { dealId: input.dealId }, `/clinic/deals/${input.dealId}`);
-  } else {
-    notify(deal.patientId, 'price_change_proposed', { dealId: input.dealId }, `/deal/${input.dealId}`);
-  }
-
-  bus.publish(ch.deal(input.dealId), { type: 'deal:status', dealId: input.dealId, status: deal.status });
-
-  return getPriceChange(Number(info.lastInsertRowid));
-}
-
-/**
- * Taklifga javob.
- *
- * Qabul qilinsa bitim narxi yangilanadi. Rad etilsa eski narx qoladi —
- * bitim bekor bo'lmaydi: tomonlar yana gaplashishi mumkin.
- */
-export function respondToPriceChange(
-  changeId: number,
-  actorId: number,
-  accept: boolean,
-): DealPriceChange {
-  const change = getPriceChange(changeId);
-  if (change.status !== 'pending') throw conflict('already_decided', 'Bu taklifga javob berilgan');
-
-  const deal = getDeal(change.dealId);
-  const isPatient = deal.patientId === actorId;
-  const isClinic = clinicMemberIds(deal.clinicId).includes(actorId);
-  if (!isPatient && !isClinic) throw forbidden('Bu bitim sizniki emas');
-
-  /*
-   * Javobni faqat IKKINCHI tomon beradi. Aks holda taklif qilgan
-   * tomon o'zi qabul qilib, narxni bir tomonlama o'zgartirardi —
-   * butun jarayonning ma'nosi shunda yo'qolardi.
-   */
-  const responderSide = isPatient ? 'patient' : 'clinic';
-  if (responderSide === change.proposedBy) {
-    throw forbidden('Javobni ikkinchi tomon beradi');
-  }
-
-  tx(() => {
-    db.prepare(
-      `UPDATE deal_price_changes SET status = ?, decided_at = datetime('now') WHERE id = ?`,
-    ).run(accept ? 'accepted' : 'rejected', changeId);
-
-    if (accept) {
-      db.prepare(`UPDATE deals SET agreed_price_uzs = ? WHERE id = ?`).run(change.toUzs, change.dealId);
-    }
-  });
-
-  const target = change.proposedBy === 'patient' ? deal.patientId : null;
-  if (target) {
-    notify(target, accept ? 'price_change_accepted' : 'price_change_rejected', { dealId: change.dealId }, `/deal/${change.dealId}`);
-  } else {
-    notifyClinic(
-      deal.clinicId,
-      accept ? 'price_change_accepted' : 'price_change_rejected',
-      { dealId: change.dealId },
-      `/clinic/deals/${change.dealId}`,
-    );
-  }
-
-  bus.publish(ch.deal(change.dealId), { type: 'deal:status', dealId: change.dealId, status: deal.status });
-
-  return getPriceChange(changeId);
-}
-
-export function getPriceChange(id: number): DealPriceChange {
-  const row = db.prepare(`SELECT * FROM deal_price_changes WHERE id = ?`).get(id) as any;
-  if (!row) throw notFound('Narx taklifi topilmadi');
-  return mapPriceChange(row);
-}
-
-/** Bitim bo'yicha narx tarixi — eng yangisi birinchi. */
-export function listPriceChanges(dealId: number): DealPriceChange[] {
-  return (
-    db.prepare(`SELECT * FROM deal_price_changes WHERE deal_id = ? ORDER BY id DESC`).all(dealId) as any[]
-  ).map(mapPriceChange);
-}
-
-function mapPriceChange(r: any): DealPriceChange {
-  return {
-    id: r.id,
-    dealId: r.deal_id,
-    fromUzs: r.from_uzs,
-    toUzs: r.to_uzs,
-    reason: r.reason,
-    proposedBy: r.proposed_by,
-    status: r.status,
-    createdAt: new Date(r.created_at.replace(' ', 'T') + 'Z').toISOString(),
-    decidedAt: r.decided_at ? new Date(r.decided_at.replace(' ', 'T') + 'Z').toISOString() : null,
-  };
-}

@@ -121,6 +121,23 @@ export function RequestDetail() {
     return list;
   }, [offers, sort]);
 
+  /*
+   * Operatsiya kuni — TANLOV BILAN BIRGA belgilanadi.
+   *
+   * Ilgari bitim sanasiz ochilar, keyin alohida "Sana belgilash"
+   * bosqichi bo'lardi: bemor allaqachon tanlab bo'lgach, kunni
+   * kelishish uchun yana muzokara boshlanardi va sana to'g'ri
+   * kelmasa bitimni buzishdan boshqa yo'l qolmasdi.
+   *
+   * Endi klinika taklifida aniq kunlarni beradi, bemor esa shu
+   * yerda birini tanlaydi. Bitta kun taklif qilingan bo'lsa u
+   * darrov tanlanadi — ortiqcha bosish kerak emas.
+   */
+  const [chosenDate, setChosenDate] = useState<string | null>(null);
+  useEffect(() => {
+    setChosenDate(choosing?.proposedDates.length === 1 ? choosing.proposedDates[0] : null);
+  }, [choosing]);
+
   const toggleCompare = (offerId: number) => {
     haptic.select();
     setCompareIds((prev) =>
@@ -129,10 +146,10 @@ export function RequestDetail() {
   };
 
   const confirmChoice = async () => {
-    if (!choosing) return;
+    if (!choosing || !chosenDate) return;
     setSubmitting(true);
     try {
-      const deal = await api.chooseOffer(requestId, choosing.id);
+      const deal = await api.chooseOffer(requestId, choosing.id, chosenDate);
       haptic.strong();
       navigate(`/deal/${deal.id}`, { replace: true });
     } catch (err: any) {
@@ -390,18 +407,6 @@ export function RequestDetail() {
                 </div>
               )}
 
-              {choosing.proposedDates.length > 0 && (
-                <div>
-                  <span className="tiny">{t('offers.proposedDates')}</span>
-                  <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-                    {choosing.proposedDates.map((d) => (
-                      <span className="badge badge--neutral num" key={d}>
-                        {formatDate(d, lang)}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {choosing.note && (
                 <p className="tiny" style={{ color: 'var(--body)' }}>
@@ -413,8 +418,20 @@ export function RequestDetail() {
                 <Notice tone="warning">{choosing.aboveBudgetReason}</Notice>
               )}
             </Card>
+            {/* Operatsiya kuni — klinika bergan kunlardan */}
+            <div className="stack" style={{ gap: 'var(--s-2)' }}>
+              <strong className="tiny">{t('offers.pickDay')}</strong>
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                {choosing.proposedDates.map((d) => (
+                  <Chip key={d} active={chosenDate === d} onClick={() => setChosenDate(d)}>
+                    {formatDate(d, lang)}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
             <Notice tone="info">{t('offers.chooseText')}</Notice>
-            <Button block loading={submitting} onClick={confirmChoice}>
+            <Button block loading={submitting} disabled={!chosenDate} onClick={confirmChoice}>
               {t('common.confirm')}
             </Button>
             <Button block variant="ghost" onClick={() => setChoosing(null)}>

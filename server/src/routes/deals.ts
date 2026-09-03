@@ -3,16 +3,12 @@ import { z } from 'zod';
 import { forbidden } from '../lib/errors';
 import { PAYMENT_METHODS } from '../../../shared/types';
 import {
-  agreeSchedule,
   cancelDeal,
   confirmReceipt,
   declarePayment,
   getDeal,
   listPatientDeals,
-  listPriceChanges,
   openDispute,
-  proposePriceChange,
-  respondToPriceChange,
 } from '../services/deals';
 import { listMessages, markMessagesRead, sendMessage, unreadMessageCount } from '../services/chat';
 import { createReview } from '../services/reviews';
@@ -72,11 +68,6 @@ dealsRouter.post('/:id/messages/read', (req, res) => {
 
 /* ── Bitim bosqichlari (7.2) ── */
 
-dealsRouter.post('/:id/schedule', (req, res) => {
-  const body = z.object({ scheduledAt: z.string().min(4) }).parse(req.body);
-  res.json(agreeSchedule(Number(req.params.id), req.user!.id, clinicOf(req), body.scheduledAt));
-});
-
 /**
  * 9.1: bemor to'lovni bildiradi. Bitim YOPILMAYDI — klinikaning
  * tasdig'i kutiladi (quyidagi `/receipt`).
@@ -135,42 +126,3 @@ dealsRouter.post('/:id/review', (req, res) => {
   );
 });
 
-/* ═════════════════  Narxni o'zgartirish  ═════════════════ */
-
-/**
- * Narx o'zgarishi IKKI TOMON roziligi bilan bo'ladi.
- *
- * Bemor ham, klinika ham taklif qila oladi: tekshiruvda qo'shimcha
- * muammo chiqishi ham, aksincha bosqich kerak bo'lmay qolishi ham
- * mumkin. Javobni har doim ikkinchi tomon beradi.
- */
-dealsRouter.post('/:id/price-change', (req, res) => {
-  const body = z
-    .object({
-      newPriceUzs: z.number().int().positive(),
-      reason: z.string().trim().min(10).max(400),
-    })
-    .parse(req.body);
-
-  res.status(201).json(
-    proposePriceChange({
-      dealId: Number(req.params.id),
-      actorId: req.user!.id,
-      newPriceUzs: body.newPriceUzs,
-      reason: body.reason,
-    }),
-  );
-});
-
-dealsRouter.post('/price-change/:changeId/respond', (req, res) => {
-  const body = z.object({ accept: z.boolean() }).parse(req.body);
-  res.json(respondToPriceChange(Number(req.params.changeId), req.user!.id, body.accept));
-});
-
-/** Narx tarixi — nizoda dalil bo'ladi. */
-dealsRouter.get('/:id/price-changes', (req, res) => {
-  const deal = getDeal(Number(req.params.id));
-  const isParty = deal.patientId === req.user!.id || deal.clinicId === clinicOf(req);
-  if (!isParty) throw forbidden('Bu bitim sizga tegishli emas');
-  res.json(listPriceChanges(deal.id));
-});

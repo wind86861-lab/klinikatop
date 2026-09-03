@@ -32,7 +32,6 @@ export type OfferStatus = (typeof OFFER_STATUSES)[number];
 
 /** Bitim: TANLANGAN → KELISHILGAN → BAJARILGAN → TASDIQLANGAN | BEKOR | NIZO */
 export const DEAL_STATUSES = [
-  'SELECTED',
   'AGREED',
   /** Bemor to'lovni bildirdi — klinikaning tasdig'i kutilmoqda */
   'PAID',
@@ -46,16 +45,23 @@ export type DealStatus = (typeof DEAL_STATUSES)[number];
 /**
  * Bitim bosqichlari.
  *
+ * SANA BITIMDAN OLDIN. Ilgari bitim sanasiz ochilar ("Tanlandi"),
+ * keyin alohida "Sana belgilash" bosqichi bo'lardi — ya'ni bemor
+ * allaqachon tanlab bo'lgach, kunni kelishish uchun yana muzokara
+ * boshlanardi va sana to'g'ri kelmasa bitimni buzishdan boshqa yo'l
+ * qolmasdi. Endi klinika taklifida aniq kunlarni beradi, bemor esa
+ * tanlov bilan birga kunni belgilaydi — bitim boshidanoq kelishilgan
+ * holatda ochiladi.
+ *
  * TO'LOV OPERATSIYADAN OLDIN. Ilgari oqim teskari edi — klinika
  * "bajarildi" deb belgilar, keyin bemor to'lovni bildirar, keyin
  * klinika pulni olganini tasdiqlardi. Ya'ni ish bajarilib bo'lgandan
  * keyin ham ikkita bosqich qolar va bittasi ikkinchisini takrorlardi.
  *
  * Endi bemor avval to'laydi, klinika esa oxirida BIR marta tasdiqlaydi:
- * pul ham olindi, operatsiya ham bajarildi. Shuning uchun alohida
- * "bajarildi" bosqichi kerak emas.
+ * pul ham olindi, operatsiya ham bajarildi.
  */
-export const DEAL_STEPS: DealStatus[] = ['SELECTED', 'AGREED', 'PAID', 'CONFIRMED'];
+export const DEAL_STEPS: DealStatus[] = ['AGREED', 'PAID', 'CONFIRMED'];
 
 /** To'lov usuli — bemor bildirganda tanlaydi, ixtiyoriy. */
 export const PAYMENT_METHODS = ['cash', 'card', 'transfer'] as const;
@@ -71,7 +77,6 @@ export const REQUEST_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
 };
 
 export const DEAL_TRANSITIONS: Record<DealStatus, DealStatus[]> = {
-  SELECTED: ['AGREED', 'CANCELLED', 'DISPUTED'],
   AGREED: ['PAID', 'CANCELLED', 'DISPUTED'],
   PAID: ['CONFIRMED', 'DISPUTED'],
   CONFIRMED: ['DISPUTED'],
@@ -433,22 +438,6 @@ export interface PatientCase {
   forSelf: boolean;
 }
 
-/** Bitim narxining o'zgarishi — ikki tomon roziligi bilan. */
-export type PriceChangeStatus = 'pending' | 'accepted' | 'rejected';
-
-export interface DealPriceChange {
-  id: number;
-  dealId: number;
-  fromUzs: number;
-  toUzs: number;
-  reason: string;
-  /** Kim taklif qildi */
-  proposedBy: 'clinic' | 'patient';
-  status: PriceChangeStatus;
-  createdAt: string;
-  decidedAt: string | null;
-}
-
 export interface OfferWithClinic extends Offer {
   clinic: ClinicPublic;
   badges: OfferBadge[];
@@ -556,9 +545,6 @@ export const NOTIFICATION_TYPES = [
   /** Admin komissiya to'lovini rad etdi */
   'commission_rejected',
   /** Ikkinchi tomon narxni o'zgartirishni taklif qildi */
-  'price_change_proposed',
-  'price_change_accepted',
-  'price_change_rejected',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -913,7 +899,7 @@ export interface ClinicRevenue {
  * Quyidagi tekshiruv shu xatoni qaytarmaslik uchun: yangi holat
  * qo'shilsa va bu yerga qo'shilmasa, TypeScript xato beradi.
  */
-export const DEAL_BOARD_COLUMNS = ['SELECTED', 'AGREED', 'PAID', 'CONFIRMED'] as const;
+export const DEAL_BOARD_COLUMNS = ['AGREED', 'PAID', 'CONFIRMED'] as const;
 export type DealBoardColumn = (typeof DEAL_BOARD_COLUMNS)[number];
 
 /** Bekor qilingan va nizodagi bitim taxtada alohida ko'rsatiladi. */

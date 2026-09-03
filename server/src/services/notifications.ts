@@ -85,18 +85,6 @@ const PUSH: Record<NotificationType, Record<Lang, (p: Params) => string>> = {
     uz: () => `Bitim javob kelmagani uchun avtomatik yakunlandi. Rozi bo‘lmasangiz nizo ochishingiz mumkin.`,
     ru: () => `Сделка закрыта автоматически из-за отсутствия ответа. Если вы не согласны — откройте спор.`,
   },
-  price_change_proposed: {
-    uz: () => `Bitim narxini o‘zgartirish taklif qilindi — ko‘rib chiqing`,
-    ru: () => `Предложено изменить цену сделки — посмотрите`,
-  },
-  price_change_accepted: {
-    uz: () => `Yangi narx qabul qilindi`,
-    ru: () => `Новая цена принята`,
-  },
-  price_change_rejected: {
-    uz: () => `Yangi narx rad etildi — eski narx kuchda qoladi`,
-    ru: () => `Новая цена отклонена — действует прежняя`,
-  },
 };
 
 export function notify(

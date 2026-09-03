@@ -212,7 +212,7 @@ function assertClinicCanOffer(clinicId: number) {
 }
 
 function validateOfferBody(
-  input: Pick<CreateOfferInput, 'priceUzs' | 'includes' | 'aboveBudgetReason'>,
+  input: Pick<CreateOfferInput, 'priceUzs' | 'includes' | 'proposedDates' | 'aboveBudgetReason'>,
   budgetUzs: number | null,
 ) {
   if (!Number.isFinite(input.priceUzs) || input.priceUzs < 100_000 || input.priceUzs > 2_000_000_000) {
@@ -221,6 +221,16 @@ function validateOfferBody(
   // Shaffoflik siyosati: nima kirishi ko'rsatilmasa taklif qabul qilinmaydi
   if (cleanList(input.includes).length === 0) {
     throw badRequest('includes_required', 'Narxga nima kirishini ko‘rsating — bu majburiy');
+  }
+  /*
+   * Aniq kun ham MAJBURIY.
+   *
+   * Bemor sanani tanlov bilan birga belgilaydi (deals.ts,
+   * `chooseOffer`), ya'ni tanlash uchun unga kunlar kerak. Kunsiz
+   * taklif tanlab bo'lmaydigan taklif bo'lardi.
+   */
+  if (cleanDates(input.proposedDates).length === 0) {
+    throw badRequest('dates_required', 'Kamida bitta aniq kun taklif qiling — bemor shundan tanlaydi');
   }
 
   /*

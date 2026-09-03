@@ -1405,6 +1405,28 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    /**
+     * Sana bitimdan OLDIN — `SELECTED` bosqichi olib tashlandi.
+     *
+     * Yangi oqim: Kelishildi -> To'landi -> Bajarildi. Bemor
+     * taklifni tanlaganda klinika taklif qilgan kunlardan birini
+     * ham belgilaydi, ya'ni bitim boshidanoq kelishilgan sana bilan
+     * ochiladi va alohida "Sana belgilash" bosqichi kerak emas.
+     *
+     * Eski oqimda `SELECTED` da qolgan bitimlar `AGREED` ga
+     * o'tkaziladi. Ularda sana yo'q va shunday qoladi: uni o'ylab
+     * topib qo'yish noto'g'ri bo'lardi, taraflar chatda kelishadi.
+     *
+     * Ular yo'qolib qolmasligi MUHIM: taxta ustunlari ro'yxatida
+     * `SELECTED` endi yo'q va ko'chirilmagan bitim hech qaysi
+     * ustunga tushmasdi.
+     */
+    id: '028_no_selected_step',
+    up: (db) => {
+      db.prepare(`UPDATE deals SET status = 'AGREED' WHERE status = 'SELECTED'`).run();
+    },
+  },
 ];
 
 /**

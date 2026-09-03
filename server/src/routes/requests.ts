@@ -135,9 +135,19 @@ requestsRouter.delete('/:id', (req, res) => {
   res.status(204).end();
 });
 
-/** 7.1: taklifni tanlash → bitim yaratiladi va chat ochiladi. */
+/**
+ * 7.1: taklifni tanlash → bitim yaratiladi va chat ochiladi.
+ *
+ * Sana ham SHU YERDA belgilanadi: bemor klinika taklif qilgan
+ * kunlardan birini tanlaydi va bitim shu sana bilan ochiladi.
+ */
 requestsRouter.post('/:id/choose', (req, res) => {
-  const body = z.object({ offerId: z.number().int().positive() }).parse(req.body);
-  const deal = chooseOffer(Number(req.params.id), body.offerId, req.user!.id);
+  const body = z
+    .object({
+      offerId: z.number().int().positive(),
+      scheduledAt: z.string().min(10).max(30),
+    })
+    .parse(req.body);
+  const deal = chooseOffer(Number(req.params.id), body.offerId, req.user!.id, body.scheduledAt);
   res.status(201).json(deal);
 });

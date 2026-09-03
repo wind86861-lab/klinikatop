@@ -23,10 +23,8 @@ import {
   Avatar,
   Button,
   Card,
-  Field,
   IconChat,
   IconSend,
-  Input,
   Notice,
   Screen,
   Skeleton,
@@ -106,7 +104,7 @@ export function DealsBoard() {
  * bu yerda `PAID` yo'q edi va klinika bitim qaysi bosqichda ekanini
  * noto'g'ri ko'rardi.
  */
-const DEAL_STEPS = ['SELECTED', 'AGREED', 'PAID', 'CONFIRMED'] as const;
+const DEAL_STEPS = ['AGREED', 'PAID', 'CONFIRMED'] as const;
 
 export function ClinicDeal() {
   const { t, lang, toast } = useApp();
@@ -115,7 +113,6 @@ export function ClinicDeal() {
   const dealId = Number(id);
 
   const res = useResource(() => api.deal(dealId), [dealId]);
-  const [scheduledAt, setScheduledAt] = useState('');
   const [busy, setBusy] = useState(false);
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -191,27 +188,6 @@ export function ClinicDeal() {
               </Card>
 
               {/* Bosqich amallari — faqat shu bosqichda mumkin bo'lganlari */}
-              {deal.status === 'SELECTED' && (
-                <Card className="stack">
-                  <Field label={t('deal.setDate')}>
-                    <Input
-                      type="date"
-                      min={new Date().toISOString().slice(0, 10)}
-                      value={scheduledAt}
-                      onChange={(e) => setScheduledAt(e.target.value)}
-                    />
-                  </Field>
-                  <Button
-                    block
-                    loading={busy}
-                    disabled={!scheduledAt}
-                    onClick={() => act(() => api.schedule(dealId, scheduledAt))}
-                  >
-                    {t('deal.setDate')}
-                  </Button>
-                </Card>
-              )}
-
               {/*
                 Sana kelishildi — navbat BEMORda: u to'lovni bildiradi.
                 Klinikada bu bosqichda amal yo'q, faqat kutish.

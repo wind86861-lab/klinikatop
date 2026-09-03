@@ -127,6 +127,7 @@ export const uz = {
   'offers.noReviews': 'Hali sharh yo‘q',
   'offers.dealsTotal': 'jami {n} bitim',
   'offers.proposedDates': 'Taklif qilingan kunlar',
+  'offers.pickDay': 'Operatsiya kunini tanlang',
   'offers.deals': '{n} ta bitim',
   'offers.compare': 'Taqqoslash',
   'offers.choose': 'Bu variantni tanlash',
@@ -146,7 +147,6 @@ export const uz = {
 
   // Bitim va chat
   'deal.title': 'Bitim',
-  'deal.step.SELECTED': 'Tanlandi',
   'deal.step.AGREED': 'Kelishildi',
   'deal.step.PAID': 'To‘landi',
   'deal.step.CONFIRMED': 'Bajarildi',
@@ -154,7 +154,6 @@ export const uz = {
   'deal.status.DISPUTED': 'Nizoda',
   'deal.agreedPrice': 'Kelishilgan narx',
   'deal.scheduled': 'Operatsiya sanasi',
-  'deal.setDate': 'Sana belgilash',
   'deal.confirm': 'Tasdiqlash',
   'deal.declarePayment': 'To‘lov qildim',
   'deal.paidAmount': 'Bemor bildirgan summa',
@@ -620,7 +619,6 @@ export const uz = {
   'board.sub': 'Har bir bitim qaysi bosqichda',
   'board.empty': 'Hali bitim yo‘q',
   'board.emptyText': 'Taklifingiz tanlanganda bitim shu yerda paydo bo‘ladi.',
-  'board.col.SELECTED': 'Tanlandi',
   'board.col.AGREED': 'Sana kelishildi',
   'board.col.PAID': 'To‘landi',
   'board.col.CONFIRMED': 'Bajarildi',
