@@ -3355,6 +3355,29 @@
   border-radius: 2px;
 }
 
+/*
+ * 2FA ogohlantirishi.
+ *
+ * Bosiladigan element — u xavfsizlik bo'limiga olib boradi, ya'ni
+ * ogohlantirish faqat aytmaydi, hal qilish yo'lini ham beradi.
+ */
+.admin__mfaWarn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--warning-line, var(--line));
+  background: var(--warning-bg, #fff4e5);
+  color: var(--warning-ink, #7a4a00);
+  font: inherit;
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  padding: var(--s-3) var(--s-6);
+  cursor: pointer;
+}
+.admin__mfaWarn:hover { filter: brightness(0.97); }
+.admin__mfaWarn strong { font-weight: 700; }
+
 .admin__body {
   flex: 1;
   padding: var(--s-6);

@@ -11,10 +11,10 @@
  * raqamlarga qaraydi, qorong'i fonda esa ular bir-biriga qo'shilib
  * ketadi. Rejim tanlovi bemor ilovasida qoladi.
  */
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { EASE, spring } from '@/lib/motion';
-import { setWebToken } from '@/lib/session';
+import { setWebToken, webToken } from '@/lib/session';
 
 export interface AdminSection {
   id: string;
@@ -44,6 +44,31 @@ export function AdminShell({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const current = sections.find((s) => s.id === active) ?? sections[0];
+
+  /*
+   * 2FA holati — hisobning o'zidan.
+   *
+   * `null` bo'lsa hali ma'lum emas: shu paytda ogohlantirish
+   * ko'rsatilmaydi, aks holda har ochilishda bir lahza miltillab
+   * turardi.
+   */
+  const [mfaOff, setMfaOff] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${import.meta.env.VITE_API_URL ?? ''}/api/web/me`, {
+      headers: { authorization: `Bearer ${webToken() ?? ''}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((me) => {
+        if (alive && me) setMfaOff(me.account?.totpEnabled === false);
+      })
+      .catch(() => {
+        /* holatni bilmasak, ogohlantirmaymiz */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   /*
    * Bo'limlar guruhlanadi, lekin TARTIB o'zgarmaydi: guruh birinchi
@@ -137,6 +162,22 @@ export function AdminShell({
           */}
           <h1 className="admin__title">{current?.label}</h1>
         </header>
+
+        {/*
+          2FA yoqilmagan bo'lsa OGOHLANTIRISH turadi.
+
+          Bu hisob butun platformani boshqaradi va hozir uni faqat
+          parol himoya qiladi — parol esa o'g'irlanishi, taxmin
+          qilinishi yoki boshqa saytdan sizib chiqishi mumkin.
+          Xavfsizlik bo'limi menyuning oxirida va odam u yerga
+          kirmasa, bu holat yillab shunday qolib ketardi.
+        */}
+        {mfaOff && (
+          <button type="button" className="admin__mfaWarn" onClick={() => onChange('security')}>
+            <strong>Ikki bosqichli tasdiq yoqilmagan.</strong> Bu hisob butun platformani
+            boshqaradi — hozir uni faqat parol himoya qiladi. Yoqish uchun bosing.
+          </button>
+        )}
 
         <div className="admin__body">
           <AnimatePresence mode="wait">
