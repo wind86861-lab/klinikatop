@@ -1,6 +1,6 @@
 /** REST klienti — autentifikatsiya sarlavhalari bir joyda. */
 import { tg } from './telegram';
-import { isCabinetPath, webToken } from './session';
+import { isCabinetPath, setWebToken, webToken } from './session';
 import type { CatalogBranch } from '@/components/CatalogBrowser';
 import type {
   AdminClinicFilter,
@@ -133,6 +133,34 @@ export function authHeaders(): Record<string, string> {
 }
 
 /**
+ * Muddati o'tgan kabinet sessiyasi.
+ *
+ * Veb sessiya cheksiz emas: u 7 kundan keyin so'nadi va uni
+ * administrator ham to'xtata oladi. Ilgari bunday holatda ilova
+ * shunchaki "Xatolik" ko'rsatardi va "Qayta urinish" tugmasi hech
+ * qachon yordam bermasdi — token localStorage'da o'lik holda
+ * qolib ketardi. Odam nima qilishni bilmasdi.
+ *
+ * Endi o'lik token o'chiriladi va odam O'Z kirish sahifasiga
+ * qaytariladi.
+ *
+ * Ikki chekka holat hisobga olingan:
+ *   • bemor ilovasi (Telegram) — u yerda veb token yo'q va 401
+ *     boshqa narsani anglatadi, tegilmaydi
+ *   • kirish so'rovining o'zi — noto'g'ri parol ham 401 qaytaradi
+ *     va uni "sessiya tugadi" deb talqin qilish xato bo'lardi
+ */
+function expireWebSession(path: string): void {
+  if (path.startsWith('/web/login') || path.startsWith('/web/mfa') || path.startsWith('/web/setup')) return;
+  if (!isCabinetPath(window.location.pathname)) return;
+  if (!webToken()) return;
+
+  setWebToken(null);
+  const login = window.location.pathname.startsWith('/admin') ? '/admin/login' : '/kabinet';
+  window.location.replace(login);
+}
+
+/**
  * So'rov qancha kutiladi.
  *
  * Chegarasiz `fetch` MANGU osilib turadi: mobil tarmoq uzilganda
@@ -185,6 +213,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch {
       /* bo'sh javob */
     }
+    if (res.status === 401) expireWebSession(path);
     throw new ApiError(res.status, payload.code ?? 'unknown', payload.error ?? res.statusText, payload.details);
   }
 

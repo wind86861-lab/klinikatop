@@ -119,8 +119,19 @@ export function notify(
   // Ichki markaz — darhol (WebSocket)
   bus.publish(ch.user(userId), { type: 'notification', notification });
 
-  // Telegram push — fon rejimida, xatolik oqimni to'xtatmaydi
-  const text = PUSH[type]?.[user.lang]?.(params);
+  /*
+   * Telegram push — fon rejimida, xatolik oqimni to'xtatmaydi.
+   *
+   * Veb hisoblarga (klinika xodimi, administrator) push ketmaydi:
+   * ularning `telegram_id` si MANFIY, chunki u haqiqiy Telegram
+   * identifikatori emas, veb hisob raqamidan yasalgan (webAuth.ts).
+   * Bunday chat mavjud emas va Telegram har safar 400 "chat not
+   * found" qaytarardi — jurnal shu xabar bilan to'lib, haqiqiy
+   * yuborish xatolarini ko'rinmas qilib qo'ygan edi.
+   *
+   * Ular bildirishnomani kabinet ichida oladi (yuqoridagi shina).
+   */
+  const text = user.telegram_id > 0 ? PUSH[type]?.[user.lang]?.(params) : null;
   if (text) {
     const url = link ? `${config.telegram.webappUrl}${link.startsWith('/') ? '' : '/'}${link}` : undefined;
     void sendTelegramMessage(user.telegram_id, text, {

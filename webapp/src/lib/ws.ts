@@ -3,6 +3,7 @@
  * Uzilganda avtomatik qayta ulanadi va obunalarni tiklaydi.
  */
 import { tg } from './telegram';
+import { isCabinetPath, webToken } from './session';
 import type { ClientEvent, ServerEvent } from '@shared/types';
 
 type Listener = (event: ServerEvent) => void;
@@ -20,8 +21,24 @@ function wsUrl(): string {
   const origin = base ? new URL(base) : new URL(window.location.origin);
   const protocol = origin.protocol === 'https:' ? 'wss:' : 'ws:';
   const params = new URLSearchParams();
-  if (tg?.initData) params.set('initData', tg.initData);
+  if (!isCabinetPath(window.location.pathname) && tg?.initData) params.set('initData', tg.initData);
   return `${protocol}//${origin.host}/ws?${params}`;
+}
+
+/**
+ * Kabinet sessiyasi soketga QANDAY beriladi.
+ *
+ * Brauzerning WebSocket API'si ixtiyoriy sarlavha qo'shishga yo'l
+ * qo'ymaydi — yagona yo'l ikkinchi argument, ya'ni "subprotokol".
+ * Token manzil qatoriga qo'yilmaydi: u nginx kirish jurnaliga
+ * to'liq tushardi.
+ *
+ * Bemor ilovasida token yo'q — u `initData` bilan ulanadi.
+ */
+function wsProtocols(): string[] | undefined {
+  if (!isCabinetPath(window.location.pathname)) return undefined;
+  const token = webToken();
+  return token ? [`klinikatop.web.${token}`] : undefined;
 }
 
 function send(msg: ClientEvent) {
@@ -32,7 +49,7 @@ export function connectWs() {
   intentionallyClosed = false;
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
 
-  socket = new WebSocket(wsUrl());
+  socket = new WebSocket(wsUrl(), wsProtocols());
 
   socket.onopen = () => {
     retry = 0;

@@ -19,7 +19,8 @@
     "grant": "npm run grant --workspace=server --",
     "seed:demo": "npm run seed:demo --workspace=server"
   },
+  "_engines_note": "Node 18 — serverda ham aynan shu. better-sqlite3 mahalliy modul: u qaysi Node uchun qurilgan bo'lsa, faqat o'shanda ishlaydi. Boshqa versiyada testlar 'segmentation fault' bilan yiqiladi va sabab ko'rinmaydi.",
   "engines": {
-    "node": ">=18"
+    "node": ">=18 <19"
   }
 }

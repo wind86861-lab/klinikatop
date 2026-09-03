@@ -123,4 +123,9 @@ export function startScheduler() {
 export function stopScheduler() {
   if (timer) clearInterval(timer);
   timer = null;
+  // banisa taymeri ham to'xtasin — aks holda `startScheduler` qayta
+  // chaqirilganda ikkinchi nusxa qo'shilib, sinxronizatsiya ikki
+  // barobar tez-tez ketardi
+  if (banisaTimer) clearInterval(banisaTimer);
+  banisaTimer = null;
 }

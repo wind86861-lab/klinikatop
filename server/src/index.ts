@@ -8,8 +8,8 @@ import { config, isProd } from './lib/config';
 import { AppError } from './lib/errors';
 import { migrate } from './db';
 import { apiRouter } from './routes';
-import { attachWebSocket } from './services/ws';
-import { startScheduler } from './services/scheduler';
+import { attachWebSocket, closeWebSocket } from './services/ws';
+import { startScheduler, stopScheduler } from './services/scheduler';
 import { aiProvider } from './services/aiProvider';
 
 migrate();
@@ -119,10 +119,37 @@ server.listen(config.port, config.host, () => {
   console.log(`[server] AI: ${aiProvider()?.name ?? 'lokal heuristika (API kaliti yo‘q)'}`);
 });
 
+/**
+ * Toza to'xtash.
+ *
+ * `server.close()` faqat OCHIQ ulanishlar tugagach chaqiriladi.
+ * WebSocket ulanishlari esa o'zi yopilmaydi va `keep-alive` HTTP
+ * soketlari ham osilib turadi — shuning uchun ilgari to'xtatish
+ * har safar 5 soniyalik taymerga borib `exit(1)` bilan tugardi.
+ * systemd har qayta ishga tushirishni nosozlik deb yozib qo'yardi.
+ *
+ * Endi tartib aniq: fon vazifalari to'xtaydi, soketlar yopiladi,
+ * keyin server o'zi yopiladi. Taymer o'z joyida qoladi, lekin endi
+ * u haqiqiy nosozlik belgisi — normal holatda ishga tushmaydi.
+ */
+let shuttingDown = false;
 const shutdown = () => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
   console.log('\n[server] to‘xtatilmoqda…');
+  stopScheduler();
+  closeWebSocket();
+
   server.close(() => process.exit(0));
-  setTimeout(() => process.exit(1), 5000).unref();
+
+  // Bo'sh `keep-alive` soketlari ulanishni bekorga ushlab turmasin
+  server.closeAllConnections?.();
+
+  setTimeout(() => {
+    console.error('[server] toza to‘xtab bo‘lmadi — majburiy chiqish');
+    process.exit(1);
+  }, 5000).unref();
 };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);

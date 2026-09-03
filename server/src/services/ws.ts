@@ -12,6 +12,7 @@ import { config } from '../lib/config';
 import { mapUser } from '../lib/mappers';
 import { verifyInitData } from '../lib/telegram';
 import { upsertUser } from '../middleware/auth';
+import { personFor, resolveSession } from './webAuth';
 import { bus, ch } from './events';
 import type { ClientEvent, ServerEvent, User } from '../../../shared/types';
 
@@ -24,9 +25,46 @@ interface Client {
 
 const clients = new Set<Client>();
 
+/**
+ * Veb sessiya tokeni shu prefiks bilan `Sec-WebSocket-Protocol` da keladi.
+ * Prefiks kerak: sarlavhada boshqa protokol nomlari ham bo'lishi mumkin.
+ */
+const TOKEN_PROTOCOL_PREFIX = 'klinikatop.web.';
+
+/**
+ * Soketni kim ochdi.
+ *
+ * IKKI yo'l bor, chunki platformada ikki xil sessiya bor:
+ *
+ *   bemor          → Telegram `initData` (manzil qatorida)
+ *   veb kabinet     → sessiya tokeni (`Sec-WebSocket-Protocol` sarlavhasida)
+ *
+ * Ilgari faqat birinchisi qabul qilinardi. Natijada klinika kabineti va
+ * admin paneli brauzerda soketni ocholmasdi: server uni 4401 bilan
+ * yopar, mijoz esa qayta-qayta ulanishga urinardi. Ya'ni kabinetda
+ * REAL VAQT umuman ishlamasdi — yangi so'rov, chat xabari va
+ * bildirishnoma sahifani qo'lda yangilamaguncha ko'rinmasdi. Takliflar
+ * kechikishining sabablaridan biri aynan shu edi.
+ *
+ * Token nega sarlavhada, manzilda emas: manzil qatori nginx kirish
+ * jurnaliga to'liq yoziladi va sessiya tokeni o'sha yerda ochiq
+ * qolardi. Brauzerning WebSocket API'si esa ixtiyoriy sarlavha
+ * qo'shishga yo'l qo'ymaydi — yagona yo'l `Sec-WebSocket-Protocol`.
+ */
 function authenticateSocket(req: IncomingMessage): User | null {
+  const offered = String(req.headers['sec-websocket-protocol'] ?? '')
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const bearer = offered.find((p) => p.startsWith(TOKEN_PROTOCOL_PREFIX));
+  if (bearer) {
+    const session = resolveSession(bearer.slice(TOKEN_PROTOCOL_PREFIX.length));
+    if (!session) return null;
+    return personFor(session.user.id);
+  }
+
   const url = new URL(req.url ?? '/', 'http://localhost');
-  // HTTP bilan bir xil qoida: faqat imzolangan initData. Imzosiz yo'l yo'q.
   const initData = url.searchParams.get('initData') ?? '';
   if (!initData || !config.telegram.botToken) return null;
 
@@ -69,8 +107,26 @@ function send(client: Client, event: ServerEvent) {
   }
 }
 
+/** Ochiq soketlarni yopish uchun — `closeWebSocket()` shuni ishlatadi. */
+let wssRef: WebSocketServer | null = null;
+
 export function attachWebSocket(server: Server) {
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({
+    server,
+    path: '/ws',
+    /*
+     * Taklif qilingan protokolni qaytarib beramiz.
+     *
+     * Brauzer `Sec-WebSocket-Protocol` yuborsa, server javobida ham
+     * o'shani kutadi — aks holda qo'l berishni O'ZI bekor qiladi va
+     * ulanish tokendan qat'i nazar uzilardi.
+     */
+    handleProtocols: (protocols) => {
+      for (const p of protocols) if (p.startsWith(TOKEN_PROTOCOL_PREFIX)) return p;
+      return false;
+    },
+  });
+  wssRef = wss;
 
   wss.on('connection', (socket, req) => {
     const user = authenticateSocket(req);
@@ -150,3 +206,28 @@ export function attachWebSocket(server: Server) {
 }
 
 export const connectedCount = () => clients.size;
+
+/**
+ * Ochiq soketlarni yopish — server to'xtayotganda.
+ *
+ * Busiz `server.close()` hech qachon tugamasdi: u BARCHA ulanishlar
+ * yopilishini kutadi, WebSocket esa o'zi yopilmaydi. Natijada har
+ * qayta ishga tushirish 5 soniyalik taymerga borib, `exit(1)` bilan
+ * tugardi — systemd buni nosozlik deb yozardi va ulangan brauzerlar
+ * uzilishni "server yiqildi" deb ko'rardi.
+ *
+ * 1001 "going away" — brauzer buni kutilgan uzilish deb tushunadi va
+ * darhol qayta ulanishga urinadi.
+ */
+export function closeWebSocket(): void {
+  for (const client of clients) {
+    try {
+      client.socket.close(1001, 'server restarting');
+    } catch {
+      /* soket allaqachon yopilgan bo'lishi mumkin */
+    }
+  }
+  clients.clear();
+  wssRef?.close();
+  wssRef = null;
+}
