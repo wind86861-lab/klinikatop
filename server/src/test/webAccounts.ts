@@ -23,7 +23,7 @@ function provision(phone: string, fullName: string, level: 'full' | 'clinic_admi
 
   const { setupToken } = createAccount({ phone, fullName, level, clinicId });
   completeSetup(setupToken, PASSWORD);
-  return login(phone, PASSWORD, '127.0.0.1', 'test').token;
+  return login(phone, PASSWORD, '127.0.0.1', 'test', level === 'full' ? 'admin' : 'clinic').token;
 }
 
 /** Test klinikasi — bo'lmasa yaratiladi. */

@@ -4,7 +4,7 @@ import { config } from '../lib/config';
 import { forbidden, unauthorized } from '../lib/errors';
 import { mapUser } from '../lib/mappers';
 import { verifyInitData, type TelegramUser } from '../lib/telegram';
-import { personFor, resolveSession } from '../services/webAuth';
+import { personFor, resolveSession, type LoginScope } from '../services/webAuth';
 import type { Role, User } from '../../../shared/types';
 
 declare global {
@@ -13,7 +13,14 @@ declare global {
     interface Request {
       user?: User;
       /** Veb sessiya orqali kirilganda — klinika va admin uchun */
-      web?: { id: number; phone: string; level: string; mfaPassed: boolean };
+      web?: {
+        id: number;
+        phone: string;
+        level: string;
+        mfaPassed: boolean;
+        /** Sessiya qaysi kirish sahifasidan ochilgan */
+        scope: LoginScope;
+      };
     }
   }
 }
@@ -126,6 +133,7 @@ export function resolveWebUser(req: Request): { user: User; web: NonNullable<Req
       phone: session.user.phone,
       level: session.user.level,
       mfaPassed: session.mfaPassed,
+      scope: session.scope,
     },
   };
 }
@@ -185,6 +193,35 @@ export function requireWeb(req: Request, _res: Response, next: NextFunction) {
   if (!req.web) return next(forbidden('Bu bo‘limga veb kabinet orqali kiriladi'));
   if (!req.web.mfaPassed) return next(forbidden('Ikki bosqichli tasdiqni yakunlang'));
   next();
+}
+
+/**
+ * Sessiya KERAKLI ESHIKDAN ochilganmi.
+ *
+ * Rol tekshiruvi yetarli emas edi va muammoning o'zagi shu: rol
+ * hisobga biriktirilgan, sessiyaga emas. Ya'ni administrator qaysi
+ * sahifadan kirgan bo'lsa ham — hatto `/api/web/login` ga qo'lda
+ * so'rov yuborib bo'lsa ham — bir xil huquqqa ega sessiya olardi.
+ * Eshikni ajratish faqat ko'rinishda qolardi.
+ *
+ * Endi eshik sessiyaga yozilgan va shu yerda majburlanadi: admin
+ * bo'limiga FAQAT admin sahifasidan ochilgan sessiya kiradi,
+ * kabinetga esa faqat kabinet sessiyasi.
+ */
+export function requireDoor(scope: LoginScope) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.web) return next(forbidden('Bu bo‘limga veb kabinet orqali kiriladi'));
+    if (req.web.scope !== scope) {
+      return next(
+        forbidden(
+          scope === 'admin'
+            ? 'Bu bo‘limga administrator sahifasidan kirish kerak: /admin/login'
+            : 'Bu bo‘limga klinika kabinetidan kirish kerak: /kabinet',
+        ),
+      );
+    }
+    next();
+  };
 }
 
 export function requireRole(...roles: Role[]) {

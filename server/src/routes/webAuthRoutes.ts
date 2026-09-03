@@ -75,12 +75,13 @@ const loginSchema = z.object({
   login: z.string().trim().min(4).max(160),
   password: z.string().min(1).max(200),
   /**
-   * Qaysi kirish sahifasidan kelindi.
+   * Qaysi kirish sahifasidan kelindi — MAJBURIY.
    *
-   * Ixtiyoriy: keshda eski qobiq qolgan brauzer uni yubormaydi va
-   * o'shanda eski xulq saqlanadi (webAuth.ts izohiga qarang).
+   * Ilgari ixtiyoriy edi. Bu esa himoyani ma'nosiz qilardi: eshikni
+   * aytmasdan yuborilgan so'rov tekshiruvni butunlay chetlab
+   * o'tardi. Endi eshiksiz so'rov qabul qilinmaydi.
    */
-  scope: z.enum(['clinic', 'admin']).optional(),
+  scope: z.enum(['clinic', 'admin']),
 });
 
 /*

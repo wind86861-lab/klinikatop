@@ -36,7 +36,16 @@ import { Blocked, NotFound, OfflineBanner, Splash } from '@/screens/SystemStates
 import { RequireRole } from '@/components/RequireRole';
 import type { Role } from '@shared/types';
 
-const CLINIC_ROLES: Role[] = ['clinic_admin', 'clinic_operator', 'admin'];
+/*
+ * Kabinet ekranlariga administrator KIRMAYDI.
+ *
+ * Ilgari bu ro'yxatda `admin` ham bor edi. Amalda u baribir ish
+ * bermasdi (adminda klinika yo'q, `needsClinic` uni qaytarardi),
+ * lekin ikki dunyo o'rtasidagi chegarani xiralashtirardi. Server
+ * ham endi admin sessiyasini `/api/clinic` ga qo'ymaydi — mijoz
+ * tomondagi ro'yxat shunga mos bo'lishi kerak.
+ */
+const CLINIC_ROLES: Role[] = ['clinic_admin', 'clinic_operator'];
 const ADMIN_ROLES: Role[] = ['admin'];
 
 export function WebApp() {

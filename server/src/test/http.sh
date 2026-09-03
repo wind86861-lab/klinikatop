@@ -322,7 +322,7 @@ check "takroriy raqam rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code
 # Xodim parolini qo'yib kabinetga kiradi, lekin admin amallariga yo'l yo'q
 curl -s "${JSON[@]}" -X POST "$API/web/setup" -d "{\"token\":\"$OP\",\"password\":\"xodim-paroli-2026\"}" > /dev/null
 OP_TOKEN=$(curl -s "${JSON[@]}" -X POST "$API/web/login" \
-  -d "{\"login\":\"$OP_PHONE\",\"password\":\"xodim-paroli-2026\"}" | jqv '.token')
+  -d "{\"login\":\"$OP_PHONE\",\"password\":\"xodim-paroli-2026\",\"scope\":\"clinic\"}" | jqv '.token')
 OPH=(-H "authorization: Bearer $OP_TOKEN")
 code=$(status "${OPH[@]}" "$API/clinic")
 check "xodim kabinetga kirdi (200)" "$([ "$code" = 200 ] && echo 1)" "$code"
@@ -710,7 +710,7 @@ code=$(status "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/applications/$APP/app
 check "ikkinchi marta tasdiqlab bo'lmaydi (409)" "$([ "$code" = 409 ] && echo 1)" "$code"
 
 # Parol o'rnatilmaguncha kirish mumkin emas
-code=$(status "${JSON[@]}" -X POST "$API/web/login" -d "{\"login\":\"$PHONE\",\"password\":\"hech-qanday-parol\"}")
+code=$(status "${JSON[@]}" -X POST "$API/web/login" -d "{\"login\":\"$PHONE\",\"password\":\"hech-qanday-parol\",\"scope\":\"clinic\"}")
 check "parolsiz hisobga kirib bo'lmaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
 # Qisqa parol rad etiladi
@@ -726,18 +726,18 @@ code=$(status "${JSON[@]}" -X POST "$API/web/setup" -d "{\"token\":\"$SETUP\",\"
 check "havola ikkinchi marta ishlamaydi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
 # ── Kirish ──
-NEW_TOKEN=$(curl -s "${JSON[@]}" -X POST "$API/web/login" -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\"}" | jqv '.token')
+NEW_TOKEN=$(curl -s "${JSON[@]}" -X POST "$API/web/login" -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\",\"scope\":\"clinic\"}" | jqv '.token')
 check "yangi klinika kabinetga kirdi" "$([ -n "$NEW_TOKEN" ] && echo 1)" ""
 
-code=$(status "${JSON[@]}" -X POST "$API/web/login" -d "{\"login\":\"$PHONE\",\"password\":\"boshqa-parol-butunlay\"}")
+code=$(status "${JSON[@]}" -X POST "$API/web/login" -d "{\"login\":\"$PHONE\",\"password\":\"boshqa-parol-butunlay\",\"scope\":\"clinic\"}")
 check "noto'g'ri parol rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
-code=$(status "${JSON[@]}" -X POST "$API/web/login" -d "{\"login\":\"998900000777\",\"password\":\"$PWD_NEW\"}")
+code=$(status "${JSON[@]}" -X POST "$API/web/login" -d "{\"login\":\"998900000777\",\"password\":\"$PWD_NEW\",\"scope\":\"clinic\"}")
 check "mavjud bo'lmagan hisob ham 401 (mavjudligi oshkor bo'lmaydi)" "$([ "$code" = 401 ] && echo 1)" "$code"
 
 # Raqam boshqa shaklda yozilsa ham bir xil hisobga tushadi
 ALT=$(curl -s "${JSON[@]}" -X POST "$API/web/login" \
-  -d "{\"login\":\"+${PHONE}\",\"password\":\"$PWD_NEW\"}" | jqv '.token')
+  -d "{\"login\":\"+${PHONE}\",\"password\":\"$PWD_NEW\",\"scope\":\"clinic\"}" | jqv '.token')
 check "raqam boshqa shaklda ham ishlaydi" "$([ -n "$ALT" ] && echo 1)" ""
 
 # ── Kirish eshiklari: klinika va admin alohida ──
@@ -760,6 +760,25 @@ done
 DOOR=$(curl -s "${JSON[@]}" -X POST "$API/web/login" \
   -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\",\"scope\":\"clinic\"}" | jqv '.token')
 check "noto'g'ri eshik hisobni qulflamaydi" "$([ -n "$DOOR" ] && echo 1)" ""
+
+# Eshiksiz so'rov — himoyani chetlab o'tishning eng oson yo'li edi
+code=$(status "${JSON[@]}" -X POST "$API/web/login" \
+  -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\"}")
+check "eshiksiz kirish so'rovi rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# ── Eshik SESSIYADA ham amal qiladi ──
+#
+# Eng muhim tekshiruv: kabinet eshigidan ochilgan sessiya admin
+# bo'limiga KIRMAYDI, hatto rol to'g'ri bo'lsa ham.
+DOORH=(-H "authorization: Bearer $DOOR")
+code=$(status "${DOORH[@]}" "$API/admin/applications")
+check "kabinet sessiyasi admin bo'limiga kirmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+code=$(status "${DOORH[@]}" "$API/clinic/dashboard")
+check "kabinet sessiyasi o'z bo'limiga kiradi (200)" "$([ "$code" = 200 ] && echo 1)" "$code"
+
+# Teskarisi ham: admin sessiyasi klinika kabinetida ish ko'rmaydi
+code=$(status "${MOD[@]}" "$API/clinic/dashboard")
+check "admin sessiyasi kabinetga kirmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
 
 # Telegram ko'prigi: imzosiz ochilmaydi
 code=$(status "${JSON[@]}" -X POST "$API/web/telegram" -d '{}')
@@ -837,7 +856,7 @@ echo "17. Hisob xavfsizligi"
 
 # NEW_TOKEN yuqorida chiqish sinovida yopilgan — yangi sessiya ochamiz
 SEC_TOKEN=$(curl -s "${JSON[@]}" -X POST "$API/web/login" \
-  -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\"}" | jqv '.token')
+  -d "{\"login\":\"$PHONE\",\"password\":\"$PWD_NEW\",\"scope\":\"clinic\"}" | jqv '.token')
 SEC=(-H "authorization: Bearer $SEC_TOKEN")
 check "yangi sessiya ochildi" "$([ -n "$SEC_TOKEN" ] && echo 1)" ""
 

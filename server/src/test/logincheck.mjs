@@ -146,6 +146,23 @@ await go('/kabinet');
 await fill(CLINIC_PHONE);
 check('klinika o‘z eshigidan kirdi', (await where()).startsWith('/clinic'), await where());
 
+/*
+ * Eng muhim tekshiruv.
+ *
+ * Kabinetdan kirgan odam manzil qatoriga `/admin` yozsa, admin
+ * paneli OCHILMASLIGI kerak. Ilgari eshik faqat kirish paytida va
+ * faqat mijoz aytsa tekshirilardi — ya'ni bu himoya emas, kelishuv
+ * edi. Endi eshik sessiyaga yozilgan va server har so'rovda
+ * majburlaydi.
+ */
+await go('/admin');
+const adminBody = await evalx(`document.body.innerText.slice(0, 400)`);
+check(
+  'kabinet sessiyasi admin paneliga kirmaydi',
+  (await where()) !== '/admin' && !/moderator|ariza|admin panel/i.test(adminBody),
+  await where(),
+);
+
 console.log(failed ? `\n${failed} ta yiqildi` : '\nHammasi o‘tdi');
 ws.close();
 process.exitCode = failed ? 1 : 0;

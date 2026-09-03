@@ -1372,6 +1372,39 @@ export const MIGRATIONS: Migration[] = [
       db.prepare(`UPDATE deals SET status = 'AGREED' WHERE status = 'PERFORMED'`).run();
     },
   },
+  {
+    /**
+     * Sessiya QAYSI ESHIKDAN ochilganini eslab qoladi.
+     *
+     * Ilgari eshik faqat kirish paytida tekshirilardi va faqat mijoz
+     * o'zi aytsa. Ya'ni bu himoya emas, kelishuv edi: kimdir
+     * `/api/web/login` ga `scope` siz so'rov yuborsa, administrator
+     * sessiyasi bemalol ochilardi. Sessiyaning o'zida esa u qaysi
+     * eshikdan kelgani haqida hech qanday belgi yo'q edi — demak
+     * keyingi har bir so'rovda ham tekshirib bo'lmasdi.
+     *
+     * Endi eshik sessiyaga YOZILADI va har so'rovda majburlanadi:
+     * admin bo'limiga faqat admin eshigidan ochilgan sessiya kiradi.
+     *
+     * Mavjud sessiyalar hisob darajasidan kelib chiqib to'ldiriladi —
+     * hech kim kirishdan chiqarib yuborilmaydi.
+     */
+    id: '027_session_scope',
+    up: (db) => {
+      const cols = db.prepare(`PRAGMA table_info(admin_sessions)`).all() as { name: string }[];
+      if (cols.some((c) => c.name === 'scope')) return;
+
+      db.exec(`ALTER TABLE admin_sessions ADD COLUMN scope TEXT`);
+      db.exec(`
+        UPDATE admin_sessions
+           SET scope = (
+             SELECT CASE WHEN u.level = 'full' THEN 'admin' ELSE 'clinic' END
+               FROM admin_users u WHERE u.id = admin_sessions.admin_id
+           )
+         WHERE scope IS NULL
+      `);
+    },
+  },
 ];
 
 /**

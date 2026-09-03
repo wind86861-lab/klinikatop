@@ -975,7 +975,7 @@ async function main() {
   // Bemor roli bu qatorga tegmaydi
   check('bemor roli berilmadi', !person.roles.includes('patient'), person?.roles);
 
-  throws('parol o‘rnatmasdan kirib bo‘lmaydi', () => webAuth.login('998901112233', 'nimadir'));
+  throws('parol o‘rnatmasdan kirib bo‘lmaydi', () => webAuth.login('998901112233', 'nimadir', null, null, 'clinic'));
   throws('qisqa parol rad etiladi', () => webAuth.completeSetup(acc.setupToken, 'qisqa'), 'weak_password');
   throws(
     'faqat raqamdan iborat parol rad etiladi',
@@ -987,7 +987,7 @@ async function main() {
   throws('sozlash havolasi bir martalik', () => webAuth.completeSetup(acc.setupToken, 'boshqa-parol-2026'));
 
   // Raqam qanday yozilishidan qat'i nazar bir xil hisobga tushadi
-  const session = webAuth.login('+998 90 111 22 33', 'yaxshi-parol-2026', '1.2.3.4', 'test');
+  const session = webAuth.login('+998 90 111 22 33', 'yaxshi-parol-2026', '1.2.3.4', 'test', 'clinic');
   check('kirish muvaffaqiyatli', typeof session.token === 'string');
   check('2FA yoqilmagan — sessiya darhol to‘liq', session.mfaRequired === false);
 
@@ -1002,12 +1002,12 @@ async function main() {
   // Ketma-ket xato urinishlar hisobni qulflaydi
   for (let i = 0; i < 5; i++) {
     try {
-      webAuth.login('998901112233', 'notogri-parol');
+      webAuth.login('998901112233', 'notogri-parol', null, null, 'clinic');
     } catch {
       /* kutilgan */
     }
   }
-  throws('5 xatodan keyin hisob qulflandi', () => webAuth.login('998901112233', 'yaxshi-parol-2026'));
+  throws('5 xatodan keyin hisob qulflandi', () => webAuth.login('998901112233', 'yaxshi-parol-2026', null, null, 'clinic'));
 
   throws(
     'bir raqam ikki marta ishlatilmaydi',
@@ -1054,7 +1054,7 @@ async function main() {
 
   // 2FA yoqilgach parol YETARLI EMAS: sessiya to'liq bo'lmaydi
   webAuth.completeSetup(adminAcc.setupToken, 'admin-paroli-2026');
-  const adminSession = webAuth.login('998900000001', 'admin-paroli-2026');
+  const adminSession = webAuth.login('998900000001', 'admin-paroli-2026', null, null, 'admin');
   check('2FA yoqilgach kod talab qilinadi', adminSession.mfaRequired === true);
   check('sessiya hali to‘liq emas', webAuth.resolveSession(adminSession.token).mfaPassed === false);
 
@@ -1090,10 +1090,11 @@ async function main() {
     webAuth.login('998900000001', 'admin-paroli-2026', null, null, 'admin').mfaRequired === true,
   );
 
-  // Eshik berilmasa tekshirilmaydi — keshda eski qobiq qolgan brauzer uchun
-  check(
-    'eshik ko‘rsatilmasa eski xulq saqlanadi',
-    webAuth.login('998900000077', 'klinika-eshigi-2026').user.id === doorAcc.user.id,
+  // Eshiksiz kirib bo'lmaydi — bu himoyani chetlab o'tishning eng oson yo'li edi
+  throws(
+    'eshiksiz so‘rov qabul qilinmaydi',
+    () => (webAuth.login as any)('998900000077', 'klinika-eshigi-2026'),
+    'forbidden',
   );
 
   /*
@@ -1112,6 +1113,36 @@ async function main() {
   check(
     'noto‘g‘ri eshik hisobni qulflamaydi',
     webAuth.login('998900000077', 'klinika-eshigi-2026', null, null, 'clinic').user.id === doorAcc.user.id,
+  );
+
+  /* ── Eshik SESSIYAGA yoziladi va keyin ham amal qiladi ── */
+
+  const clinicDoor = webAuth.login('998900000077', 'klinika-eshigi-2026', null, null, 'clinic');
+  check(
+    'kabinet sessiyasi kabinet eshigini eslab qoladi',
+    webAuth.resolveSession(clinicDoor.token).scope === 'clinic',
+    webAuth.resolveSession(clinicDoor.token).scope,
+  );
+
+  /*
+   * 2FA yoqilgan admin hisobi bilan tekshiramiz: sessiya to'liq
+   * bo'lmasa ham eshik yozilgan bo'lishi kerak.
+   */
+  const adminDoor = webAuth.login('998900000001', 'admin-paroli-2026', null, null, 'admin');
+  check(
+    'admin sessiyasi admin eshigini eslab qoladi',
+    webAuth.resolveSession(adminDoor.token).scope === 'admin',
+    webAuth.resolveSession(adminDoor.token).scope,
+  );
+
+  /*
+   * Telegram ko'prigi administrator sessiyasini HECH QACHON bermaydi.
+   * Bu yo'l parol so'ramaydi — butun platformani boshqaradigan hisob
+   * uchun raqam tasdig'i yetarli asos emas.
+   */
+  check(
+    'Telegram ko‘prigi admin hisobiga sessiya bermaydi',
+    webAuth.loginByVerifiedPhone('998900000001', null, null) === null,
   );
 
 
@@ -1407,8 +1438,8 @@ async function main() {
   });
   webAuth.completeSetup(secAcc.setupToken, 'birinchi-parol-2026');
 
-  const s1 = webAuth.login('998907776655', 'birinchi-parol-2026', '1.1.1.1', 'kompyuter');
-  const s2 = webAuth.login('998907776655', 'birinchi-parol-2026', '2.2.2.2', 'telefon');
+  const s1 = webAuth.login('998907776655', 'birinchi-parol-2026', '1.1.1.1', 'kompyuter', 'clinic');
+  const s2 = webAuth.login('998907776655', 'birinchi-parol-2026', '2.2.2.2', 'telefon', 'clinic');
   check('ikki sessiya ochildi', webAuth.listSessions(secAcc.user.id, s1.token).length === 2);
   check('joriy sessiya belgilangan',
     webAuth.listSessions(secAcc.user.id, s1.token).filter((r: any) => r.current).length === 1);
@@ -1439,9 +1470,9 @@ async function main() {
   check('boshqa sessiya yopildi', webAuth.resolveSession(s2.token) === null);
   check('joriy sessiya ochiq qoldi', webAuth.resolveSession(s1.token) !== null);
 
-  throws('eski parol endi ishlamaydi', () => webAuth.login('998907776655', 'birinchi-parol-2026'));
+  throws('eski parol endi ishlamaydi', () => webAuth.login('998907776655', 'birinchi-parol-2026', null, null, 'clinic'));
   check('yangi parol ishlaydi',
-    Boolean(webAuth.login('998907776655', 'ikkinchi-parol-2026', null, null).token));
+    Boolean(webAuth.login('998907776655', 'ikkinchi-parol-2026', null, null, 'clinic').token));
 
   /* ── 2FA ── */
 
@@ -1460,7 +1491,7 @@ async function main() {
   const validCode = totpFor(totpSetup.secret);
   webAuth.confirmTotp(secAcc.user.id, validCode);
 
-  const afterTotp = webAuth.login('998907776655', 'ikkinchi-parol-2026', null, null);
+  const afterTotp = webAuth.login('998907776655', 'ikkinchi-parol-2026', null, null, 'clinic');
   check('2FA yoqilgach kirish yarim qoladi', afterTotp.mfaRequired === true);
   check('yarim sessiya to‘liq emas', webAuth.resolveSession(afterTotp.token)?.mfaPassed === false);
 
@@ -1483,7 +1514,7 @@ async function main() {
   throws('parolsiz 2FA o‘chirilmaydi', () => webAuth.disableTotp(secAcc.user.id, 'notogri'));
   webAuth.disableTotp(secAcc.user.id, 'ikkinchi-parol-2026');
   check('2FA o‘chirildi',
-    webAuth.login('998907776655', 'ikkinchi-parol-2026', null, null).mfaRequired === false);
+    webAuth.login('998907776655', 'ikkinchi-parol-2026', null, null, 'clinic').mfaRequired === false);
 
 
   /* ═════ 18. Profil ustiga yozilmasligi ═════ */

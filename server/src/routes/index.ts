@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, requireWeb } from '../middleware/auth';
+import { authenticate, requireDoor, requireWeb } from '../middleware/auth';
 import { catalogRouter } from './catalog';
 import { meRouter } from './me';
 import { requestsRouter } from './requests';
@@ -60,5 +60,13 @@ apiRouter.use('/deals', limits.write, dealsRouter);
  * uning qatoriga qandaydir yo'l bilan rol yozilgan bo'lsa ham. Bemor
  * ilovasi va ish kabineti ikki alohida dunyo.
  */
-apiRouter.use('/clinic', requireWeb, clinicRouter);
-apiRouter.use('/admin', requireWeb, adminRouter);
+/*
+ * ESHIK ham majburlanadi, rol bilan birga.
+ *
+ * Rol hisobga biriktirilgan, sessiyaga emas — shuning uchun yolg'iz
+ * rol tekshiruvi "admin qaysi sahifadan kirdi" degan savolga javob
+ * bermasdi. Endi sessiyaning o'zi qaysi eshikdan ochilganini biladi
+ * va admin bo'limiga faqat admin sessiyasi o'tadi.
+ */
+apiRouter.use('/clinic', requireWeb, requireDoor('clinic'), clinicRouter);
+apiRouter.use('/admin', requireWeb, requireDoor('admin'), adminRouter);

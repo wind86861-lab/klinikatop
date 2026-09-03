@@ -237,6 +237,8 @@ export function completeSetup(token: string, password: string): WebUser {
 const MAX_FAILED = 5;
 const LOCK_MINUTES = 15;
 const SESSION_DAYS = 7;
+/** Administrator sessiyasi — kabinetnikidan ancha qisqa. */
+const ADMIN_SESSION_HOURS = 12;
 
 /** Sessiya tokeni bazada hash bilan saqlanadi. */
 function tokenHash(token: string): string {
@@ -256,11 +258,13 @@ export function login(
   ip: string | null,
   userAgent: string | null,
   /*
-   * Qaysi kirish sahifasidan kelgani. Berilmasa tekshirilmaydi —
-   * eski qobiq keshda qolgan brauzer uni yubormaydi va uni
-   * kabinetidan qamab qo'yish noto'g'ri bo'lardi.
+   * Qaysi kirish sahifasidan kelgani — MAJBURIY.
+   *
+   * Ilgari ixtiyoriy edi va bu himoyani ma'nosiz qilardi: `scope`
+   * siz so'rov yuborgan har kim tekshiruvni chetlab o'ta olardi.
+   * Endi eshikni aytmasdan kirib bo'lmaydi.
    */
-  scope?: LoginScope,
+  scope: LoginScope,
 ): LoginResult {
   /*
    * Kirish raqam bo'yicha. Email ham qabul qilinadi: eski hisoblar
@@ -306,20 +310,30 @@ export function login(
   }
 
   /*
-   * Sahifa tekshiruvi shu yerda — parol to'g'ri, lekin sessiya hali
+   * Eshik tekshiruvi shu yerda — parol to'g'ri, lekin sessiya hali
    * berilmagan. Xato urinishlar hisoblagichi allaqachon nolga tushdi:
    * bu parol xatosi emas, shunchaki noto'g'ri eshik.
    */
   db.prepare(`UPDATE admin_users SET failed_count = 0, locked_until = NULL WHERE id = ?`).run(row.id);
 
-  if (scope && SCOPE_OF[row.level as WebLevel] !== scope) {
+  if (SCOPE_OF[row.level as WebLevel] !== scope) {
     throw forbidden(WRONG_SCOPE[scope]);
   }
 
   db.prepare(`UPDATE admin_users SET last_login_at = datetime('now') WHERE id = ?`).run(row.id);
 
   const token = crypto.randomBytes(32).toString('base64url');
-  const expires = new Date(Date.now() + SESSION_DAYS * 24 * 3600_000)
+
+  /*
+   * Administrator sessiyasi QISQAROQ.
+   *
+   * Klinika kabineti kun bo'yi ochiq turadi va uzoq muddat u yerda
+   * ish qulayligi masalasi. Admin panelida esa butun platforma
+   * boshqariladi: ochiq qolgan brauzer bir hafta emas, bir kun
+   * ham ochiq turmasligi kerak.
+   */
+  const ttlHours = scope === 'admin' ? ADMIN_SESSION_HOURS : SESSION_DAYS * 24;
+  const expires = new Date(Date.now() + ttlHours * 3600_000)
     .toISOString()
     .slice(0, 19)
     .replace('T', ' ');
@@ -327,8 +341,8 @@ export function login(
   const mfaRequired = row.totp_enabled === 1;
 
   db.prepare(
-    `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed, ttl_hours)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed, ttl_hours, scope)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     tokenHash(token),
     row.id,
@@ -336,8 +350,30 @@ export function login(
     userAgent?.slice(0, 300) ?? null,
     expires,
     mfaRequired ? 0 : 1,
-    SESSION_DAYS * 24,
+    ttlHours,
+    scope,
   );
+
+  /*
+   * Admin panelga kirish IZ QOLDIRADI.
+   *
+   * Butun platforma shu yerdan boshqariladi: kim, qachon va qaysi
+   * IP'dan kirgani keyin savol tug'ilsa javob bo'lishi kerak.
+   * Klinika kirishlari yozilmaydi — ular kundalik ish va jurnalni
+   * ko'mib tashlardi.
+   *
+   * Token YOZILMAYDI: jurnal moderatorlarga ko'rinadi.
+   */
+  if (scope === 'admin') {
+    db.prepare(
+      `INSERT INTO moderation_log (moderator_id, entity, entity_id, action, note)
+       VALUES (?, 'admin_session', ?, 'login', ?)`,
+    ).run(
+      personFor(row.id)?.id ?? null,
+      row.id,
+      `${ip ?? 'IP noma’lum'} · ${(userAgent ?? '').slice(0, 120) || 'brauzer noma’lum'}`,
+    );
+  }
 
   return { token, user: mapWebUser(row), mfaRequired };
 }
@@ -376,6 +412,16 @@ export function loginByVerifiedPhone(
   // Parol qo'yilmagan hisob hali tayyor emas — avval uni sozlash kerak
   if (!row || !row.password_hash) return null;
 
+  /*
+   * Telegram ko'prigi ADMINISTRATOR sessiyasini hech qachon bermaydi.
+   *
+   * Bu yo'l parol so'ramaydi — u klinika egasining raqami botda
+   * tasdiqlanganiga tayanadi. Butun platformani boshqaradigan hisob
+   * uchun bu yetarli asos emas: administrator har doim o'z
+   * sahifasidan, paroli bilan kiradi.
+   */
+  if (row.level === 'full') return null;
+
   const token = crypto.randomBytes(32).toString('base64url');
   const expires = new Date(Date.now() + TELEGRAM_SESSION_HOURS * 3600_000)
     .toISOString()
@@ -391,8 +437,8 @@ export function loginByVerifiedPhone(
   const mfaRequired = row.totp_enabled === 1;
 
   db.prepare(
-    `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed, ttl_hours)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed, ttl_hours, scope)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'clinic')`,
   ).run(
     tokenHash(token),
     row.id,
@@ -418,12 +464,21 @@ export function personFor(webUserId: number): User | null {
   return row ? mapUser(row) : null;
 }
 
-/** Sessiyani tekshirish. 2FA o'tilmagan sessiya to'liq hisoblanmaydi. */
-export function resolveSession(token: string): { user: WebUser; mfaPassed: boolean } | null {
+/**
+ * Sessiyani tekshirish. 2FA o'tilmagan sessiya to'liq hisoblanmaydi.
+ *
+ * Eshik ham qaytariladi: u sessiyaga yozilgan va har so'rovda
+ * majburlanadi (`requireDoor`). Eski, `scope` siz sessiyalar uchun
+ * hisob darajasidan kelib chiqiladi — ular migratsiyada to'ldirilgan,
+ * bu shunchaki qo'shimcha ehtiyot.
+ */
+export function resolveSession(
+  token: string,
+): { user: WebUser; mfaPassed: boolean; scope: LoginScope } | null {
   const hash = tokenHash(token);
   const row = db
     .prepare(
-      `SELECT s.mfa_passed, s.expires_at, s.ttl_hours, u.* FROM admin_sessions s
+      `SELECT s.mfa_passed, s.expires_at, s.ttl_hours, s.scope, u.* FROM admin_sessions s
          JOIN admin_users u ON u.id = s.admin_id
         WHERE s.token = ? AND s.expires_at > datetime('now') AND u.disabled_at IS NULL`,
     )
@@ -450,7 +505,11 @@ export function resolveSession(token: string): { user: WebUser; mfaPassed: boole
     ).run(`+${row.ttl_hours ?? 168} hours`, hash);
   }
 
-  return { user: mapWebUser(row), mfaPassed: row.mfa_passed === 1 };
+  return {
+    user: mapWebUser(row),
+    mfaPassed: row.mfa_passed === 1,
+    scope: (row.scope as LoginScope | null) ?? SCOPE_OF[row.level as WebLevel],
+  };
 }
 
 /** Eskirgan sessiyalarni tozalash — rejalashtiruvchi chaqiradi. */

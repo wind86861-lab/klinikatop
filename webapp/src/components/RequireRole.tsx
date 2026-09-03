@@ -57,7 +57,9 @@ export function RequireRole({
      */
     const home = user.roles.some((role) => role === 'clinic_admin' || role === 'clinic_operator')
       ? '/clinic'
-      : loginPath;
+      : user.roles.includes('admin')
+        ? '/admin'
+        : loginPath;
     return <Navigate to={home} replace state={{ denied: location.pathname }} />;
   }
 
