@@ -83,6 +83,13 @@ if (process.env.TG_INIT_DATA) {
   const webApp = {
     initData: process.env.TG_INIT_DATA,
     initDataUnsafe: { user: { id: 1, first_name: 'Sinov', language_code: 'uz' } },
+    // Haqiqiy SDK skripti buni o'qiydi — bo'lmasa konsolga
+    // "Cannot read properties of undefined (reading 'initParams')"
+    // chiqib, testda yolg'on xato ko'rinardi
+    initParams: {},
+    version: '6.0',
+    platform: 'tdesktop',
+    isExpanded: true,
     colorScheme: 'light',
     themeParams: {},
     viewportHeight: 800,
