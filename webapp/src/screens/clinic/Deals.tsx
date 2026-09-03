@@ -106,7 +106,7 @@ export function DealsBoard() {
  * bu yerda `PAID` yo'q edi va klinika bitim qaysi bosqichda ekanini
  * noto'g'ri ko'rardi.
  */
-const DEAL_STEPS = ['SELECTED', 'AGREED', 'PERFORMED', 'PAID', 'CONFIRMED'] as const;
+const DEAL_STEPS = ['SELECTED', 'AGREED', 'PAID', 'CONFIRMED'] as const;
 
 export function ClinicDeal() {
   const { t, lang, toast } = useApp();
@@ -176,7 +176,7 @@ export function ClinicDeal() {
                 )}
                 {deal.confirmedAmountUzs != null && (
                   <div className="between">
-                    <span className="tiny">{t('confirm.amount')}</span>
+                    <span className="tiny">{t('deal.paidSum')}</span>
                     <strong className="num">{money(deal.confirmedAmountUzs, lang)}</strong>
                   </div>
                 )}
@@ -212,18 +212,16 @@ export function ClinicDeal() {
                 </Card>
               )}
 
-              {deal.status === 'AGREED' && (
-                <Button block loading={busy} onClick={() => act(() => api.markPerformed(dealId))}>
-                  {t('deal.markPerformed')}
-                </Button>
-              )}
-
-              {deal.status === 'PERFORMED' && <Notice tone="info">{t('confirm.subtitle')}</Notice>}
+              {/*
+                Sana kelishildi — navbat BEMORda: u to'lovni bildiradi.
+                Klinikada bu bosqichda amal yo'q, faqat kutish.
+              */}
+              {deal.status === 'AGREED' && <Notice tone="info">{t('deal.awaitingPaymentClinic')}</Notice>}
 
               {/*
-                Bemor to'lovni bildirgach navbat KLINIKAda: u pulni
-                olganini tasdiqlashi kerak va faqat shundan keyin
-                bitim yopilib, komissiya hisoblanadi.
+                To'lov bildirilgach navbat KLINIKAda: u pulni olganini
+                va operatsiya bajarilganini tasdiqlaydi. Faqat shundan
+                keyin bitim yopilib, komissiya hisoblanadi.
 
                 Bu tugma ilgari faqat bemor ilovasidagi ekranda bor
                 edi — klinika `ClinicDeal` degan boshqa komponentni

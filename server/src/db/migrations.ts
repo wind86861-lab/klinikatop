@@ -1348,6 +1348,30 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    /**
+     * To'lov operatsiyadan OLDIN — `PERFORMED` bosqichi olib tashlandi.
+     *
+     * Yangi oqim: Tanlandi -> Kelishildi -> To'landi -> Bajarildi.
+     * Klinika oxirida bir marta tasdiqlaydi: pul ham olindi, operatsiya
+     * ham bajarildi.
+     *
+     * Eski oqimda qolib ketgan bitimlar `PERFORMED` holatida turadi.
+     * Ular `AGREED` ga qaytariladi: operatsiya bajarilgan, lekin to'lov
+     * hali bildirilmagan — yangi oqimda aynan shu bosqich to'lovni
+     * kutadi. Bekor qilinmaydi va yopilmaydi: birinchisi bajarilgan
+     * ishni yo'q qilardi, ikkinchisi hech kim bildirmagan to'lovga
+     * komissiya yozardi.
+     *
+     * `CHECK` ro'yxatiga tegilmaydi — u `PERFORMED` ni hali ham qabul
+     * qiladi, lekin endi hech kim yozmaydi. Jadvalni faqat shuning
+     * uchun qayta qurish arzimaydi.
+     */
+    id: '026_payment_before_operation',
+    up: (db) => {
+      db.prepare(`UPDATE deals SET status = 'AGREED' WHERE status = 'PERFORMED'`).run();
+    },
+  },
 ];
 
 /**

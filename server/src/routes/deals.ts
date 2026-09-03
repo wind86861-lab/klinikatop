@@ -10,7 +10,6 @@ import {
   getDeal,
   listPatientDeals,
   listPriceChanges,
-  markPerformed,
   openDispute,
   proposePriceChange,
   respondToPriceChange,
@@ -76,13 +75,6 @@ dealsRouter.post('/:id/messages/read', (req, res) => {
 dealsRouter.post('/:id/schedule', (req, res) => {
   const body = z.object({ scheduledAt: z.string().min(4) }).parse(req.body);
   res.json(agreeSchedule(Number(req.params.id), req.user!.id, clinicOf(req), body.scheduledAt));
-});
-
-/** Operatsiya bajarildi — faqat klinika belgilaydi. */
-dealsRouter.post('/:id/performed', (req, res) => {
-  const clinicId = clinicOf(req);
-  if (!clinicId) throw forbidden('Bu amalni klinika bajaradi');
-  res.json(markPerformed(Number(req.params.id), clinicId));
 });
 
 /**

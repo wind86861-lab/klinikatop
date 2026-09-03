@@ -34,16 +34,28 @@ export type OfferStatus = (typeof OFFER_STATUSES)[number];
 export const DEAL_STATUSES = [
   'SELECTED',
   'AGREED',
-  'PERFORMED',
   /** Bemor to'lovni bildirdi — klinikaning tasdig'i kutilmoqda */
   'PAID',
+  /** Klinika pulni olganini va operatsiyani bajarganini tasdiqladi */
   'CONFIRMED',
   'CANCELLED',
   'DISPUTED',
 ] as const;
 export type DealStatus = (typeof DEAL_STATUSES)[number];
 
-export const DEAL_STEPS: DealStatus[] = ['SELECTED', 'AGREED', 'PERFORMED', 'PAID', 'CONFIRMED'];
+/**
+ * Bitim bosqichlari.
+ *
+ * TO'LOV OPERATSIYADAN OLDIN. Ilgari oqim teskari edi — klinika
+ * "bajarildi" deb belgilar, keyin bemor to'lovni bildirar, keyin
+ * klinika pulni olganini tasdiqlardi. Ya'ni ish bajarilib bo'lgandan
+ * keyin ham ikkita bosqich qolar va bittasi ikkinchisini takrorlardi.
+ *
+ * Endi bemor avval to'laydi, klinika esa oxirida BIR marta tasdiqlaydi:
+ * pul ham olindi, operatsiya ham bajarildi. Shuning uchun alohida
+ * "bajarildi" bosqichi kerak emas.
+ */
+export const DEAL_STEPS: DealStatus[] = ['SELECTED', 'AGREED', 'PAID', 'CONFIRMED'];
 
 /** To'lov usuli — bemor bildirganda tanlaydi, ixtiyoriy. */
 export const PAYMENT_METHODS = ['cash', 'card', 'transfer'] as const;
@@ -60,13 +72,7 @@ export const REQUEST_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
 
 export const DEAL_TRANSITIONS: Record<DealStatus, DealStatus[]> = {
   SELECTED: ['AGREED', 'CANCELLED', 'DISPUTED'],
-  /*
-   * `AGREED → PAID` ham bor: bemor klinika "bajarildi" deb
-   * belgilashidan oldin to'lagan bo'lishi mumkin. Uni kutib
-   * o'tirishga majburlash mantiqsiz.
-   */
-  AGREED: ['PERFORMED', 'PAID', 'CANCELLED', 'DISPUTED'],
-  PERFORMED: ['PAID', 'CONFIRMED', 'DISPUTED'],
+  AGREED: ['PAID', 'CANCELLED', 'DISPUTED'],
   PAID: ['CONFIRMED', 'DISPUTED'],
   CONFIRMED: ['DISPUTED'],
   CANCELLED: [],
@@ -900,7 +906,7 @@ export interface ClinicRevenue {
  * Quyidagi tekshiruv shu xatoni qaytarmaslik uchun: yangi holat
  * qo'shilsa va bu yerga qo'shilmasa, TypeScript xato beradi.
  */
-export const DEAL_BOARD_COLUMNS = ['SELECTED', 'AGREED', 'PERFORMED', 'PAID', 'CONFIRMED'] as const;
+export const DEAL_BOARD_COLUMNS = ['SELECTED', 'AGREED', 'PAID', 'CONFIRMED'] as const;
 export type DealBoardColumn = (typeof DEAL_BOARD_COLUMNS)[number];
 
 /** Bekor qilingan va nizodagi bitim taxtada alohida ko'rsatiladi. */

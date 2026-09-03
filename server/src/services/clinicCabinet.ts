@@ -353,7 +353,7 @@ export function listSlots(clinicId: number, from: string, to: string): CapacityS
               (SELECT COUNT(*) FROM deals d
                 WHERE d.clinic_id = s.clinic_id
                   AND date(d.scheduled_at) = s.date
-                  AND d.status IN ('AGREED','PERFORMED','CONFIRMED')) AS booked
+                  AND d.status IN ('AGREED','PAID','CONFIRMED')) AS booked
          FROM capacity_slots s
         WHERE s.clinic_id = ? AND s.date BETWEEN ? AND ?
         ORDER BY s.date`,

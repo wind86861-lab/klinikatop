@@ -204,7 +204,7 @@ export function DealScreen() {
 
           {deal.status === 'CONFIRMED' && deal.confirmedAmountUzs && (
             <div className="between">
-              <span className="tiny">{t('confirm.amount')}</span>
+              <span className="tiny">{t('deal.paidSum')}</span>
               <strong className="num" style={{ color: 'var(--success)' }}>
                 {money(deal.confirmedAmountUzs, lang)}
               </strong>
@@ -227,7 +227,15 @@ export function DealScreen() {
             </div>
           )}
 
-          {/* To'lov bildirilgan, navbat klinikada — ikkala tomon ham buni bilsin */}
+          {/*
+            Navbat kimda ekani har doim ko'rinib tursin.
+
+            Sana kelishilgach to'lov navbati BEMORda: unda tugma bor,
+            klinika esa kutadi. To'lov bildirilgach navbat klinikaga
+            o'tadi — endi u operatsiyani yakunlaydi.
+          */}
+          {deal.status === 'AGREED' && isClinicSide && <Notice>{t('deal.awaitingPaymentClinic')}</Notice>}
+          {deal.status === 'AGREED' && !isClinicSide && <Notice>{t('deal.awaitingPayment')}</Notice>}
           {deal.status === 'PAID' && (
             <Notice>{t(isClinicSide ? 'deal.awaitingReceiptClinic' : 'deal.awaitingReceipt')}</Notice>
           )}
@@ -236,7 +244,6 @@ export function DealScreen() {
             deal={deal}
             isClinicSide={isClinicSide}
             onSchedule={() => setSheet('schedule')}
-            onPerformed={() => act(() => api.markPerformed(dealId))}
             onConfirm={() => setSheet('confirm')}
             onReceipt={() => act(() => api.confirmReceipt(dealId))}
             onReview={() => setSheet('review')}
@@ -363,7 +370,6 @@ function DealActions({
   deal,
   isClinicSide,
   onSchedule,
-  onPerformed,
   onConfirm,
   onReceipt,
   onReview,
@@ -372,7 +378,6 @@ function DealActions({
   deal: DealDetail;
   isClinicSide: boolean;
   onSchedule: () => void;
-  onPerformed: () => void;
   onConfirm: () => void;
   onReceipt: () => void;
   onReview: () => void;
@@ -390,15 +395,12 @@ function DealActions({
     );
   }
 
-  if (deal.status === 'AGREED' && isClinicSide) {
-    buttons.push(
-      <Button key="performed" size="sm" block onClick={onPerformed}>
-        {t('deal.markPerformed')}
-      </Button>,
-    );
-  }
-
-  if (deal.status === 'PERFORMED' && !isClinicSide) {
+  /*
+   * Sana kelishilgach to'lov navbati bemorda. Ilgari bu tugma
+   * klinika "bajarildi" deb belgilaganidan KEYIN chiqardi; endi
+   * to'lov birinchi bosqich.
+   */
+  if (deal.status === 'AGREED' && !isClinicSide) {
     buttons.push(
       <Button key="confirm" size="sm" block onClick={onConfirm}>
         {t('deal.declarePayment')}
@@ -407,9 +409,10 @@ function DealActions({
   }
 
   /*
-   * To'lov bildirilgach navbat KLINIKAda: u pulni olganini
-   * tasdiqlashi kerak. Bemor tomonida bu bosqichda tugma yo'q —
-   * u faqat kutadi (holat matni buni aytadi).
+   * To'lov bildirilgach navbat KLINIKAda: u pulni olganini va
+   * operatsiya bajarilganini tasdiqlab bitimni yopadi. Bemor
+   * tomonida bu bosqichda tugma yo'q — u faqat kutadi (holat
+   * matni buni aytadi).
    */
   if (deal.status === 'PAID' && isClinicSide) {
     buttons.push(

@@ -370,7 +370,6 @@ export const api = {
     post<ChatMessage>(`/deals/${id}/messages`, { body, attachment: attachment ?? null }),
   readMessages: (id: number) => post<{ marked: number }>(`/deals/${id}/messages/read`),
   schedule: (id: number, scheduledAt: string) => post<DealDetail>(`/deals/${id}/schedule`, { scheduledAt }),
-  markPerformed: (id: number) => post<DealDetail>(`/deals/${id}/performed`),
   /** Bemor to'lovni bildiradi — bitim yopilmaydi, klinika tasdig'i kutiladi */
   declarePayment: (id: number, amountUzs: number, method: PaymentMethod | null = null) =>
     post<DealDetail>(`/deals/${id}/paid`, { amountUzs, method }),

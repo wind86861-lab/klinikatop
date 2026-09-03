@@ -35,12 +35,12 @@ const PUSH: Record<NotificationType, Record<Lang, (p: Params) => string>> = {
     ru: (p) => `✉️ <b>${p.from}</b>\n${p.preview}`,
   },
   confirm_prompt: {
-    uz: (p) => `❓ <b>Operatsiya bo'ldimi?</b>\n${p.clinic} bilan bitim. Bo'lgan bo'lsa, qancha to'laganingizni yozing — bu boshqa bemorlarga real narxni ko'rsatadi.`,
-    ru: (p) => `❓ <b>Операция состоялась?</b>\nСделка с «${p.clinic}». Укажите сумму — это покажет реальную цену другим пациентам.`,
+    uz: (p) => `💳 <b>To'lovni bildirdingizmi?</b>\n${p.clinic} bilan bitim. To'laganingizdan keyin summani yozing — klinika shundan so'ng operatsiyani yakunlaydi va bu boshqa bemorlarga real narxni ko'rsatadi.`,
+    ru: (p) => `💳 <b>Вы указали оплату?</b>\nСделка с «${p.clinic}». Укажите сумму — после этого клиника завершит операцию, а другие пациенты увидят реальную цену.`,
   },
   payment_declared: {
-    uz: () => `💵 <b>Bemor to'lovni bildirdi</b>\nSummani tekshirib, pulni olganingizni tasdiqlang.`,
-    ru: () => `💵 <b>Пациент указал оплату</b>\nПроверьте сумму и подтвердите получение.`,
+    uz: () => `💵 <b>Bemor to'lovni bildirdi</b>\nSummani tekshiring va operatsiya bajarilgach bitimni yakunlang.`,
+    ru: () => `💵 <b>Пациент указал оплату</b>\nПроверьте сумму и завершите сделку после операции.`,
   },
   commission_confirmed: {
     uz: (p) => `✅ <b>Komissiya to'lovi tasdiqlandi</b>\n${p.amount} so'm hisobga olindi.`,
@@ -51,8 +51,8 @@ const PUSH: Record<NotificationType, Record<Lang, (p: Params) => string>> = {
     ru: (p) => `⚠️ <b>Оплата комиссии отклонена</b>\n${p.note || 'Причина не указана'}. Проверьте и отправьте снова.`,
   },
   payment_confirmed: {
-    uz: (p) => `✅ <b>To'lov tasdiqlandi</b>\n${p.clinic} pulni olganini tasdiqladi. Bitim yopildi.`,
-    ru: (p) => `✅ <b>Оплата подтверждена</b>\n«${p.clinic}» подтвердила получение. Сделка закрыта.`,
+    uz: (p) => `✅ <b>Bitim yakunlandi</b>\n${p.clinic} to'lovni olganini va operatsiya bajarilganini tasdiqladi.`,
+    ru: (p) => `✅ <b>Сделка завершена</b>\n«${p.clinic}» подтвердила оплату и выполнение операции.`,
   },
   request_expiring: {
     uz: (p) => `⏳ So'rovingiz muddati 1 soatdan keyin tugaydi (${p.operation}). Takliflarni ko'rib chiqing.`,

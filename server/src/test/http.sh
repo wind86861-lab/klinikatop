@@ -233,22 +233,20 @@ TOMORROW=$(node -e "console.log(new Date(Date.now()+864e5).toISOString())")
 STATUS=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/schedule" -d "{\"scheduledAt\":\"$TOMORROW\"}" | jqv '.status')
 check "sana kelishildi (AGREED)" "$([ "$STATUS" = "AGREED" ] && echo 1)" "$STATUS"
 
-code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/performed")
-check "bemor 'bajarildi' deya olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+# Eski "bajarildi" bosqichi olib tashlandi — endi bunday manzil yo'q
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/performed")
+check "eski 'bajarildi' manzili yo'q (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
 
-STATUS=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/performed" | jqv '.status')
-check "klinika bajarilganini belgiladi" "$([ "$STATUS" = "PERFORMED" ] && echo 1)" "$STATUS"
-
-# To'lov ikki qadam: bemor bildiradi -> klinika olganini tasdiqlaydi
+# To'lov OPERATSIYADAN OLDIN: bemor bildiradi -> klinika yakunlaydi
 PAID=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/paid" -d '{"amountUzs":10500000}' | jqv '.status')
 check "bemor to'lovni bildirdi" "$([ "$PAID" = "PAID" ] && echo 1)" "$PAID"
 
 # Bemor o'zi yopa olmaydi — bu klinikaning ishi
 code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/receipt")
-check "bemor to'lovni tasdiqlay olmaydi (403)" "$([ "$code" = "403" ] && echo 1)" "$code"
+check "bemor bitimni yakunlay olmaydi (403)" "$([ "$code" = "403" ] && echo 1)" "$code"
 
 COMMISSION=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/receipt" | jqv '.commissionUzs')
-check "klinika tasdiqlagach komissiya hisoblandi (5%)" "$([ "$COMMISSION" = "525000" ] && echo 1)" "$COMMISSION"
+check "klinika yakunlagach komissiya hisoblandi (5%)" "$([ "$COMMISSION" = "525000" ] && echo 1)" "$COMMISSION"
 
 AVG=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/deals/$DEAL_ID/review" \
   -d '{"quality":5,"attitude":4,"cleanliness":5,"result":4,"body":"Yaxshi"}' | jqv '.average')

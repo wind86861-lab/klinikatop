@@ -169,23 +169,6 @@ export function agreeSchedule(dealId: number, userId: number, clinicId: number |
   return getDeal(dealId);
 }
 
-/** Operatsiya bajarildi — klinika belgilaydi (7.2). */
-export function markPerformed(dealId: number, clinicId: number): DealDetail {
-  const deal = getDeal(dealId);
-  if (deal.clinicId !== clinicId) throw forbidden('Bu bitim sizniki emas');
-  assertTransition(deal.status, 'PERFORMED');
-
-  db.prepare(`UPDATE deals SET status = 'PERFORMED', performed_at = datetime('now'),
-                               confirm_prompted_at = datetime('now') WHERE id = ?`).run(dealId);
-
-  systemMessage(dealId, 'Klinika operatsiya bajarilganini belgiladi. Bemordan tasdiq so‘raldi.');
-  bus.publish(ch.deal(dealId), { type: 'deal:status', dealId, status: 'PERFORMED' });
-
-  // 9.1: platforma bemordan so'raydi — "Bo'ldimi? Qancha to'lading?"
-  notify(deal.patientId, 'confirm_prompt', { clinic: deal.clinic.name }, `/deal/${dealId}/confirm`);
-  return getDeal(dealId);
-}
-
 /**
  * 9.1: bemor to'lovni bildiradi → `PAID`.
  *
@@ -206,7 +189,7 @@ export function declarePayment(
 ): DealDetail {
   const deal = getDeal(dealId);
   if (deal.patientId !== patientId) throw forbidden('Bu bitim sizniki emas');
-  if (deal.status !== 'PERFORMED' && deal.status !== 'AGREED') {
+  if (deal.status !== 'AGREED') {
     throw conflict('not_payable', 'Bu bitim bo‘yicha hozir to‘lov bildirib bo‘lmaydi');
   }
   if (!Number.isFinite(amountUzs) || amountUzs < 100_000 || amountUzs > 2_000_000_000) {
@@ -229,7 +212,12 @@ export function declarePayment(
 }
 
 /**
- * 9.2: klinika pulni olganini tasdiqlaydi → `CONFIRMED`.
+ * 9.2: klinika bitimni yakunlaydi → `CONFIRMED`.
+ *
+ * Bu OXIRGI bosqich va u ikki narsani birdan tasdiqlaydi: pul olindi
+ * va operatsiya bajarildi. Ilgari bular alohida ikki bosqich edi —
+ * klinika avval "bajarildi" deb belgilar, oxirida yana "pulni oldim"
+ * derdi. Ish tugagandan keyin ikki marta tasdiqlash ortiqcha.
  *
  * Shu yerda va faqat shu yerda komissiya hisoblanadi, bitim yopiladi
  * va bemor bonus oladi.
@@ -248,7 +236,7 @@ export function confirmReceipt(dealId: number, clinicId: number): DealDetail {
   if (amount == null) throw conflict('no_amount', 'To‘lov summasi yo‘q');
 
   closeDeal(dealId, amount, deal.clinicId, deal.requestId, deal.patientId, { bonus: true });
-  systemMessage(dealId, 'Klinika to‘lovni olganini tasdiqladi. Bitim yopildi.');
+  systemMessage(dealId, 'Klinika to‘lovni olganini va operatsiya bajarilganini tasdiqladi. Bitim yopildi.');
   notify(deal.patientId, 'payment_confirmed', { clinic: deal.clinic.name }, `/deal/${dealId}`);
 
   return getDeal(dealId);
@@ -346,15 +334,25 @@ export function listClinicDeals(clinicId: number): DealDetail[] {
 }
 
 /**
- * 9.2 chekka holat: bemor N kun javob bermasa — avto eslatma.
- * (Keyingi qadam — klinika o'zi belgilaydi, moderator tekshiruvi bilan.)
+ * 9.2 chekka holat: to'lov bildirilmagan bitimlarga eslatma.
+ *
+ * Operatsiya sanasi kelib o'tdi, lekin bemor to'lovni bildirmadi.
+ * Ilgari soat klinikaning "bajarildi" belgisidan boshlanardi; endi
+ * bunday belgi yo'q, shuning uchun KELISHILGAN SANA boshlaydi.
+ *
+ * `confirm_prompted_at` bo'sh bo'lishi mumkin — birinchi eslatma hali
+ * yuborilmagan. `NULL <= …` har doim yolg'on bo'lgani uchun uni alohida
+ * hisobga olish kerak, aks holda birinchi eslatma hech qachon
+ * ketmasdi.
  */
 export function remindPendingConfirmations(): number {
   const rows = db
     .prepare(
       `SELECT * FROM deals
-        WHERE status = 'PERFORMED'
-          AND confirm_prompted_at <= datetime('now', ?)`,
+        WHERE status = 'AGREED'
+          AND scheduled_at IS NOT NULL
+          AND scheduled_at <= datetime('now')
+          AND (confirm_prompted_at IS NULL OR confirm_prompted_at <= datetime('now', ?))`,
     )
     .all(`-${config.rules.confirmReminderDays} days`) as any[];
 
@@ -370,19 +368,20 @@ export function remindPendingConfirmations(): number {
 /**
  * Javobsiz qolgan bitimlarni avtomatik yopish.
  *
- * Muammo: komissiya faqat bemor tasdiqlaganda olinadi. Shuning uchun
- * "tasdiqlamaslik" ikkala tomon uchun ham foydali bo'lib qolardi va
- * platforma bajarilgan operatsiyadan hech narsa olmasdi.
+ * Muammo: komissiya faqat bitim yopilganda olinadi. Shuning uchun
+ * jim turish tomonlarga foydali bo'lib qolardi va platforma
+ * bajarilgan operatsiyadan hech narsa olmasdi.
  *
- * Yechim: klinika "bajarildi" deb belgilagach soat ishlaydi. Belgilangan
- * kun ichida bemor tasdiqlamasa VA nizo ochmasa — bitim kelishilgan narx
- * bo'yicha avtomatik yopiladi.
+ * Yechim: bemor to'lovni bildirgach soat ishlaydi. Belgilangan kun
+ * ichida klinika tasdiqlamasa VA nizo ochmasa — bitim bemor aytgan
+ * summa bo'yicha avtomatik yopiladi.
  *
- * Bu adolatli, chunki:
- *   • bemor bir necha marta eslatma oladi
- *   • rozi bo'lmasa istalgan payt nizo ochishi mumkin
- *   • summa kelishilgan narxdan olinadi, klinika aytganidan emas
- *   • bitim `auto_confirmed` deb belgilanadi — statistikada ajratiladi
+ * ILGARI ikkinchi oyoq ham bor edi: klinika "bajarildi" deb
+ * belgilagandan keyin bemor jim qolsa, bitim kelishilgan narx bo'yicha
+ * yopilardi. Endi bunday belgi yo'q — to'lov birinchi bosqich bo'lib
+ * qoldi. To'lovi bildirilmagan bitimni avtomatik yopish esa hech kim
+ * "bo'ldi" demagan ish uchun komissiya yozish bo'lardi. Bunday
+ * holatlar uchun NIZO yo'li bor: klinika ochadi, moderator qaraydi.
  *
  * Avtomatik yopilgan bitim sharh so'ramaydi va bonus ball bermaydi:
  * bemor hech narsa qilmagan, rag'batlantiradigan xatti-harakat yo'q.
@@ -393,35 +392,11 @@ export function autoConfirmStaleDeals(): number {
   let closed = 0;
 
   /*
-   * 1-oyoq: bemor to'lovni bildirmadi.
-   * Summa KELISHILGAN narxdan olinadi — klinika aytganidan emas.
-   */
-  const silentPatients = db
-    .prepare(
-      `SELECT id, clinic_id, request_id, agreed_price_uzs, patient_id
-         FROM deals
-        WHERE status = 'PERFORMED'
-          AND performed_at IS NOT NULL
-          AND performed_at <= datetime('now', ?)`,
-    )
-    .all(cutoff) as any[];
-
-  for (const row of silentPatients) {
-    closeDeal(row.id, row.agreed_price_uzs, row.clinic_id, row.request_id, row.patient_id, {
-      bonus: false,
-      auto: true,
-    });
-    notify(row.patient_id, 'deal_auto_confirmed', { dealId: row.id }, `/deal/${row.id}`);
-    notifyClinic(row.clinic_id, 'deal_auto_confirmed', { dealId: row.id }, `/clinic/deals/${row.id}`);
-    closed += 1;
-  }
-
-  /*
-   * 2-oyoq: bemor to'ladi, lekin klinika tasdiqlamadi.
+   * Bemor to'ladi, lekin klinika tasdiqlamadi.
    *
    * Busiz jim turish klinikaga FOYDALI bo'lardi: tasdiqlamasa
-   * komissiya ham hisoblanmasdi. Shuning uchun soat bu yerda ham
-   * ishlaydi va summa bemor aytgan qiymatdan olinadi.
+   * komissiya ham hisoblanmasdi. Shuning uchun soat ishlaydi va
+   * summa bemor aytgan qiymatdan olinadi.
    */
   const silentClinics = db
     .prepare(

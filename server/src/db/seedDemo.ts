@@ -12,7 +12,7 @@ import { config } from '../lib/config';
 import { upsertUser } from '../middleware/auth';
 import { createRequest } from '../services/requests';
 import { createOffer } from '../services/offers';
-import { chooseOffer, agreeSchedule, markPerformed, declarePayment, confirmReceipt } from '../services/deals';
+import { chooseOffer, agreeSchedule, declarePayment, confirmReceipt } from '../services/deals';
 import { createReview } from '../services/reviews';
 import { activateSubscription } from '../services/clinics';
 
@@ -203,8 +203,7 @@ function main() {
 
     const deal = chooseOffer(request.id, offer.id, patient.id);
     agreeSchedule(deal.id, patient.id, null, new Date(Date.now() - 3 * 86_400_000).toISOString());
-    markPerformed(deal.id, clinic.id);
-    // To'lov endi ikki qadam: bemor bildiradi, klinika tasdiqlaydi
+    // To'lov birinchi: bemor bildiradi, klinika yakunida tasdiqlaydi
     declarePayment(deal.id, patient.id, demo.paid);
     confirmReceipt(deal.id, deal.clinicId);
 

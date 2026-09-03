@@ -457,16 +457,11 @@ async function main() {
   deals.agreeSchedule(deal.id, patient.id, null, new Date(Date.now() + 86_400_000).toISOString());
   check('KELISHILGAN holatiga o‘tdi', deals.getDeal(deal.id).status === 'AGREED');
 
-  throws(
-    'bemor "bajarildi" deb belgilay olmaydi',
-    () => deals.markPerformed(deal.id, null as any),
-    'forbidden',
-  );
-
-  deals.markPerformed(deal.id, clinic.id);
-  check('BAJARILGAN holatiga o‘tdi', deals.getDeal(deal.id).status === 'PERFORMED');
-
-  // To'lov ikki qadam: bemor bildiradi → klinika olganini tasdiqlaydi
+  /*
+   * To'lov OPERATSIYADAN OLDIN: sana kelishilgach navbat bemorda.
+   * Klinika oxirida bir marta tasdiqlaydi — pul ham olindi,
+   * operatsiya ham bajarildi.
+   */
   const paid = deals.declarePayment(deal.id, patient.id, 10_500_000, 'cash');
   check('TO‘LANDI holatiga o‘tdi', paid.status === 'PAID');
   check('summa yozildi', paid.confirmedAmountUzs === 10_500_000);
@@ -553,12 +548,11 @@ async function main() {
   });
   const deal2 = deals.chooseOffer(request2.id, offer2.id, patient.id);
   throws(
-    'bosqichni o‘tkazib yuborib bo‘lmaydi (SELECTED → PERFORMED)',
-    () => deals.markPerformed(deal2.id, clinic.id),
-    'invalid_transition',
+    'sana kelishilmasdan to‘lov bildirib bo‘lmaydi',
+    () => deals.declarePayment(deal2.id, patient.id, 13_000_000),
+    'not_payable',
   );
   deals.agreeSchedule(deal2.id, patient.id, null, new Date(Date.now() + 86_400_000).toISOString());
-  deals.markPerformed(deal2.id, clinic.id);
   deals.declarePayment(deal2.id, patient.id, 13_000_000);
   deals.confirmReceipt(deal2.id, deals.getDeal(deal2.id).clinicId);
 
@@ -667,20 +661,31 @@ async function main() {
   });
   const autoDeal = deals.chooseOffer(autoReq.id, autoOffer.id, patient.id);
   deals.agreeSchedule(autoDeal.id, patient.id, null, new Date(Date.now() + 86_400_000).toISOString());
-  deals.markPerformed(autoDeal.id, clinic.id);
 
+  /*
+   * To'lovi bildirilmagan bitim avtomatik YOPILMAYDI.
+   *
+   * Ilgari klinikaning "bajarildi" belgisi soatni ishga tushirardi.
+   * Endi bunday belgi yo'q va to'lovsiz bitimni yopish hech kim
+   * "bo'ldi" demagan ish uchun komissiya yozish bo'lardi. Bunday
+   * holat uchun nizo yo'li bor.
+   */
+  db.prepare(`UPDATE deals SET scheduled_at = datetime('now', '-30 days') WHERE id = ?`).run(autoDeal.id);
+  check('to‘lovsiz bitim avtomatik yopilmaydi', deals.autoConfirmStaleDeals() === 0);
+
+  deals.declarePayment(autoDeal.id, patient.id, 12_000_000);
   check('avto-tasdiq muddati kelmagan bitimga tegmaydi', deals.autoConfirmStaleDeals() === 0);
 
-  // Bajarilgan sanani orqaga surib, muddat o'tganini taqlid qilamiz
-  db.prepare(`UPDATE deals SET performed_at = datetime('now', '-30 days') WHERE id = ?`).run(autoDeal.id);
+  // To'lov sanasini orqaga surib, muddat o'tganini taqlid qilamiz
+  db.prepare(`UPDATE deals SET paid_at = datetime('now', '-30 days') WHERE id = ?`).run(autoDeal.id);
   const closed = deals.autoConfirmStaleDeals();
-  check('javobsiz bitim avtomatik yopildi', closed === 1, String(closed));
+  check('klinika tasdiqlamagan bitim avtomatik yopildi', closed === 1, String(closed));
 
   const autoClosed = deals.getDeal(autoDeal.id);
   check('holat CONFIRMED', autoClosed.status === 'CONFIRMED', autoClosed.status);
   check('avto belgisi qo‘yildi', (autoClosed as any).autoConfirmed !== false);
   check(
-    'komissiya kelishilgan narxdan hisoblandi',
+    'komissiya bildirilgan summadan hisoblandi',
     autoClosed.commissionUzs === Math.round((12_000_000 * 7) / 100),
     String(autoClosed.commissionUzs),
   );
@@ -1773,7 +1778,6 @@ async function main() {
   /* ── Komissiya YANGI narxdan hisoblanadi ── */
 
   deals.agreeSchedule(priceDeal.id, patient.id, null, futureDate(5) + 'T10:00:00.000Z');
-  deals.markPerformed(priceDeal.id, clinic.id);
   deals.declarePayment(priceDeal.id, patient.id, 10_500_000);
   const priceConfirmed = deals.confirmReceipt(priceDeal.id, deals.getDeal(priceDeal.id).clinicId);
 
@@ -2277,7 +2281,6 @@ async function main() {
     });
     const d2 = deals.chooseOffer(r2.id, o2.id, p2.id);
     deals.agreeSchedule(d2.id, p2.id, clinic.id, new Date(Date.now() + 86400_000).toISOString());
-    deals.markPerformed(d2.id, clinic.id);
 
     // ── Klinika to'lovdan OLDIN tasdiqlay olmaydi ──
     throws('to‘lovsiz tasdiqlab bo‘lmaydi', () => deals.confirmReceipt(d2.id, clinic.id));
@@ -2344,7 +2347,6 @@ async function main() {
     });
     const d3 = deals.chooseOffer(r3.id, o3.id, p3.id);
     deals.agreeSchedule(d3.id, p3.id, clinic.id, new Date(Date.now() + 86400_000).toISOString());
-    deals.markPerformed(d3.id, clinic.id);
     deals.declarePayment(d3.id, p3.id, 9_000_000);
 
     // Soatni orqaga suramiz — 60 kun oldin to'langan deb
@@ -2726,7 +2728,6 @@ async function main() {
      * javob qolmasdi.
      */
     deals.agreeSchedule(deal.id, patient.id, clinic.id, new Date(Date.now() + 86400_000).toISOString());
-    deals.markPerformed(deal.id, clinic.id);
     deals.declarePayment(deal.id, patient.id, 9_500_000);
     deals.confirmReceipt(deal.id, clinic.id);
 
