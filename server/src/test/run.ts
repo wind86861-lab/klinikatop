@@ -1786,6 +1786,70 @@ async function main() {
    */
   check('narx o‘zgartirish amali endi yo‘q', (deals as any).proposePriceChange === undefined);
 
+  /* ═════ Migratsiya kaskadi ═════ */
+  console.log('\nMigratsiya kaskadi');
+
+  /*
+   * SQLite ustunni o'zgartira olmaydi — jadvalni qayta qurish kerak.
+   * Ammo `DROP TABLE` tashqi kalit kaskadini ishga tushiradi va
+   * bog'liq jadvallar JIMGINA tozalanib ketadi.
+   *
+   * Bu prodda bir marta sodir bo'ldi: `requests` qayta qurilganda
+   * unga bog'langan takliflar, bitimlar, chat va sharhlar o'chdi.
+   * Ma'lumot ko'chirilgan bo'lsa ham, kaskad undan oldin ishlagan.
+   *
+   * Quyida usulning o'zi tekshiriladi: tashqi kalitlar o'chirilgan
+   * holda qayta qurish bolalarni saqlab qoladi.
+   */
+  {
+    const Database = require('better-sqlite3');
+    const probe = new Database(':memory:');
+    probe.pragma('foreign_keys = ON');
+    probe.exec(`
+      CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT);
+      CREATE TABLE child (
+        id INTEGER PRIMARY KEY,
+        parent_id INTEGER NOT NULL REFERENCES parent(id) ON DELETE CASCADE
+      );
+      INSERT INTO parent (id, name) VALUES (1, 'a');
+      INSERT INTO child (id, parent_id) VALUES (1, 1), (2, 1);
+    `);
+
+    // Kalitlar YOQILGAN holda qayta qurish — bolalar yo'qoladi
+    probe.exec(`
+      CREATE TABLE parent_copy (id INTEGER PRIMARY KEY, name TEXT);
+      INSERT INTO parent_copy SELECT id, name FROM parent;
+      DROP TABLE parent;
+      ALTER TABLE parent_copy RENAME TO parent;
+    `);
+    check(
+      'kalitlar yoqilgan holda qayta qurish bolalarni o‘chiradi',
+      probe.prepare('SELECT COUNT(*) n FROM child').get().n === 0,
+    );
+
+    // Endi to'g'ri usul: kalitlar o'chirilgan holda
+    probe.pragma('foreign_keys = OFF');
+    probe.exec(`
+      INSERT INTO child (id, parent_id) VALUES (1, 1), (2, 1);
+      CREATE TABLE parent_copy (id INTEGER PRIMARY KEY, name TEXT);
+      INSERT INTO parent_copy SELECT id, name FROM parent;
+      DROP TABLE parent;
+      ALTER TABLE parent_copy RENAME TO parent;
+    `);
+    check(
+      'kalitlar o‘chirilgan holda bolalar saqlanadi',
+      probe.prepare('SELECT COUNT(*) n FROM child').get().n === 2,
+      probe.prepare('SELECT COUNT(*) n FROM child').get().n,
+    );
+    probe.pragma('foreign_keys = ON');
+    probe.close();
+  }
+
+  // Migratsiyalardan keyin kalitlar QAYTA yoqilgan bo'lishi kerak
+  check('migratsiyadan keyin tashqi kalitlar yoqilgan', db.pragma('foreign_keys', { simple: true }) === 1);
+  check('bog‘lanishlar buzilmagan', (db.pragma('foreign_key_check') as unknown[]).length === 0);
+
+
   /* ═════ Tahlil so'rovi ═════ */
   console.log('\nTahlil so‘rovi');
 

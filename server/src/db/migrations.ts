@@ -1596,13 +1596,49 @@ export function runMigrations(db: Database): string[] {
   const applied: string[] = [];
   const mark = db.prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES (?, datetime('now'))`);
 
-  for (const migration of MIGRATIONS) {
-    if (done.has(migration.id)) continue;
-    db.transaction(() => {
-      migration.up(db);
-      mark.run(`migration:${migration.id}`);
-    })();
-    applied.push(migration.id);
+  /*
+   * Migratsiya davomida tashqi kalitlar O'CHIRILADI.
+   *
+   * SQLite ustunni o'zgartira olmaydi — jadvalni qayta qurish kerak:
+   * yangisini yasa, ma'lumotni ko'chir, eskisini DROP qil, nomini
+   * o'zgartir. Ammo `DROP TABLE` tashqi kalit kaskadini ishga
+   * tushiradi va bog'liq jadvallar JIMGINA tozalanib ketadi.
+   *
+   * Aynan shu sodir bo'ldi: `requests` qayta qurilganda unga
+   * bog'langan takliflar, bitimlar, chat va sharhlar o'chib ketdi.
+   * Ma'lumot ko'chirilgan bo'lsa ham, kaskad undan oldin ishlagan.
+   *
+   * SQLite hujjatlarida ham shunday deyilgan: jadval qayta
+   * qurishdan OLDIN `foreign_keys` o'chiriladi. Pragma tranzaksiya
+   * ichida ishlamaydi, shuning uchun u tashqarida turadi.
+   *
+   * Oxirida `foreign_key_check` yuritiladi: migratsiya bog'lanishni
+   * buzgan bo'lsa, buni jimgina o'tkazib yubormaymiz.
+   */
+  const fkWasOn = Boolean((db.pragma('foreign_keys', { simple: true }) as unknown as number));
+  db.pragma('foreign_keys = OFF');
+
+  try {
+    for (const migration of MIGRATIONS) {
+      if (done.has(migration.id)) continue;
+      db.transaction(() => {
+        migration.up(db);
+        mark.run(`migration:${migration.id}`);
+      })();
+      applied.push(migration.id);
+    }
+
+    if (applied.length) {
+      const broken = db.pragma('foreign_key_check') as unknown[];
+      if (broken.length) {
+        console.error(
+          `[db] DIQQAT: migratsiyadan keyin ${broken.length} ta buzilgan bog‘lanish topildi`,
+          broken.slice(0, 5),
+        );
+      }
+    }
+  } finally {
+    if (fkWasOn) db.pragma('foreign_keys = ON');
   }
 
   return applied;
