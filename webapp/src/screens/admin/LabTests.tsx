@@ -17,7 +17,7 @@ import { useState } from 'react';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { Async, useResource } from '@/screens/clinic/shell';
-import { Button, Card, Chip, Field, Input, Notice, Sheet } from '@/ui';
+import { Button, Chip, Field, Input, Notice, Sheet } from '@/ui';
 import type { LabOrgan, LabTest } from '@shared/types';
 import { PageHeader, Toolbar, Empty } from './ui';
 
@@ -38,6 +38,7 @@ export function LabTests() {
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [openTest, setOpenTest] = useState<number | null>(null);
 
   /*
    * Tana a'zolarini ham SHU YERDA boshqaramiz.
@@ -156,33 +157,54 @@ export function LabTests() {
           data.tests.length === 0 ? (
             <Empty title="Tekshiruv yo‘q" hint="Birinchisini qo‘shing — bemor shundan tanlaydi." />
           ) : (
-            <div className="stack" style={{ gap: 'var(--s-3)' }}>
-              {data.tests.map((t) => (
-                <Card key={t.id} className="stack" style={{ gap: 'var(--s-2)' }}>
-                  <div className="between">
-                    <div className="row" style={{ gap: 8 }}>
-                      <span className="organrow__icon">{t.icon}</span>
-                      <strong>{t.nameUz}</strong>
-                    </div>
-                    <div className="row" style={{ gap: 6 }}>
-                      <Button size="sm" variant="ghost" onClick={() => open(t)}>
-                        Tahrirlash
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => remove(t)}>
-                        O‘chirish
-                      </Button>
-                    </div>
-                  </div>
+            /*
+              Yig'iladigan ro'yxat — operatsiyalar katalogidagidek.
+              Tekshiruvlar soni o'sgani sari hammasining organlarini
+              bir vaqtda ochiq ko'rsatish ekranni uzun devorga
+              aylantiradi va keraklisini topish qiyinlashadi.
+            */
+            <div className="cat__tree">
+              {data.tests.map((t) => {
+                const isOpen = openTest === t.id;
+                return (
+                  <div key={t.id} className="cat__branch">
+                    <div className="labrow">
+                      <button
+                        type="button"
+                        className={`cat__head ${isOpen ? 'is-open' : ''}`}
+                        style={{ flex: 1 }}
+                        onClick={() => setOpenTest(isOpen ? null : t.id)}
+                      >
+                        <span className={`cat__caret ${isOpen ? 'is-open' : ''}`}>›</span>
+                        <span className="labtest__icon">{t.icon}</span>
+                        <span className="cat__name truncate">{t.nameUz}</span>
+                        <span className="cat__count num">{t.organIds.length}</span>
+                      </button>
 
-                  <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                    {t.organIds.map((id) => (
-                      <span className="badge badge--neutral" key={id}>
-                        {organName(data.organs, id)}
-                      </span>
-                    ))}
+                      <div className="row" style={{ gap: 4, paddingRight: 'var(--s-3)' }}>
+                        <Button size="sm" variant="ghost" onClick={() => open(t)}>
+                          Tahrirlash
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => remove(t)}>
+                          O‘chirish
+                        </Button>
+                      </div>
+                    </div>
+
+                    {isOpen && (
+                      <div className="cat__body">
+                        <div className="cat__ops">
+                          {t.organIds.map((id) => (
+                            <span className="badge badge--neutral" key={id}>
+                              {organName(data.organs, id)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </Card>
-              ))}
+                );
+              })}
             </div>
           )
         }

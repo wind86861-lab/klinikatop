@@ -5133,18 +5133,10 @@
 .organrow.is-active { border-color: var(--primary); }
 .organrow__icon { font-size: 20px; line-height: 1; }
 
-/* Tekshiruv guruhi sarlavhasi — bosilsa butun guruh yoqiladi */
-.labtest__head {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  width: 100%;
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
+/* Tekshiruv belgisi — yig'iladigan ro'yxat sarlavhasida */
+.labtest__icon {
+  font-size: 17px;
+  line-height: 1;
 }
 
 /* Admin: tana a'zosi yorlig'i — bosilsa tahrir, xochi o'chiradi */
@@ -5176,3 +5168,10 @@
   cursor: pointer;
 }
 .organchip__x:hover { color: var(--danger, #c0392b); }
+
+/* Admin: tekshiruv qatori — sarlavha va amallar yonma-yon */
+.labrow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}

@@ -567,6 +567,8 @@ export const uz = {
   'ops.noMatch': 'Bunday yo‘nalish topilmadi',
   'lab.title': 'Tahlil yo‘nalishlari',
   'lab.navHint': 'Qaysi organlar bo‘yicha tekshiruv qilasiz',
+  'lab.organs': 'Tana a‘zolari',
+  'lab.selectAll': 'Barchasini tanlash',
   'lab.hint': 'Qaysi organlar bo‘yicha tahlil va tekshiruv qilasiz? Tahlil so‘rovi faqat shu yo‘nalishlarni belgilagan klinikalarga boradi.',
   'lab.none': 'Hech biri tanlanmagan — tahlil so‘rovlari sizga kelmaydi.',
   'lab.saved': 'Tahlil yo‘nalishlari saqlandi',
