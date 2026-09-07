@@ -9,7 +9,7 @@ import { config } from '../lib/config';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { deleteFiles } from './files';
 import { formatUzs } from '../lib/format';
-import { mapCity, mapOperation, mapRequest, mapUser , mapLabOrgan } from '../lib/mappers';
+import { mapCity, mapOperation, mapRequest, mapUser , mapLabOrgan, mapLabTest } from '../lib/mappers';
 import {
   REQUEST_TRANSITIONS,
   UNKNOWN_OPERATION_SLUG,
@@ -22,6 +22,7 @@ import {
 } from '../../../shared/types';
 import { bus, ch } from './events';
 import { findClinicsForLab, findMatchingClinics } from './matching';
+import { isValidPair } from './labOrgans';
 import { notify, notifyClinic } from './notifications';
 import { validateAnswers } from './requestSteps';
 import { TERMS_VERSION, recordAcceptance } from './terms';
@@ -46,10 +47,14 @@ export function hydrate(row: any): RequestWithMeta {
   const organ = row.lab_organ_id
     ? db.prepare(`SELECT * FROM lab_organs WHERE id = ?`).get(row.lab_organ_id)
     : null;
+  const test = row.lab_test_id
+    ? db.prepare(`SELECT * FROM lab_tests WHERE id = ?`).get(row.lab_test_id)
+    : null;
   const city = db.prepare(`SELECT * FROM cities WHERE id = ?`).get(row.city_id);
   return {
     ...mapRequest(row),
     operation: operation ? mapOperation(operation) : null,
+    labTest: test ? mapLabTest(test) : null,
     labOrgan: organ ? mapLabOrgan(organ) : null,
     city: mapCity(city),
     offersCount: row.offers_count ?? 0,
@@ -81,7 +86,9 @@ export interface CreateRequestInput {
   kind?: RequestKind;
   /** Operatsiya so'rovida majburiy, tahlilda ishlatilmaydi */
   operationId?: number | null;
-  /** Tahlil so'rovida majburiy */
+  /** Tahlil so'rovida majburiy: qanday tekshiruv */
+  labTestId?: number | null;
+  /** Tahlil so'rovida majburiy: qaysi organ */
   labOrganId?: number | null;
   /** Tahlil so'rovida so'raladi (kg) */
   weightKg?: number | null;
@@ -214,16 +221,35 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
    * tahlil so'rovida operatsiya umuman yo'q va aksincha.
    */
   let op: { slug: string } | null = null;
+  let labTestId: number | null = null;
   let labOrganId: number | null = null;
   let weightKg: number | null = null;
   let condition = '';
 
   if (kind === 'lab') {
+    const test = db
+      .prepare(`SELECT id FROM lab_tests WHERE id = ? AND active = 1`)
+      .get(input.labTestId ?? 0) as { id: number } | undefined;
+    if (!test) throw badRequest('test_required', 'Qanday tekshiruv kerakligini tanlang');
+    labTestId = test.id;
+
     const organ = db
       .prepare(`SELECT id FROM lab_organs WHERE id = ? AND active = 1`)
       .get(input.labOrganId ?? 0) as { id: number } | undefined;
     if (!organ) throw badRequest('organ_required', 'Qaysi organ uchun tahlil kerakligini tanlang');
     labOrganId = organ.id;
+
+    /*
+     * Juftlik ADMIN ruxsat berganidan bo'lishi shart.
+     *
+     * Ilova ro'yxatni o'zi cheklaydi, lekin unga ishonib bo'lmaydi:
+     * eskirgan ro'yxat bilan ochilgan ilova ham, qo'lda yuborilgan
+     * so'rov ham mantiqsiz juftlik yuborishi mumkin ("qon tahlili +
+     * umurtqa"). Bunday so'rov hech qaysi klinikaga tushmasdi.
+     */
+    if (!isValidPair(labTestId, labOrganId)) {
+      throw badRequest('pair_not_allowed', 'Bu tekshiruv shu organ uchun qilinmaydi');
+    }
 
     /*
      * Vazn — 2 dan 400 kg gacha. Chegara keng: chaqaloq ham,
@@ -277,13 +303,13 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
   const requestId = tx(() => {
     const info = db
       .prepare(
-        `INSERT INTO requests (patient_id, kind, operation_id, lab_organ_id, weight_kg,
+        `INSERT INTO requests (patient_id, kind, operation_id, lab_test_id, lab_organ_id, weight_kg,
                                city_id, budget_uzs, condition_text, note,
                                urgency, attachments, other_regions_ok, date_from, date_to, date_flexible,
                                ai_conversation, status, ai_suggested, expires_at, terms_version, terms_accepted_at,
                                for_self, subject_name, subject_birth_year, subject_gender, extra_answers,
                                fallback_category_id)
-         VALUES (@patientId, @kind, @operationId, @labOrganId, @weightKg,
+         VALUES (@patientId, @kind, @operationId, @labTestId, @labOrganId, @weightKg,
                  @cityId, @budgetUzs, @conditionText, @note,
                  @urgency, @attachments, @otherRegionsOk, @dateFrom, @dateTo, @dateFlexible,
                  @aiConversation, 'NEW', @aiSuggested, @expiresAt, @termsVersion, datetime('now'),
@@ -294,6 +320,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
         patientId: input.patientId,
         kind,
         operationId: kind === 'lab' ? null : (input.operationId ?? null),
+        labTestId,
         labOrganId,
         weightKg,
         cityId: input.cityId,
@@ -353,8 +380,10 @@ export function broadcast(requestId: number): number {
    */
   const clinics =
     req.kind === 'lab'
-      ? req.labOrganId
-        ? findClinicsForLab(req.labOrganId, req.cityId, { otherRegionsOk: req.otherRegionsOk })
+      ? req.labTestId && req.labOrganId
+        ? findClinicsForLab(req.labTestId, req.labOrganId, req.cityId, {
+            otherRegionsOk: req.otherRegionsOk,
+          })
         : []
       : req.operationId
         ? findMatchingClinics(req.operationId, req.cityId, {

@@ -23,7 +23,8 @@ const createSchema = z.object({
   kind: z.enum(['operation', 'lab']).default('operation'),
   /* Operatsiya so'rovida majburiy, tahlilda bo'lmaydi */
   operationId: z.number().int().positive().nullable().optional(),
-  /* Tahlil so'rovida majburiy */
+  /* Tahlil so'rovida majburiy: tekshiruv va organ */
+  labTestId: z.number().int().positive().nullable().optional(),
   labOrganId: z.number().int().positive().nullable().optional(),
   weightKg: z.number().int().min(2).max(400).nullable().optional(),
   cityId: z.number().int().positive(),
@@ -88,6 +89,7 @@ requestsRouter.post('/', (req, res) => {
     patientId: req.user!.id,
     kind: body.kind,
     operationId: body.operationId ?? null,
+    labTestId: body.labTestId ?? null,
     labOrganId: body.labOrganId ?? null,
     weightKg: body.weightKg ?? null,
     cityId: body.cityId,

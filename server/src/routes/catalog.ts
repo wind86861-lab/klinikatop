@@ -15,7 +15,7 @@ import { countMatchingClinics } from '../services/matching';
 import { getPricePulse, getTestimonials } from '../services/highlights';
 import { resolveUser } from '../middleware/auth';
 import { wizardSteps } from '../services/requestSteps';
-import { listLabOrgans } from '../services/labOrgans';
+import { listLabOrgans, listLabTests } from '../services/labOrgans';
 
 export const catalogRouter = Router();
 
@@ -101,4 +101,15 @@ catalogRouter.get('/request-steps', (req, res) => {
  */
 catalogRouter.get('/lab-organs', (_req, res) => {
   res.json(listLabOrgans());
+});
+
+/**
+ * Tekshiruvlar — bemor "qanday tekshiruv" deb tanlaydigan ro'yxat.
+ *
+ * Har birida unga mos organlar ham keladi: bemor tekshiruvni
+ * tanlagach, organ ro'yxati o'shalar bilan cheklanadi va mantiqsiz
+ * juftlik umuman chiqmaydi.
+ */
+catalogRouter.get('/lab-tests', (_req, res) => {
+  res.json(listLabTests());
 });

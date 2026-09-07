@@ -49,6 +49,7 @@ import { BotFaceScreen } from './BotFace';
 import { AiKeys } from './AiKeys';
 import { Empty, Kpi, PageHeader } from './ui';
 import { Security } from '../web/Security';
+import { LabTests } from './LabTests';
 import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
 import type { AdminMetrics, ChatMessage, Clinic, ClinicDocument, Deal, DealDetail } from '@shared/types';
 
@@ -158,6 +159,7 @@ export function AdminHome() {
     { id: 'clinics', label: t('admin.tabClinics'), group: 'Boshqaruv', icon: <IconClinic size={17} />, render: () => <AdminClinics /> },
     { id: 'metrics', label: t('admin.metrics'), group: 'Boshqaruv', icon: <IconChart size={17} />, render: () => <MetricsPanel metrics={metrics} /> },
     { id: 'catalog', label: 'Katalog', group: 'Boshqaruv', icon: <IconStethoscope size={17} />, render: () => <CatalogSync /> },
+    { id: 'lab-tests', label: 'Tahlil katalogi', group: 'Boshqaruv', icon: <IconStethoscope size={17} />, render: () => <LabTests /> },
     { id: 'commission', label: 'Komissiya to‘lovlari', group: 'Pul', icon: <IconWallet size={17} />, render: () => <CommissionPayments /> },
     { id: 'steps', label: 'So‘rov bosqichlari', group: 'Sozlash', icon: <IconSparkle size={17} />, render: () => <RequestStepsScreen /> },
     { id: 'bot', label: 'Bot matnlari', group: 'Sozlash', icon: <IconChat size={17} />, render: () => <BotFaceScreen /> },

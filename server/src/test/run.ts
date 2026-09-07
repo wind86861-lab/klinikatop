@@ -1861,6 +1861,26 @@ async function main() {
   const brain = organs.find((o: any) => o.slug === 'brain');
   check('bosh miya ro‘yxatda bor', Boolean(brain));
 
+  /* ── Tekshiruvlar va juftliklar ── */
+
+  const tests = labOrgans.listLabTests();
+  check('tekshiruvlar katalogi to‘ldirilgan', tests.length >= 5, tests.length);
+
+  const mrt = tests.find((x: any) => x.slug === 'mrt');
+  const blood = tests.find((x: any) => x.slug === 'blood');
+  check('MRT bor va organlari bor', Boolean(mrt) && mrt.organIds.length > 0, mrt?.organIds?.length);
+  check('MRT bosh miyani qamraydi', mrt.organIds.includes(brain.id));
+
+  /*
+   * Mantiqsiz juftlik yo'q: qon tahlili umurtqa uchun qilinmaydi.
+   * Bemorga bunday variant ko'rsatilmasligi kerak, server ham qabul
+   * qilmasligi kerak.
+   */
+  const spine = organs.find((o: any) => o.slug === 'spine');
+  check('qon tahlili umurtqani qamramaydi', !blood.organIds.includes(spine.id));
+  check('juftlik tekshiruvi ishlaydi', labOrgans.isValidPair(mrt.id, brain.id) === true);
+  check('mantiqsiz juftlik rad etiladi', labOrgans.isValidPair(blood.id, spine.id) === false);
+
   /*
    * Tahlil so'rovi operatsiyaga bog'lanmaydi va holat tavsifi
    * so'ralmaydi — o'rniga organ va vazn majburiy.
@@ -1871,6 +1891,7 @@ async function main() {
       requests.createRequest({
         patientId: patient.id,
         kind: 'lab',
+        labTestId: mrt.id,
         cityId: tashkent.id,
         weightKg: 70,
         budgetUzs: 500_000,
@@ -1889,6 +1910,7 @@ async function main() {
       requests.createRequest({
         patientId: patient.id,
         kind: 'lab',
+        labTestId: mrt.id,
         labOrganId: brain.id,
         cityId: tashkent.id,
         budgetUzs: 500_000,
@@ -1901,16 +1923,45 @@ async function main() {
     'invalid_weight',
   );
 
-  // Klinika bu organ bo'yicha tahlil qilishini belgilaydi
-  labOrgans.saveClinicLabOrgans(clinic.id, [brain.id]);
+  // Klinika shu JUFTLIKNI qilishini belgilaydi
+  labOrgans.saveClinicLabServices(clinic.id, [{ testId: mrt.id, organId: brain.id }]);
   check(
-    'klinika organni belgiladi',
-    labOrgans.clinicLabOrganIds(clinic.id).includes(brain.id),
+    'klinika juftlikni belgiladi',
+    labOrgans.clinicLabServices(clinic.id).some((sv: any) => sv.testId === mrt.id && sv.organId === brain.id),
+  );
+
+  // Admin ruxsat bermagan juftlik saqlanmaydi
+  check(
+    'mantiqsiz juftlik saqlanmaydi',
+    labOrgans.saveClinicLabServices(clinic.id, [
+      { testId: mrt.id, organId: brain.id },
+      { testId: blood.id, organId: spine.id },
+    ]).length === 1,
+  );
+
+  throws(
+    'mantiqsiz juftlik bilan so‘rov rad etiladi',
+    () =>
+      requests.createRequest({
+        patientId: patient.id,
+        kind: 'lab',
+        labTestId: blood.id,
+        labOrganId: spine.id,
+        weightKg: 70,
+        cityId: tashkent.id,
+        note: null,
+        urgency: 'normal',
+        attachments: [],
+        aiSuggested: false,
+        acceptTerms: true,
+      } as any),
+    'pair_not_allowed',
   );
 
   const labReq = requests.createRequest({
     patientId: patient.id,
     kind: 'lab',
+    labTestId: mrt.id,
     labOrganId: brain.id,
     weightKg: 72,
     cityId: tashkent.id,
@@ -1927,7 +1978,12 @@ async function main() {
   check('organ yozildi', labReq.labOrganId === brain.id);
   check('vazn yozildi', labReq.weightKg === 72);
   check('organ nomi keldi', Boolean(labReq.labOrgan), labReq.labOrgan?.nameUz);
-  check('sarlavha organ nomidan olinadi', requestTitle(labReq) === brain.nameUz, requestTitle(labReq));
+  check('tekshiruv nomi keldi', Boolean(labReq.labTest), labReq.labTest?.nameUz);
+  check(
+    'sarlavha tekshiruv va organdan yig‘iladi',
+    requestTitle(labReq) === `${mrt.nameUz} · ${brain.nameUz}`,
+    requestTitle(labReq),
+  );
 
   // Vazn profilga ham yozildi — keyingi safar o'zi to'ladi
   check(
@@ -1946,6 +2002,7 @@ async function main() {
   const labReq2 = requests.createRequest({
     patientId: patient.id,
     kind: 'lab',
+    labTestId: mrt.id,
     labOrganId: otherOrgan.id,
     weightKg: 72,
     cityId: tashkent.id,
@@ -1956,14 +2013,67 @@ async function main() {
     aiSuggested: false,
     acceptTerms: true,
   } as any);
-  check('belgilanmagan organ bo‘yicha so‘rov bormaydi', labReq2.broadcastCount === 0, labReq2.broadcastCount);
+  check('belgilanmagan juftlik bo‘yicha so‘rov bormaydi', labReq2.broadcastCount === 0, labReq2.broadcastCount);
 
   // Bosqichlar oqim bo'yicha ajraladi
   const { stepInFlow } = require('../../../shared/types');
   check('operatsiya bosqichi tahlilda yo‘q', stepInFlow('operation', 'lab') === false);
   check('organ bosqichi operatsiyada yo‘q', stepInFlow('organ', 'operation') === false);
+  check('tekshiruv bosqichi faqat tahlilda', stepInFlow('test', 'lab') && !stepInFlow('test', 'operation'));
   check('byudjet ikkalasida ham bor', stepInFlow('budget', 'lab') && stepInFlow('budget', 'operation'));
   check('admin savoli ikkalasida ham chiqadi', stepInFlow('smoking', 'lab') === true);
+
+
+  /* ── Admin katalogni qo'lda to'ldiradi ── */
+
+  const madeOrgan = labOrgans.createLabOrgan({ nameUz: 'Quloq', nameRu: 'Ухо', icon: '👂' });
+  check('admin tana a‘zosi qo‘shdi', madeOrgan.id > 0 && madeOrgan.nameUz === 'Quloq');
+  check(
+    'yangi a‘zo ro‘yxatda ko‘rinadi',
+    labOrgans.listLabOrgans().some((o: any) => o.id === madeOrgan.id),
+  );
+
+  const madeTest = labOrgans.createLabTest({
+    nameUz: 'Audiometriya',
+    nameRu: 'Аудиометрия',
+    icon: '🎧',
+    organIds: [madeOrgan.id],
+  });
+  check('admin tekshiruv qo‘shdi', madeTest.organIds.includes(madeOrgan.id));
+  check('yangi juftlik amal qiladi', labOrgans.isValidPair(madeTest.id, madeOrgan.id) === true);
+
+  throws(
+    'organsiz tekshiruv qabul qilinmaydi',
+    () => labOrgans.createLabTest({ nameUz: 'Bo‘sh', organIds: [] } as any),
+    'organs_required',
+  );
+
+  /*
+   * Admin organni tekshiruvdan olib tashlasa, klinikaning endi
+   * mos kelmaydigan juftligi ham olib tashlanadi — aks holda hech
+   * kim tanlay olmaydigan so'rov o'sha klinikaga borardi.
+   */
+  labOrgans.saveClinicLabServices(clinic.id, [
+    { testId: mrt.id, organId: brain.id },
+    { testId: madeTest.id, organId: madeOrgan.id },
+  ]);
+  labOrgans.updateLabTest(madeTest.id, { organIds: [brain.id] });
+  check(
+    'mos kelmay qolgan juftlik klinikadan olindi',
+    !labOrgans.clinicLabServices(clinic.id).some((sv: any) => sv.organId === madeOrgan.id),
+  );
+
+  // Ishlatilgan a'zoni o'chirib bo'lmaydi — yashirish kerak
+  throws(
+    'so‘rovda ishlatilgan a‘zo o‘chirilmaydi',
+    () => labOrgans.deleteLabOrgan(brain.id),
+    'organ_in_use',
+  );
+  labOrgans.deleteLabOrgan(madeOrgan.id);
+  check(
+    'ishlatilmagan a‘zo o‘chirildi',
+    !labOrgans.listLabOrgans(true).some((o: any) => o.id === madeOrgan.id),
+  );
 
 
   /* ═════ 20. Sana oralig'i va moslashuvchanlik ═════ */

@@ -57,7 +57,9 @@ import type {
   RequestStep,
   StepOption,
   StepKind,
+  ClinicLabService,
   LabOrgan,
+  LabTest,
   RequestKind,
 } from '@shared/types';
 
@@ -333,11 +335,53 @@ export const api = {
 
   /** Tahlil organlari — bemor "qaysi organ uchun" deb tanlaydigan ro'yxat */
   labOrgans: () => get<LabOrgan[]>('/catalog/lab-organs'),
+  /** Tekshiruvlar; har birida unga mos organlar ham keladi */
+  labTests: () => get<LabTest[]>('/catalog/lab-tests'),
 
-  /* ── Klinikaning tahlil yo'nalishlari ── */
-  clinicLabOrgans: () => get<{ all: LabOrgan[]; selected: number[] }>('/clinic/lab-organs'),
-  saveClinicLabOrgans: (organIds: number[]) =>
-    put<{ selected: number[] }>('/clinic/lab-organs', { organIds }),
+  /* ── Klinikaning tahlil xizmatlari ── */
+  clinicLabServices: () =>
+    get<{ tests: LabTest[]; organs: LabOrgan[]; selected: ClinicLabService[] }>(
+      '/clinic/lab-services',
+    ),
+  saveClinicLabServices: (services: ClinicLabService[]) =>
+    put<{ selected: ClinicLabService[] }>('/clinic/lab-services', { services }),
+
+  /* ── Admin: tahlil katalogi ── */
+  adminLabTests: () => get<{ tests: LabTest[]; organs: LabOrgan[] }>('/admin/lab-tests'),
+  createLabTest: (body: {
+    nameUz: string;
+    nameRu?: string;
+    icon?: string;
+    position?: number;
+    active?: boolean;
+    organIds: number[];
+  }) => post<LabTest>('/admin/lab-tests', body),
+  updateLabTest: (
+    id: number,
+    body: Partial<{
+      nameUz: string;
+      nameRu: string;
+      icon: string;
+      position: number;
+      active: boolean;
+      organIds: number[];
+    }>,
+  ) => patch<LabTest>(`/admin/lab-tests/${id}`, body),
+  deleteLabTest: (id: number) => del(`/admin/lab-tests/${id}`),
+
+  /* ── Admin: tana a'zolari ── */
+  createLabOrgan: (body: {
+    nameUz: string;
+    nameRu?: string;
+    icon?: string;
+    position?: number;
+    active?: boolean;
+  }) => post<LabOrgan>('/admin/lab-organs', body),
+  updateLabOrgan: (
+    id: number,
+    body: Partial<{ nameUz: string; nameRu: string; icon: string; position: number; active: boolean }>,
+  ) => patch<LabOrgan>(`/admin/lab-organs/${id}`, body),
+  deleteLabOrgan: (id: number) => del(`/admin/lab-organs/${id}`),
   unknownOperation: () => get<Operation | null>('/catalog/unknown-operation'),
   clinicProfile: (id: number) => get<{ clinic: ClinicPublic; reviews: Review[] }>(`/catalog/clinics/${id}`),
 
@@ -351,6 +395,7 @@ export const api = {
     /** Operatsiya so'rovida majburiy, tahlilda `null` */
     operationId?: number | null;
     /** Tahlil so'rovida majburiy */
+    labTestId?: number | null;
     labOrganId?: number | null;
     weightKg?: number | null;
     cityId: number;

@@ -20,6 +20,7 @@ import { FileOpenButton, FileThumb } from '@/components/wizard/FileThumb';
 import {
   Button,
   Card,
+  Chip,
   Field,
   IconAlert,
   IconCheck,
@@ -521,33 +522,51 @@ export async function uploadAsBase64(file: File, kind: 'uzi' | 'other' = 'other'
 export { FileOpenButton, formatDate };
 
 
-/* ═════════════════  Tahlil yo'nalishlari  ═════════════════ */
+/* ═════════════════  Tahlil xizmatlari  ═════════════════ */
 
 /**
- * Klinika qaysi organlar bo'yicha tahlil qiladi.
+ * Klinika qaysi tekshiruvni qaysi organ bo'yicha qiladi.
  *
- * Operatsiyalar ekranidan farqi — ro'yxat TEKIS. Organlar o'nga
- * yaqin va ularni soha/bo'lim daraxtiga solish faqat ortiqcha
- * bosish qo'shardi.
+ * Ikki daraja, chunki bitta ro'yxat yetarli emas edi: MRT
+ * qiladigan klinika qon tahlilini qilmasligi mumkin, garchi
+ * ikkalasi ham "jigar" bo'lsa ham.
  *
- * Bo'sh ro'yxat ham saqlanadi: klinika tahlil qilmasa shuni ayta
- * olishi kerak. Operatsiyalarda bu boshqacha — u yerda kamida
- * bittasi shart, chunki operatsiyasiz klinika platformada umuman
- * ish ko'ra olmaydi.
+ * Har tekshiruv o'z organlari bilan guruh bo'lib turadi va sarlavha
+ * bosilsa butun guruh yoqiladi — MRT ni to'liq qiladigan klinika
+ * o'nta katakni bittalab bosishi kerak emas.
  */
-export function ClinicLabOrgans() {
+export function ClinicLabServices() {
   const { t, lang, toast } = useApp();
   const navigate = useNavigate();
 
-  const res = useResource(() => api.clinicLabOrgans());
-  const [selected, setSelected] = useState<Set<number> | null>(null);
+  const res = useResource(() => api.clinicLabServices());
+  const [selected, setSelected] = useState<Set<string> | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const current = selected ?? new Set(res.data?.selected ?? []);
+  const key = (testId: number, organId: number) => `${testId}:${organId}`;
+  const current =
+    selected ?? new Set((res.data?.selected ?? []).map((s) => key(s.testId, s.organId)));
 
-  const toggle = (id: number) => {
+  const organName = (id: number) => {
+    const o = res.data?.organs.find((x) => x.id === id);
+    return o ? (lang === 'ru' ? o.nameRu : o.nameUz) : String(id);
+  };
+
+  const toggle = (testId: number, organId: number) => {
     const next = new Set(current);
-    next.has(id) ? next.delete(id) : next.add(id);
+    const k = key(testId, organId);
+    next.has(k) ? next.delete(k) : next.add(k);
+    setSelected(next);
+    haptic.tap();
+  };
+
+  const toggleTest = (testId: number, organIds: number[]) => {
+    const allOn = organIds.every((o) => current.has(key(testId, o)));
+    const next = new Set(current);
+    for (const o of organIds) {
+      if (allOn) next.delete(key(testId, o));
+      else next.add(key(testId, o));
+    }
     setSelected(next);
     haptic.tap();
   };
@@ -555,7 +574,11 @@ export function ClinicLabOrgans() {
   const save = async () => {
     setSaving(true);
     try {
-      await api.saveClinicLabOrgans([...current]);
+      const services = [...current].map((k) => {
+        const [testId, organId] = k.split(':').map(Number);
+        return { testId, organId };
+      });
+      await api.saveClinicLabServices(services);
       haptic.success();
       toast(t('lab.saved'), 'success');
       navigate(-1);
@@ -590,23 +613,36 @@ export function ClinicLabOrgans() {
         <>
           <Notice tone="info">{t('lab.hint')}</Notice>
 
-          <div className="stack" style={{ gap: 'var(--s-2)' }}>
-            {res.data.all.map((organ) => (
-              <Card
-                key={organ.id}
-                variant="flat"
-                className={`organrow ${current.has(organ.id) ? 'is-active' : ''}`}
-                onClick={() => toggle(organ.id)}
-              >
-                <span className="organrow__icon">{organ.icon}</span>
-                <strong style={{ flex: 1 }}>{lang === 'ru' ? organ.nameRu : organ.nameUz}</strong>
-                {current.has(organ.id) && (
-                  <span style={{ color: 'var(--primary)' }}>
-                    <IconCheck size={16} />
-                  </span>
-                )}
-              </Card>
-            ))}
+          <div className="stack" style={{ gap: 'var(--s-3)' }}>
+            {res.data.tests.map((test) => {
+              const on = test.organIds.filter((o) => current.has(key(test.id, o))).length;
+              return (
+                <Card key={test.id} className="stack" style={{ gap: 'var(--s-2)' }}>
+                  <button type="button" className="labtest__head" onClick={() => toggleTest(test.id, test.organIds)}>
+                    <span className="organrow__icon">{test.icon}</span>
+                    <strong style={{ flex: 1, textAlign: 'left' }}>
+                      {lang === 'ru' ? test.nameRu : test.nameUz}
+                    </strong>
+                    <span className="tiny">
+                      {on}/{test.organIds.length}
+                    </span>
+                  </button>
+
+                  <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                    {test.organIds.map((organId) => (
+                      <Chip
+                        key={organId}
+                        size="sm"
+                        active={current.has(key(test.id, organId))}
+                        onClick={() => toggle(test.id, organId)}
+                      >
+                        {organName(organId)}
+                      </Chip>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })}
           </div>
 
           {current.size === 0 && <Notice tone="warning">{t('lab.none')}</Notice>}

@@ -45,6 +45,16 @@ function logModeration(userId: number, entity: string, entityId: number, action:
 }
 import { requireRole } from '../middleware/auth';
 import {
+  createLabOrgan,
+  createLabTest,
+  deleteLabOrgan,
+  deleteLabTest,
+  listLabOrgans,
+  listLabTests,
+  updateLabOrgan,
+  updateLabTest,
+} from '../services/labOrgans';
+import {
   getMetrics,
   listDisputes,
   listFlaggedReviews,
@@ -493,4 +503,69 @@ adminRouter.delete('/ai-keys/:id', requireRole('admin'), (req, res) => {
   resetAiProvider();
   logModeration(req.user!.id, 'platform', Number(req.params.id), 'ai-key:delete', '');
   res.json(list);
+});
+
+/* ═════════════════  Tahlil katalogi  ═════════════════ */
+
+/**
+ * Tekshiruvlar va ularga mos organlar — ADMIN belgilaydi.
+ *
+ * Bu mahsulot qarori, kod emas: yangi tekshiruv qo'shish yoki
+ * organni ro'yxatdan olib tashlash uchun deploy kutish noto'g'ri
+ * bo'lardi. Bemorga faqat shu yerda ruxsat berilgan juftliklar
+ * ko'rsatiladi.
+ */
+adminRouter.get('/lab-tests', requireRole('admin'), (_req, res) => {
+  res.json({ tests: listLabTests(true), organs: listLabOrgans(true) });
+});
+
+const labTestSchema = z.object({
+  nameUz: z.string().trim().min(2).max(120),
+  nameRu: z.string().trim().max(120).optional().default(''),
+  icon: z.string().trim().max(8).optional().default(''),
+  position: z.number().int().min(0).max(9999).optional(),
+  active: z.boolean().optional(),
+  organIds: z.array(z.number().int().positive()).min(1).max(64),
+});
+
+adminRouter.post('/lab-tests', requireRole('admin'), (req, res) => {
+  res.status(201).json(createLabTest(labTestSchema.parse(req.body)));
+});
+
+adminRouter.patch('/lab-tests/:id', requireRole('admin'), (req, res) => {
+  const body = labTestSchema.partial().parse(req.body);
+  res.json(updateLabTest(Number(req.params.id), body));
+});
+
+adminRouter.delete('/lab-tests/:id', requireRole('admin'), (req, res) => {
+  deleteLabTest(Number(req.params.id));
+  res.status(204).end();
+});
+
+/**
+ * Tana a'zolari — admin QO'LDA kiritadi.
+ *
+ * Ro'yxat oldindan bilib bo'lmaydi: klinikalar qaysi yo'nalishda
+ * ishlashiga qarab u kengayadi. Kodda tursa har qo'shimcha deploy
+ * kutardi.
+ */
+const labOrganSchema = z.object({
+  nameUz: z.string().trim().min(2).max(120),
+  nameRu: z.string().trim().max(120).optional().default(''),
+  icon: z.string().trim().max(8).optional().default(''),
+  position: z.number().int().min(0).max(9999).optional(),
+  active: z.boolean().optional(),
+});
+
+adminRouter.post('/lab-organs', requireRole('admin'), (req, res) => {
+  res.status(201).json(createLabOrgan(labOrganSchema.parse(req.body)));
+});
+
+adminRouter.patch('/lab-organs/:id', requireRole('admin'), (req, res) => {
+  res.json(updateLabOrgan(Number(req.params.id), labOrganSchema.partial().parse(req.body)));
+});
+
+adminRouter.delete('/lab-organs/:id', requireRole('admin'), (req, res) => {
+  deleteLabOrgan(Number(req.params.id));
+  res.status(204).end();
 });

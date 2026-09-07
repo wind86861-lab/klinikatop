@@ -200,8 +200,6 @@ export type RequestKind = (typeof REQUEST_KINDS)[number];
  * Tahlil qaysi organ uchun (bosh miya, jigar, ...).
  *
  * Operatsiyada "nima qilinadi" muhim, tahlilda esa "nima tekshiriladi".
- * Klinika ham aynan shu ro'yxatdan o'zi qiladiganini belgilaydi va
- * so'rov faqat o'shalarga boradi.
  */
 export interface LabOrgan {
   id: number;
@@ -209,6 +207,32 @@ export interface LabOrgan {
   nameUz: string;
   nameRu: string;
   icon: string;
+}
+
+/**
+ * Tekshiruv turi — MRT, UZI, qon tahlili va hokazo.
+ *
+ * Yolg'iz organ yetarli emas edi: "bosh miya" degan javob MRT ni
+ * ham, KT ni ham, qon tahlilini ham anglatishi mumkin — klinika esa
+ * ularning hammasini qilmaydi va narxi butunlay boshqa.
+ *
+ * Qaysi organ qaysi tekshiruvga mos kelishini ADMIN belgilaydi:
+ * bemorga faqat mantiqiy juftliklar ko'rsatiladi.
+ */
+export interface LabTest {
+  id: number;
+  slug: string;
+  nameUz: string;
+  nameRu: string;
+  icon: string;
+  /** Shu tekshiruvga mos organlar */
+  organIds: number[];
+}
+
+/** Klinika yoqqan juftlik: qaysi tekshiruvni qaysi organ bo'yicha qiladi. */
+export interface ClinicLabService {
+  testId: number;
+  organId: number;
 }
 
 export interface Operation {
@@ -333,6 +357,8 @@ export interface MedicalRequest {
   kind: RequestKind;
   /** Tahlil so'rovida bo'sh: u operatsiyaga bog'lanmaydi */
   operationId: number | null;
+  /** Tahlil so'rovida — qanday tekshiruv (MRT, UZI, ...) */
+  labTestId: number | null;
   /** Tahlil so'rovida — qaysi organ tekshiriladi */
   labOrganId: number | null;
   /**
@@ -412,17 +438,31 @@ export interface TermsDocument {
  * olinadi.
  */
 export function requestTitle(
-  req: { operation?: { nameUz: string; nameRu: string } | null; labOrgan?: { nameUz: string; nameRu: string } | null },
+  req: {
+    operation?: { nameUz: string; nameRu: string } | null;
+    labTest?: { nameUz: string; nameRu: string } | null;
+    labOrgan?: { nameUz: string; nameRu: string } | null;
+  },
   lang: Lang = 'uz',
 ): string {
-  const src = req.operation ?? req.labOrgan ?? null;
-  if (!src) return '';
-  return lang === 'ru' ? src.nameRu : src.nameUz;
+  const name = (x: { nameUz: string; nameRu: string } | null | undefined) =>
+    x ? (lang === 'ru' ? x.nameRu : x.nameUz) : '';
+
+  if (req.operation) return name(req.operation);
+
+  /*
+   * Tahlilda ikkovi birga: "MRT · Bosh miya". Yolg'iz tekshiruv
+   * nomi qaysi organ ekanini aytmaydi, yolg'iz organ esa qanday
+   * tekshiruv kerakligini.
+   */
+  const parts = [name(req.labTest), name(req.labOrgan)].filter(Boolean);
+  return parts.join(' · ');
 }
 
 export interface RequestWithMeta extends MedicalRequest {
-  /** Tahlil so'rovida `null` — o'rniga `labOrgan` to'ladi */
+  /** Tahlil so'rovida `null` — o'rniga `labTest` va `labOrgan` to'ladi */
   operation: Operation | null;
+  labTest: LabTest | null;
   labOrgan: LabOrgan | null;
   city: City;
   offersCount: number;
@@ -1099,6 +1139,7 @@ export const BUILTIN_STEPS = [
   'documents',
   /** Faqat tahlil oqimida */
   'weight',
+  'test',
   'organ',
   'region',
   'budget',
@@ -1116,6 +1157,7 @@ export const LOCKED_STEPS: readonly BuiltinStep[] = [
   'type',
   'operation',
   'condition',
+  'test',
   'organ',
   'region',
   'review',
@@ -1136,6 +1178,7 @@ export const STEP_FLOWS: Record<BuiltinStep, readonly RequestKind[]> = {
   condition: ['operation'],
   documents: ['operation'],
   weight: ['lab'],
+  test: ['lab'],
   organ: ['lab'],
   region: ['operation', 'lab'],
   budget: ['operation', 'lab'],

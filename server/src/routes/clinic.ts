@@ -14,7 +14,7 @@ import { listClinicRequests, markViewed, getRequest } from '../services/requests
 import { listClinicDeals } from '../services/deals';
 import { listClinicReviews } from '../services/reviews';
 import { statsForRequest } from '../services/priceStats';
-import { clinicLabOrganIds, listLabOrgans, saveClinicLabOrgans } from '../services/labOrgans';
+import { clinicLabServices, listLabOrgans, listLabTests, saveClinicLabServices } from '../services/labOrgans';
 import {
   addDocument,
   createDoctor,
@@ -379,25 +379,36 @@ clinicRouter.post('/commission/pay', (req, res) => {
 
 
 
-/* ═════════════════  Tahlil yo'nalishlari  ═════════════════ */
+/* ═════════════════  Tahlil xizmatlari  ═════════════════ */
 
 /**
- * Klinika qaysi organlar bo'yicha tahlil qiladi.
+ * Klinika qaysi tekshiruvni qaysi organ bo'yicha qiladi.
  *
- * So'rov faqat shu ro'yxatni belgilagan klinikalarga boradi —
- * operatsiyalardagi bilan bir xil qoida.
+ * So'rov faqat shu JUFTLIKNI yoqqan klinikalarga boradi. Yolg'iz
+ * organ yetarli emas edi: MRT qiladigan klinika qon tahlilini
+ * qilmasligi mumkin, garchi ikkovi ham "jigar" bo'lsa ham.
  */
-clinicRouter.get('/lab-organs', (req, res) => {
+clinicRouter.get('/lab-services', (req, res) => {
   res.json({
-    all: listLabOrgans(),
-    selected: clinicLabOrganIds(requireClinic(req)),
+    tests: listLabTests(),
+    organs: listLabOrgans(),
+    selected: clinicLabServices(requireClinic(req)),
   });
 });
 
-clinicRouter.put('/lab-organs', (req, res) => {
+clinicRouter.put('/lab-services', (req, res) => {
   const body = z
     // Bo'sh ro'yxat ham mumkin: klinika tahlilni butunlay o'chira oladi
-    .object({ organIds: z.array(z.number().int().positive()).max(64) })
+    .object({
+      services: z
+        .array(
+          z.object({
+            testId: z.number().int().positive(),
+            organId: z.number().int().positive(),
+          }),
+        )
+        .max(400),
+    })
     .parse(req.body);
-  res.json({ selected: saveClinicLabOrgans(requireClinic(req), body.organIds) });
+  res.json({ selected: saveClinicLabServices(requireClinic(req), body.services) });
 });

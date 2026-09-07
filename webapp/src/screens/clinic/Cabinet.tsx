@@ -189,7 +189,7 @@ export function MoreMenu() {
         <NavRow icon={<IconPlus size={18} />} title={t('team.title')} hint={t('team.sub')} to="/clinic/team" />
         <NavRow icon={<IconShield size={18} />} title={t('ver.title')} hint={t('ver.sub')} to="/clinic/verification" />
         <NavRow icon={<IconCheck size={18} />} title={t('ops.title')} hint={t('ops.sub')} to="/clinic/operations" />
-        <NavRow icon={<IconCheck size={18} />} title={t('lab.title')} hint={t('lab.navHint')} to="/clinic/lab-organs" />
+        <NavRow icon={<IconCheck size={18} />} title={t('lab.title')} hint={t('lab.navHint')} to="/clinic/lab-services" />
       </Section>
 
       <Section title={t('cab.system')}>

@@ -1551,6 +1551,131 @@ export const MIGRATIONS: Migration[] = [
       step.run('organ', 14, 1, 1);
     },
   },
+  {
+    /**
+     * TAHLIL + ORGAN — ikki darajali model.
+     *
+     * Ilgari tahlil so'rovida faqat organ so'ralardi va bu yetarli
+     * emas edi: "bosh miya" degan javob MRT ni ham, KT ni ham, qon
+     * tahlilini ham anglatishi mumkin — klinika esa ularning
+     * hammasini qilmaydi va narxi ham butunlay boshqa.
+     *
+     * Endi ikkita savol: QANDAY tekshiruv va QAYSI organ uchun.
+     * Qaysi organ qaysi tekshiruvga mos kelishini ADMIN belgilaydi —
+     * bemorga faqat mantiqiy juftliklar ko'rsatiladi ("qon tahlili +
+     * umurtqa" degan variant umuman chiqmaydi).
+     *
+     * Klinika esa o'zida bor JUFTLIKLARNI yoqadi: MRT qiladigan,
+     * lekin faqat bosh miya bo'yicha qiladigan klinika bor.
+     */
+    id: '030_lab_tests',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS lab_tests (
+          id       INTEGER PRIMARY KEY AUTOINCREMENT,
+          slug     TEXT NOT NULL UNIQUE,
+          name_uz  TEXT NOT NULL,
+          name_ru  TEXT NOT NULL,
+          icon     TEXT NOT NULL DEFAULT '',
+          position INTEGER NOT NULL DEFAULT 0,
+          active   INTEGER NOT NULL DEFAULT 1
+        );
+
+        -- Qaysi organ qaysi tekshiruvga mos — ADMIN belgilaydi
+        CREATE TABLE IF NOT EXISTS lab_test_organs (
+          test_id  INTEGER NOT NULL REFERENCES lab_tests(id) ON DELETE CASCADE,
+          organ_id INTEGER NOT NULL REFERENCES lab_organs(id) ON DELETE CASCADE,
+          PRIMARY KEY (test_id, organ_id)
+        );
+
+        -- Klinika o'zida bor juftliklarni yoqadi
+        CREATE TABLE IF NOT EXISTS clinic_lab_services (
+          clinic_id INTEGER NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+          test_id   INTEGER NOT NULL REFERENCES lab_tests(id) ON DELETE CASCADE,
+          organ_id  INTEGER NOT NULL REFERENCES lab_organs(id) ON DELETE CASCADE,
+          PRIMARY KEY (clinic_id, test_id, organ_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_clinic_lab_services
+          ON clinic_lab_services(test_id, organ_id);
+      `);
+
+      addColumn(db, 'requests', 'lab_test_id', 'INTEGER REFERENCES lab_tests(id)');
+
+      /*
+       * Boshlang'ich ro'yxat — admin keyin o'zgartiradi.
+       *
+       * Har tekshiruvga mos organlar ham shu yerda: bemorga
+       * mantiqsiz juftlik ko'rsatilmasligi kerak.
+       */
+      const test = db.prepare(
+        `INSERT OR IGNORE INTO lab_tests (slug, name_uz, name_ru, icon, position)
+         VALUES (?, ?, ?, ?, ?)`,
+      );
+      const link = db.prepare(
+        `INSERT OR IGNORE INTO lab_test_organs (test_id, organ_id)
+         SELECT ?, id FROM lab_organs WHERE slug = ?`,
+      );
+
+      const TESTS: [string, string, string, string, string[]][] = [
+        ['mrt', 'MRT (magnit-rezonans tomografiya)', 'МРТ (магнитно-резонансная томография)', '🧲',
+          ['brain', 'spine', 'liver', 'kidney', 'heart', 'reproductive']],
+        ['kt', 'KT (kompyuter tomografiya)', 'КТ (компьютерная томография)', '🩻',
+          ['brain', 'lungs', 'liver', 'kidney', 'stomach', 'spine']],
+        ['uzi', 'UZI (ultratovush)', 'УЗИ (ультразвук)', '📡',
+          ['heart', 'liver', 'kidney', 'stomach', 'thyroid', 'reproductive', 'eye']],
+        ['rentgen', 'Rentgen', 'Рентген', '☢️', ['lungs', 'spine', 'stomach']],
+        ['blood', 'Qon tahlili', 'Анализ крови', '💉',
+          ['blood', 'liver', 'kidney', 'thyroid', 'heart']],
+        ['urine', 'Siydik tahlili', 'Анализ мочи', '🧪', ['kidney', 'reproductive']],
+        ['hormone', 'Gormonlar tahlili', 'Анализ гормонов', '⚗️', ['thyroid', 'reproductive']],
+        ['endoscopy', 'Endoskopiya', 'Эндоскопия', '🔎', ['stomach', 'lungs']],
+        ['ecg', 'EKG va yurak tekshiruvi', 'ЭКГ и обследование сердца', '📈', ['heart']],
+        ['other', 'Boshqa tekshiruv', 'Другое обследование', '🔬', ['other']],
+      ];
+
+      TESTS.forEach(([slug, uz, ru, icon, organs], i) => {
+        test.run(slug, uz, ru, icon, i * 10);
+        const row = db.prepare(`SELECT id FROM lab_tests WHERE slug = ?`).get(slug) as
+          | { id: number }
+          | undefined;
+        if (row) for (const o of organs) link.run(row.id, o);
+      });
+
+      /*
+       * Eski `clinic_lab_organs` ni ko'chiramiz: organ yoqilgan
+       * bo'lsa, o'sha organga mos HAR tekshiruv yoqiladi. Klinika
+       * keyin keraksizini olib tashlaydi — bu jimgina xizmatni
+       * o'chirib qo'yishdan yaxshiroq.
+       */
+      // Yangi bosqich: tekshiruv organdan OLDIN so'raladi
+      db.prepare(
+        `INSERT OR IGNORE INTO request_steps (key, kind, position, enabled, required, locked)
+         VALUES ('test', 'builtin', 13, 1, 1, 1)`,
+      ).run();
+
+      /*
+       * Yangi bosqich: tekshiruv ORGANDAN OLDIN so'raladi.
+       *
+       * "Bosh miya" degan javob MRT ni ham, KT ni ham anglatishi
+       * mumkin — avval qanday tekshiruv kerakligi aniqlanadi, keyin
+       * organ ro'yxati o'shanga mos ravishda qisqaradi.
+       */
+      db.prepare(
+        `INSERT OR IGNORE INTO request_steps (key, kind, position, enabled, required, locked)
+         VALUES ('test', 'builtin', 13, 1, 1, 1)`,
+      ).run();
+
+      const old = db.prepare(`SELECT clinic_id, organ_id FROM clinic_lab_organs`).all() as {
+        clinic_id: number;
+        organ_id: number;
+      }[];
+      const move = db.prepare(
+        `INSERT OR IGNORE INTO clinic_lab_services (clinic_id, test_id, organ_id)
+         SELECT ?, test_id, organ_id FROM lab_test_organs WHERE organ_id = ?`,
+      );
+      for (const r of old) move.run(r.clinic_id, r.organ_id);
+    },
+  },
 ];
 
 /**

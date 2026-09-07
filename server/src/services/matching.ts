@@ -137,7 +137,8 @@ export function countMatchingClinics(
 export function clinicMatchesRequest(clinicId: number, requestId: number): boolean {
   const request = db
     .prepare(
-      `SELECT r.kind, r.operation_id AS operationId, r.lab_organ_id AS labOrganId,
+      `SELECT r.kind, r.operation_id AS operationId,
+              r.lab_test_id AS labTestId, r.lab_organ_id AS labOrganId,
               r.city_id AS cityId,
               r.other_regions_ok AS otherRegionsOk,
               r.fallback_category_id AS fallbackCategoryId
@@ -147,6 +148,7 @@ export function clinicMatchesRequest(clinicId: number, requestId: number): boole
     | {
         kind: string;
         operationId: number | null;
+        labTestId: number | null;
         labOrganId: number | null;
         cityId: number;
         otherRegionsOk: number;
@@ -157,8 +159,8 @@ export function clinicMatchesRequest(clinicId: number, requestId: number): boole
 
   // Turga qarab: tahlil so'rovida shart organ bo'yicha tekshiriladi
   if (request.kind === 'lab') {
-    if (!request.labOrganId) return false;
-    return findClinicsForLab(request.labOrganId, request.cityId, {
+    if (!request.labTestId || !request.labOrganId) return false;
+    return findClinicsForLab(request.labTestId, request.labOrganId, request.cityId, {
       otherRegionsOk: Boolean(request.otherRegionsOk),
     }).some((c) => c.id === clinicId);
   }
@@ -183,6 +185,7 @@ export function clinicMatchesRequest(clinicId: number, requestId: number): boole
  * klinikaga so'rov yuborish uni ham, bemorni ham bezovta qilardi.
  */
 export function findClinicsForLab(
+  testId: number,
   organId: number,
   cityId: number,
   options: { otherRegionsOk?: boolean } = {},
@@ -193,15 +196,15 @@ export function findClinicsForLab(
     .prepare(
       `SELECT c.*
          FROM clinics c
-         JOIN clinic_lab_organs cl ON cl.clinic_id = c.id
-        WHERE cl.organ_id = @organId
+         JOIN clinic_lab_services cl ON cl.clinic_id = c.id
+        WHERE cl.test_id = @testId AND cl.organ_id = @organId
           AND c.verification = 'approved'
           AND (@anyCity = 1 OR c.city_id = @cityId)
         ORDER BY (c.city_id = @cityId) DESC,
                  (c.subscription_status = 'active') DESC,
                  c.rating_avg DESC`,
     )
-    .all({ organId, cityId, anyCity: anyCity ? 1 : 0 }) as any[];
+    .all({ testId, organId, cityId, anyCity: anyCity ? 1 : 0 }) as any[];
 
   return rows.map(mapClinicPublic);
 }

@@ -142,6 +142,7 @@ export function mapRequest(r: any): MedicalRequest {
     patientId: r.patient_id,
     kind: (r.kind ?? 'operation') as any,
     operationId: r.operation_id,
+    labTestId: r.lab_test_id ?? null,
     labOrganId: r.lab_organ_id ?? null,
     weightKg: r.weight_kg ?? null,
     cityId: r.city_id,
@@ -261,6 +262,18 @@ export function mapNotification(r: any): Notification {
     link: r.link,
     readAt: iso(r.read_at),
     createdAt: isoReq(r.created_at),
+  };
+}
+
+/** Tekshiruv turi — katalog qatoridan. Organlar alohida qo'shiladi. */
+export function mapLabTest(r: any, organIds: number[] = []) {
+  return {
+    id: r.id,
+    slug: r.slug,
+    nameUz: r.name_uz,
+    nameRu: r.name_ru,
+    icon: r.icon ?? '',
+    organIds,
   };
 }
 

@@ -44,6 +44,7 @@ import {
   type ChatTurn,
   type Gender,
   type LabOrgan,
+  type LabTest,
   type Operation,
   type PriceStats,
   type RequestKind,
@@ -77,6 +78,8 @@ export interface Draft {
   subjectGender: Gender | null;
   /** Operatsiya so'rovimi yoki tahlil — oqim shunga qarab ajraladi */
   kind: RequestKind;
+  /** Tahlil so'rovida: qanday tekshiruv (MRT, UZI, ...) */
+  labTest: LabTest | null;
   /** Tahlil so'rovida: qaysi organ tekshiriladi */
   labOrgan: LabOrgan | null;
   /** Tahlil so'rovida: bemor vazni (kg) */
@@ -93,7 +96,7 @@ export interface Draft {
  * javob bermasa bemor ilovasiz qolmasligi kerak — shunda shu ishlatiladi.
  */
 const FALLBACK_STEPS: WizardStep[] = [
-  'who', 'type', 'operation', 'condition', 'documents', 'weight', 'organ',
+  'who', 'type', 'operation', 'condition', 'documents', 'weight', 'test', 'organ',
   'region', 'budget', 'date', 'note', 'review',
 ].map((key) => ({
   key,
@@ -120,6 +123,7 @@ export function NewRequest() {
 
   const [draft, setDraft] = useState<Draft>({
     kind: 'operation',
+    labTest: null,
     labOrgan: null,
     weightKg: null,
     operation: null,
@@ -221,6 +225,8 @@ export function NewRequest() {
         return draft.operation !== null;
       case 'weight':
         return draft.weightKg !== null && draft.weightKg >= 2 && draft.weightKg <= 400;
+      case 'test':
+        return draft.labTest !== null;
       case 'organ':
         return draft.labOrgan !== null;
       case 'condition':
@@ -259,7 +265,9 @@ export function NewRequest() {
      * tahlilda esa organ va vazn bo'lishi kerak.
      */
     const ready =
-      draft.kind === 'lab' ? Boolean(draft.labOrgan && draft.weightKg) : Boolean(draft.operation);
+      draft.kind === 'lab'
+        ? Boolean(draft.labTest && draft.labOrgan && draft.weightKg)
+        : Boolean(draft.operation);
     if (!ready || !draft.cityId || !termsAccepted) return;
 
     setSubmitting(true);
@@ -267,6 +275,7 @@ export function NewRequest() {
       const request = await api.createRequest({
         kind: draft.kind,
         operationId: draft.kind === 'lab' ? null : (draft.operation?.id ?? null),
+        labTestId: draft.kind === 'lab' ? (draft.labTest?.id ?? null) : null,
         labOrganId: draft.kind === 'lab' ? (draft.labOrgan?.id ?? null) : null,
         weightKg: draft.kind === 'lab' ? draft.weightKg : null,
         cityId: draft.cityId,
@@ -353,7 +362,7 @@ export function NewRequest() {
                 patch(
                   kind === 'lab'
                     ? { kind, operation: null, conditionText: '', files: [], aiConversation: null, fallbackCategoryId: null }
-                    : { kind, labOrgan: null, weightKg: null },
+                    : { kind, labTest: null, labOrgan: null, weightKg: null },
                 );
                 setDirection(1);
                 setIndex(nextAfter('type'));
@@ -364,6 +373,29 @@ export function NewRequest() {
           )}
 
           {step === 'weight' && <WeightStep draft={draft} patch={patch} />}
+          {step === 'test' && (
+            <TestStep
+              draft={draft}
+              onPick={(labTest) => {
+                /*
+                 * Tekshiruv almashsa ORGAN tozalanadi: har tekshiruvning
+                 * o'z organlari bor va eskisi yangisiga mos kelmasligi
+                 * mumkin ("qon tahlili + umurtqa" degan juftlik yo'q).
+                 */
+                patch({
+                  labTest,
+                  labOrgan:
+                    draft.labOrgan && labTest.organIds.includes(draft.labOrgan.id)
+                      ? draft.labOrgan
+                      : null,
+                });
+                setDirection(1);
+                setIndex(nextAfter('test'));
+                haptic.press();
+                window.scrollTo({ top: 0 });
+              }}
+            />
+          )}
           {step === 'organ' && (
             <OrganStep
               draft={draft}
@@ -511,21 +543,22 @@ function WeightStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
 }
 
 /**
- * Qaysi organ uchun tahlil.
+ * Qanday tekshiruv — MRT, UZI, qon tahlili va hokazo.
  *
- * Ro'yxat serverdan keladi va tekis: organlar o'nga yaqin, ularni
- * daraxtga solish faqat ortiqcha bosish qo'shardi.
+ * Organdan OLDIN so'raladi: "bosh miya" degan javob MRT ni ham, KT
+ * ni ham anglatishi mumkin va ularning narxi butunlay boshqa.
+ * Tekshiruv ma'lum bo'lgach organ ro'yxati ham qisqaradi.
  */
-function OrganStep({ draft, onPick }: { draft: Draft; onPick: (organ: LabOrgan) => void }) {
+function TestStep({ draft, onPick }: { draft: Draft; onPick: (test: LabTest) => void }) {
   const { t, lang } = useApp();
-  const [organs, setOrgans] = useState<LabOrgan[] | null>(null);
+  const [tests, setTests] = useState<LabTest[] | null>(null);
 
   useEffect(() => {
     let alive = true;
     api
-      .labOrgans()
-      .then((list) => alive && setOrgans(list))
-      .catch(() => alive && setOrgans([]));
+      .labTests()
+      .then((list) => alive && setTests(list))
+      .catch(() => alive && setTests([]));
     return () => {
       alive = false;
     };
@@ -533,12 +566,102 @@ function OrganStep({ draft, onPick }: { draft: Draft; onPick: (organ: LabOrgan) 
 
   return (
     <>
-      <StepHead title={t('wz.organ.title')} sub={t('wz.organ.sub')} />
-      {organs === null ? (
-        <div className="stack">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} h={52} />)}</div>
+      <StepHead title={t('wz.test.title')} sub={t('wz.test.sub')} />
+      {tests === null ? (
+        <div className="stack">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} h={52} />
+          ))}
+        </div>
       ) : (
         <div className="stack" style={{ gap: 'var(--s-2)' }}>
-          {organs.map((o) => (
+          {tests.map((x) => (
+            <Card
+              key={x.id}
+              variant="flat"
+              className={`organrow ${draft.labTest?.id === x.id ? 'is-active' : ''}`}
+              onClick={() => onPick(x)}
+            >
+              <span className="organrow__icon">{x.icon}</span>
+              <strong>{lang === 'ru' ? x.nameRu : x.nameUz}</strong>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Qaysi organ uchun tahlil — YOZIB QIDIRILADI.
+ *
+ * Ro'yxatni admin qo'lda to'ldiradi va u o'sib boradi: yigirmata
+ * a'zoni varaqlab o'tirish tez charchatadi, ayniqsa telefonda.
+ * Odam esa nima kerakligini biladi — "bosh" deb yozsa yetarli.
+ *
+ * Ro'yxat TANLANGAN TEKSHIRUVGA mos a'zolar bilan cheklanadi: qaysi
+ * a'zo qaysi tekshiruvga to'g'ri kelishini admin belgilaydi va
+ * bemorga mantiqsiz juftlik ko'rsatilmasligi kerak.
+ *
+ * Qidiruv nomning HAR QAYSI so'zi boshidan mos keladi: "miya" deb
+ * yozilsa ham "Bosh miya" topiladi.
+ */
+function OrganStep({ draft, onPick }: { draft: Draft; onPick: (organ: LabOrgan) => void }) {
+  const { t, lang } = useApp();
+  const [all, setAll] = useState<LabOrgan[] | null>(null);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .labOrgans()
+      .then((list) => alive && setAll(list))
+      .catch(() => alive && setAll([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const allowed = draft.labTest?.organIds ?? null;
+  const pool = useMemo(
+    () => (all && allowed ? all.filter((o) => allowed.includes(o.id)) : (all ?? [])),
+    [all, allowed],
+  );
+
+  const name = (o: LabOrgan) => (lang === 'ru' ? o.nameRu : o.nameUz);
+
+  const found = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return pool;
+    return pool.filter((o) => {
+      const words = `${o.nameUz} ${o.nameRu}`.toLowerCase().split(/[^\p{L}\p{N}]+/u);
+      return words.some((w) => w.startsWith(q));
+    });
+  }, [pool, query]);
+
+  return (
+    <>
+      <StepHead title={t('wz.organ.title')} sub={t('wz.organ.sub')} />
+
+      <Field label={t('wz.organ.search')}>
+        <Input
+          value={query}
+          placeholder={t('wz.organ.searchHint')}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </Field>
+
+      {all === null ? (
+        <div className="stack">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} h={52} />
+          ))}
+        </div>
+      ) : found.length === 0 ? (
+        <Notice tone="warning">{t('wz.organ.none')}</Notice>
+      ) : (
+        <div className="stack" style={{ gap: 'var(--s-2)' }}>
+          {found.map((o) => (
             <Card
               key={o.id}
               variant="flat"
@@ -546,7 +669,7 @@ function OrganStep({ draft, onPick }: { draft: Draft; onPick: (organ: LabOrgan) 
               onClick={() => onPick(o)}
             >
               <span className="organrow__icon">{o.icon}</span>
-              <strong>{lang === 'ru' ? o.nameRu : o.nameUz}</strong>
+              <strong>{name(o)}</strong>
             </Card>
           ))}
         </div>
@@ -1065,6 +1188,13 @@ function ReviewStep({
         */}
         {draft.kind === 'lab' ? (
           <>
+            <ReviewRow
+              label={t('wz.review.test')}
+              value={
+                draft.labTest ? (lang === 'ru' ? draft.labTest.nameRu : draft.labTest.nameUz) : empty
+              }
+              onEdit={() => onEdit('test')}
+            />
             <ReviewRow
               label={t('wz.review.organ')}
               value={
