@@ -45,6 +45,7 @@ import {
   Skeleton,
 } from '@/ui';
 import { Async, ClinicTabBar, Meter, NavRow, StatTile, useResource } from './shell';
+import { requestTitle } from '@shared/types';
 import type { Lang, NotificationPrefs as Prefs } from '@shared/types';
 import { Security } from '@/screens/web/Security';
 
@@ -123,7 +124,7 @@ export function Dashboard() {
                   requests.slice(0, 3).map((request) => (
                     <Card key={request.id} onClick={() => navigate(`/clinic/requests/${request.id}`)} className="stack" style={{ gap: 4 }}>
                       <div className="between">
-                        <strong className="truncate">{request.operation.nameUz}</strong>
+                        <strong className="truncate">{requestTitle(request, lang)}</strong>
                         <span className="live-pill">
                           <i /> {t('feed.live')}
                         </span>
@@ -188,6 +189,7 @@ export function MoreMenu() {
         <NavRow icon={<IconPlus size={18} />} title={t('team.title')} hint={t('team.sub')} to="/clinic/team" />
         <NavRow icon={<IconShield size={18} />} title={t('ver.title')} hint={t('ver.sub')} to="/clinic/verification" />
         <NavRow icon={<IconCheck size={18} />} title={t('ops.title')} hint={t('ops.sub')} to="/clinic/operations" />
+        <NavRow icon={<IconCheck size={18} />} title={t('lab.title')} hint={t('lab.navHint')} to="/clinic/lab-organs" />
       </Section>
 
       <Section title={t('cab.system')}>

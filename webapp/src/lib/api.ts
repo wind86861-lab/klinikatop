@@ -57,6 +57,8 @@ import type {
   RequestStep,
   StepOption,
   StepKind,
+  LabOrgan,
+  RequestKind,
 } from '@shared/types';
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
@@ -328,6 +330,14 @@ export const api = {
 
   /** So'rov sehrgarining bosqichlari — admin panelidan boshqariladi */
   requestSteps: () => get<WizardStep[]>('/catalog/request-steps'),
+
+  /** Tahlil organlari — bemor "qaysi organ uchun" deb tanlaydigan ro'yxat */
+  labOrgans: () => get<LabOrgan[]>('/catalog/lab-organs'),
+
+  /* ── Klinikaning tahlil yo'nalishlari ── */
+  clinicLabOrgans: () => get<{ all: LabOrgan[]; selected: number[] }>('/clinic/lab-organs'),
+  saveClinicLabOrgans: (organIds: number[]) =>
+    put<{ selected: number[] }>('/clinic/lab-organs', { organIds }),
   unknownOperation: () => get<Operation | null>('/catalog/unknown-operation'),
   clinicProfile: (id: number) => get<{ clinic: ClinicPublic; reviews: Review[] }>(`/catalog/clinics/${id}`),
 
@@ -336,7 +346,13 @@ export const api = {
   request: (id: number) =>
     get<{ request: RequestWithMeta; offers: OfferWithClinic[]; stats: PriceStats }>(`/requests/${id}`),
   createRequest: (body: {
-    operationId: number;
+    /** Operatsiya so'rovimi yoki tahlil */
+    kind?: RequestKind;
+    /** Operatsiya so'rovida majburiy, tahlilda `null` */
+    operationId?: number | null;
+    /** Tahlil so'rovida majburiy */
+    labOrganId?: number | null;
+    weightKg?: number | null;
     cityId: number;
     conditionText: string;
     budgetUzs: number | null;

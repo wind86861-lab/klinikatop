@@ -11,7 +11,6 @@ import { channelFor, onServerEvent, sendTyping, subscribe } from '@/lib/ws';
 import { clockTime, formatDate, groupDigits, money } from '@/lib/format';
 import { haptic } from '@/lib/telegram';
 import { popVariants, spring } from '@/lib/motion';
-import { opName } from '@/i18n';
 import {
   Avatar,
   Badge,
@@ -31,7 +30,7 @@ import {
   Stepper,
   Textarea,
 } from '@/ui';
-import { DEAL_STEPS, REVIEW_ASPECTS, type ChatMessage, type DealDetail, type ReviewAspect } from '@shared/types';
+import { DEAL_STEPS, REVIEW_ASPECTS, type ChatMessage, type DealDetail, type ReviewAspect , requestTitle } from '@shared/types';
 
 export function DealScreen() {
   const { id } = useParams();
@@ -173,7 +172,7 @@ export function DealScreen() {
                 </span>
               )}
             </div>
-            <div className="app-header__sub truncate">{opName(deal.request.operation, lang)}</div>
+            <div className="app-header__sub truncate">{requestTitle(deal.request, lang)}</div>
           </div>
         </div>
       </header>

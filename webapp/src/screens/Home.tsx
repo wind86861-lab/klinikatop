@@ -13,7 +13,6 @@ import { api, type Highlights } from '@/lib/api';
 import { money, timeLeft } from '@/lib/format';
 import { haptic } from '@/lib/telegram';
 import { spring } from '@/lib/motion';
-import { opName } from '@/i18n';
 import { TabBar } from '@/components/TabBar';
 import {
   AnimatedItem,
@@ -30,6 +29,7 @@ import {
   Skeleton,
   SkeletonList,
 } from '@/ui';
+import { requestTitle } from '@shared/types';
 import type { DealDetail, RequestWithMeta } from '@shared/types';
 
 export function Home() {
@@ -159,7 +159,7 @@ export function Home() {
                             {deal.clinic.name}
                           </span>
                           <span className="list-item__sub truncate" style={{ display: 'block' }}>
-                            {opName(deal.request.operation, lang)} · {money(deal.agreedPriceUzs, lang)}
+                            {requestTitle(deal.request, lang)} · {money(deal.agreedPriceUzs, lang)}
                           </span>
                         </span>
                         <span className="badge badge--neutral">
@@ -282,7 +282,7 @@ function ActiveRequestCard({
       <span className="req-card__top">
         <span>
           <span className="req-card__title" style={{ display: 'block' }}>
-            {opName(request.operation, lang)}
+            {requestTitle(request, lang)}
           </span>
           <span className="req-card__price" style={{ display: 'block' }}>
             {money(request.budgetUzs, lang)}

@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 import { formatDate, groupDigits, money, timeLeft } from '@/lib/format';
 import { haptic } from '@/lib/telegram';
 import { popVariants, spring } from '@/lib/motion';
-import { cityName, opAlias, opName } from '@/i18n';
+import { cityName, opAlias } from '@/i18n';
 import { PriceChart } from '@/components/Visuals';
 import { ExtraAnswers } from '@/components/ExtraAnswers';
 import { AttachmentList } from '@/components/wizard/DocumentsStep';
@@ -28,6 +28,7 @@ import {
   SkeletonList,
   Textarea,
 } from '@/ui';
+import { requestTitle } from '@shared/types';
 import type { PatientCase, PriceStats, RequestWithMeta } from '@shared/types';
 import { PatientCaseCard } from '@/components/PatientCaseCard';
 import { ChipPicker } from '@/components/ChipPicker';
@@ -177,8 +178,8 @@ export function ClinicRequest() {
 
   return (
     <Screen
-      title={opName(request.operation, lang)}
-      subtitle={`${cityName(request.city, lang)} · ${opAlias(request.operation, lang)}`}
+      title={requestTitle(request, lang)}
+      subtitle={`${cityName(request.city, lang)}${request.operation ? ` · ${opAlias(request.operation, lang)}` : ''}`}
       onBack={() => navigate('/clinic')}
       footer={
         <Button block loading={sending} disabled={!valid} onClick={submit}>
@@ -210,6 +211,18 @@ export function ClinicRequest() {
           <Badge tone={request.urgency === 'urgent' ? 'danger' : 'warning'}>
             {t(`budget.urgency.${request.urgency}` as any)}
           </Badge>
+        )}
+
+        {/*
+          Tahlil so'rovida VAZN ko'rsatiladi.
+          Ko'p tekshiruvda doza va uskuna sozlamasi shunga bog'liq —
+          klinika buni taklif berishdan oldin bilishi kerak.
+        */}
+        {request.kind === 'lab' && request.weightKg && (
+          <div className="between">
+            <span className="tiny">{t('wz.review.weight')}</span>
+            <strong className="num">{request.weightKg} kg</strong>
+          </div>
         )}
 
         {/* Bemor holati — klinika narxni shundan aniqlaydi */}

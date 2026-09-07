@@ -1427,6 +1427,130 @@ export const MIGRATIONS: Migration[] = [
       db.prepare(`UPDATE deals SET status = 'AGREED' WHERE status = 'SELECTED'`).run();
     },
   },
+  {
+    /**
+     * TAHLIL SO'ROVI — platformaning ikkinchi turi.
+     *
+     * Ilgari har so'rov operatsiya edi: `requests.operation_id` majburiy
+     * bo'lib, butun oqim shunga qurilgandi. Tahlil (MRT, UZI, qon
+     * tahlili) esa boshqa savol talab qiladi — operatsiya nomi emas,
+     * QAYSI ORGAN tekshirilishi va bemorning vazni.
+     *
+     * Shuning uchun:
+     *   • so'rov TURGA ega bo'ldi (`kind`);
+     *   • `operation_id` endi bo'sh bo'lishi mumkin — tahlilda u yo'q;
+     *   • organ katalogi va klinikaning organ bo'yicha aktivatsiyasi
+     *     qo'shildi (operatsiyalardagi `clinic_operations` kabi).
+     *
+     * SQLite ustundan NOT NULL ni olib tashlay olmaydi, shuning uchun
+     * `requests` jadvali qayta quriladi. Ma'lumot to'liq ko'chiriladi
+     * va mavjud so'rovlar `operation` turini oladi.
+     */
+    id: '029_lab_requests',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS lab_organs (
+          id       INTEGER PRIMARY KEY AUTOINCREMENT,
+          slug     TEXT NOT NULL UNIQUE,
+          name_uz  TEXT NOT NULL,
+          name_ru  TEXT NOT NULL,
+          icon     TEXT NOT NULL DEFAULT '',
+          position INTEGER NOT NULL DEFAULT 0,
+          active   INTEGER NOT NULL DEFAULT 1
+        );
+
+        CREATE TABLE IF NOT EXISTS clinic_lab_organs (
+          clinic_id INTEGER NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+          organ_id  INTEGER NOT NULL REFERENCES lab_organs(id) ON DELETE CASCADE,
+          PRIMARY KEY (clinic_id, organ_id)
+        );
+      `);
+
+      const organ = db.prepare(
+        `INSERT OR IGNORE INTO lab_organs (slug, name_uz, name_ru, icon, position)
+         VALUES (?, ?, ?, ?, ?)`,
+      );
+      const ORGANS: [string, string, string, string][] = [
+        ['brain', 'Bosh miya', 'Головной мозг', '🧠'],
+        ['heart', 'Yurak va tomirlar', 'Сердце и сосуды', '🫀'],
+        ['lungs', 'O‘pka va nafas yo‘llari', 'Лёгкие и дыхательные пути', '🫁'],
+        ['liver', 'Jigar va o‘t yo‘llari', 'Печень и желчные пути', '🩸'],
+        ['kidney', 'Buyrak va siydik yo‘llari', 'Почки и мочевые пути', '🧫'],
+        ['stomach', 'Oshqozon va ichak', 'Желудок и кишечник', '🍽'],
+        ['spine', 'Umurtqa va bo‘g‘imlar', 'Позвоночник и суставы', '🦴'],
+        ['thyroid', 'Qalqonsimon bez va gormonlar', 'Щитовидная железа и гормоны', '⚗️'],
+        ['blood', 'Umumiy qon tahlili', 'Общий анализ крови', '💉'],
+        ['reproductive', 'Reproduktiv tizim', 'Репродуктивная система', '🌡'],
+        ['eye', 'Ko‘z', 'Глаза', '👁'],
+        ['other', 'Boshqa', 'Другое', '🔬'],
+      ];
+      ORGANS.forEach(([slug, uz, ru, icon], i) => organ.run(slug, uz, ru, icon, i * 10));
+
+      addColumn(db, 'users', 'weight_kg', 'INTEGER');
+
+      // ── `requests` qayta quriladi: `operation_id` endi ixtiyoriy ──
+      const cols = db.prepare(`PRAGMA table_info(requests)`).all() as { name: string }[];
+      if (!cols.some((c) => c.name === 'kind')) {
+        const names = cols.map((c) => c.name).join(', ');
+        db.exec(`
+          CREATE TABLE requests_new (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            kind           TEXT NOT NULL DEFAULT 'operation'
+                           CHECK (kind IN ('operation','lab')),
+            operation_id   INTEGER REFERENCES operations(id),
+            lab_organ_id   INTEGER REFERENCES lab_organs(id),
+            weight_kg      INTEGER,
+            city_id        INTEGER NOT NULL REFERENCES cities(id),
+            budget_uzs     INTEGER,
+            note           TEXT,
+            urgency        TEXT NOT NULL DEFAULT 'normal'
+                           CHECK (urgency IN ('normal','soon','urgent')),
+            attachments    TEXT NOT NULL DEFAULT '[]',
+            status         TEXT NOT NULL DEFAULT 'NEW'
+                           CHECK (status IN ('NEW','COLLECTING','CHOSEN','COMPLETED','CANCELLED')),
+            ai_suggested   INTEGER NOT NULL DEFAULT 0,
+            expires_at     TEXT NOT NULL,
+            chosen_offer_id INTEGER REFERENCES offers(id) ON DELETE SET NULL,
+            expiring_notified INTEGER NOT NULL DEFAULT 0,
+            condition_text TEXT,
+            other_regions_ok INTEGER NOT NULL DEFAULT 0,
+            date_from      TEXT,
+            date_to        TEXT,
+            date_flexible  INTEGER NOT NULL DEFAULT 0,
+            ai_conversation TEXT,
+            fallback_category_id INTEGER REFERENCES operation_categories(id),
+            extra_answers  TEXT,
+            for_self       INTEGER NOT NULL DEFAULT 1,
+            subject_name   TEXT,
+            subject_birth_year INTEGER,
+            subject_gender TEXT,
+            terms_version  TEXT,
+            terms_accepted_at TEXT,
+            created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+
+          INSERT INTO requests_new (${names}) SELECT ${names} FROM requests;
+
+          DROP TABLE requests;
+          ALTER TABLE requests_new RENAME TO requests;
+
+          CREATE INDEX IF NOT EXISTS idx_requests_patient ON requests(patient_id, status);
+          CREATE INDEX IF NOT EXISTS idx_requests_match   ON requests(operation_id, city_id, status);
+          CREATE INDEX IF NOT EXISTS idx_requests_lab     ON requests(lab_organ_id, city_id, status);
+        `);
+      }
+
+      // ── Yangi bosqichlar ──
+      const step = db.prepare(
+        `INSERT OR IGNORE INTO request_steps (key, kind, position, enabled, required, locked)
+         VALUES (?, 'builtin', ?, 1, ?, ?)`,
+      );
+      step.run('type', 5, 1, 1);
+      step.run('weight', 12, 1, 0);
+      step.run('organ', 14, 1, 1);
+    },
+  },
 ];
 
 /**

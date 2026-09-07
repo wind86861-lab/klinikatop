@@ -120,3 +120,81 @@ export function getPriceStats(operationId: number, cityId: number): PriceStats {
     windowDays,
   };
 }
+
+
+/**
+ * Tahlil so'rovi uchun narx oralig'i — ORGAN bo'yicha.
+ *
+ * Operatsiyada o'lchov birligi operatsiyaning o'zi, tahlilda esa
+ * tekshiriladigan organ. Boshqa hammasi bir xil: faqat yopilgan
+ * bitimlarning haqiqiy summasi olinadi.
+ *
+ * Qo'lda kiritilgan oraliq (`manual_prices`) hozircha faqat
+ * operatsiyalar uchun. Tahlilda bitim yetarli bo'lmasa bo'sh
+ * statistika qaytadi va byudjet ekrani o'zining odatiy oralig'ini
+ * ko'rsatadi — bu allaqachon shunday ishlaydi.
+ */
+export function getLabPriceStats(organId: number, cityId: number): PriceStats {
+  const windowDays = config.rules.priceWindowDays;
+
+  const rows = db
+    .prepare(
+      `SELECT d.confirmed_amount_uzs AS amount
+         FROM deals d
+         JOIN requests r ON r.id = d.request_id
+        WHERE d.status = 'CONFIRMED'
+          AND d.confirmed_amount_uzs IS NOT NULL
+          AND r.kind = 'lab'
+          AND r.lab_organ_id = ?
+          AND r.city_id = ?
+          AND d.confirmed_at >= datetime('now', ?)`,
+    )
+    .all(organId, cityId, `-${windowDays} days`) as { amount: number }[];
+
+  const values = rows.map((r) => r.amount).sort((a, b) => a - b);
+  const empty: PriceStats = {
+    operationId: 0,
+    cityId,
+    source: 'manual',
+    lowConfidence: true,
+    sampleSize: values.length,
+    min: null,
+    p25: null,
+    median: null,
+    p75: null,
+    max: null,
+    avg: null,
+    histogram: [],
+    windowDays,
+  };
+
+  if (values.length < config.rules.minDealsForPriceStats) return empty;
+
+  const min = values[0];
+  const max = values[values.length - 1];
+  return {
+    ...empty,
+    source: 'deals',
+    lowConfidence: false,
+    min,
+    p25: Math.round(percentile(values, 0.25)),
+    median: Math.round(percentile(values, 0.5)),
+    p75: Math.round(percentile(values, 0.75)),
+    max,
+    avg: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
+    histogram: buildHistogram(values, min, max),
+  };
+}
+
+/** So'rov turiga qarab to'g'ri statistikani beradi. */
+export function statsForRequest(req: {
+  kind: string;
+  operationId: number | null;
+  labOrganId: number | null;
+  cityId: number;
+}): PriceStats | null {
+  if (req.kind === 'lab') {
+    return req.labOrganId ? getLabPriceStats(req.labOrganId, req.cityId) : null;
+  }
+  return req.operationId ? getPriceStats(req.operationId, req.cityId) : null;
+}

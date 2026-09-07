@@ -12,6 +12,7 @@ import {
   UNKNOWN_OPERATION_SLUG,
   type OfferBadge,
   type OfferWithClinic,
+  requestTitle,
 } from '../../../shared/types';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { formatUzs } from '../lib/format';
@@ -290,9 +291,15 @@ function validateOfferBody(
  * qilish" holatini yopadi.
  */
 function resolveOperationForOffer(
-  req: { operationId: number },
+  req: { kind: string; operationId: number | null },
   input: CreateOfferInput,
 ): number | null {
+  /*
+   * Tahlil so'rovida operatsiya umuman yo'q: klinika organ bo'yicha
+   * taklif beradi va aniqlashtiradigan narsa qolmaydi.
+   */
+  if (req.kind === 'lab' || !req.operationId) return null;
+
   const op = db.prepare(`SELECT slug FROM operations WHERE id = ?`).get(req.operationId) as
     | { slug: string }
     | undefined;
@@ -386,7 +393,7 @@ export function createOffer(input: CreateOfferInput): OfferWithClinic {
   notify(
     req.patientId,
     'new_offer',
-    { clinic: offer.clinic.name, price: formatUzs(offer.priceUzs), operation: req.operation.nameUz },
+    { clinic: offer.clinic.name, price: formatUzs(offer.priceUzs), operation: requestTitle(req) },
     `/request/${input.requestId}`,
   );
 

@@ -39,7 +39,7 @@ import {
 } from '@/ui';
 import { CatalogBrowser, type CatalogBranch } from '@/components/CatalogBrowser';
 import { Async, ClinicTabBar, Meter, useResource } from './shell';
-import { isUnknownOperation, type OfferTemplate, type Operation, type RequestWithMeta } from '@shared/types';
+import { isUnknownOperation, type OfferTemplate, type Operation, type RequestWithMeta , requestTitle } from '@shared/types';
 
 /* ═════════════════  6-ekran: so'rovlar oqimi  ═════════════════ */
 
@@ -129,7 +129,7 @@ export function RequestsFeed() {
               >
                 <Card onClick={() => navigate(`/clinic/requests/${request.id}`)} className="stack">
                   <div className="between">
-                    <strong>{opName(request.operation, lang)}</strong>
+                    <strong>{requestTitle(request, lang)}</strong>
                     {request.offersCount > 0 ? (
                       <span className="badge badge--muted">{t('feed.answered')}</span>
                     ) : (
@@ -186,7 +186,7 @@ export function OfferBuilder() {
      * Ikkita qo'shimcha so'rov faqat kerak bo'lgandagina yuboriladi.
      */
     let myTree: CatalogBranch[] = [];
-    if (isUnknownOperation(detail.request.operation)) {
+    if (detail.request.operation && isUnknownOperation(detail.request.operation)) {
       const [me, tree] = await Promise.all([api.clinic(), api.catalogTree()]);
       myTree = narrowTree(tree, new Set(me.operationIds));
     }
@@ -210,7 +210,7 @@ export function OfferBuilder() {
 
   const priceNumber = Number(price.replace(/\D/g, '')) || 0;
   const clean = (list: string[]) => list.map((s) => s.trim()).filter(Boolean);
-  const unknownRequest = res.data ? isUnknownOperation(res.data.request.operation) : false;
+  const unknownRequest = res.data?.request.operation ? isUnknownOperation(res.data.request.operation) : false;
   // Noma'lum so'rovda operatsiya tanlanmaguncha yuborib bo'lmaydi
   const canSend =
     priceNumber > 0 && clean(includes).length > 0 && (!unknownRequest || resolvedOperation !== null);
@@ -244,7 +244,7 @@ export function OfferBuilder() {
       // Shablon sifatida saqlash ixtiyoriy — keyingi safar bir tegishda qo'llaniladi
       if (saveAsTemplate && res.data) {
         await clinicApi.createTemplate({
-          title: opName(res.data.request.operation, lang).slice(0, 60),
+          title: requestTitle(res.data.request, lang).slice(0, 60),
           operationId: res.data.request.operationId,
           priceUzs: priceNumber,
           includes: clean(includes),
@@ -287,7 +287,7 @@ export function OfferBuilder() {
           return (
             <>
               <Card className="stack" style={{ gap: 6 }}>
-                <strong>{opName(data.request.operation, lang)}</strong>
+                <strong>{requestTitle(data.request, lang)}</strong>
                 <p className="tiny">{data.request.conditionText}</p>
                 {data.request.files && data.request.files.length > 0 && (
                   <AttachmentList files={data.request.files} />

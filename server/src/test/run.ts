@@ -1786,6 +1786,122 @@ async function main() {
    */
   check('narx o‘zgartirish amali endi yo‘q', (deals as any).proposePriceChange === undefined);
 
+  /* ═════ Tahlil so'rovi ═════ */
+  console.log('\nTahlil so‘rovi');
+
+  const labOrgans = require('../services/labOrgans');
+  const { requestTitle } = require('../../../shared/types');
+  const organs = labOrgans.listLabOrgans();
+  check('organlar katalogi to‘ldirilgan', organs.length >= 5, organs.length);
+
+  const brain = organs.find((o: any) => o.slug === 'brain');
+  check('bosh miya ro‘yxatda bor', Boolean(brain));
+
+  /*
+   * Tahlil so'rovi operatsiyaga bog'lanmaydi va holat tavsifi
+   * so'ralmaydi — o'rniga organ va vazn majburiy.
+   */
+  throws(
+    'organsiz tahlil so‘rovi rad etiladi',
+    () =>
+      requests.createRequest({
+        patientId: patient.id,
+        kind: 'lab',
+        cityId: tashkent.id,
+        weightKg: 70,
+        budgetUzs: 500_000,
+        note: null,
+        urgency: 'normal',
+        attachments: [],
+        aiSuggested: false,
+        acceptTerms: true,
+      } as any),
+    'organ_required',
+  );
+
+  throws(
+    'vaznsiz tahlil so‘rovi rad etiladi',
+    () =>
+      requests.createRequest({
+        patientId: patient.id,
+        kind: 'lab',
+        labOrganId: brain.id,
+        cityId: tashkent.id,
+        budgetUzs: 500_000,
+        note: null,
+        urgency: 'normal',
+        attachments: [],
+        aiSuggested: false,
+        acceptTerms: true,
+      } as any),
+    'invalid_weight',
+  );
+
+  // Klinika bu organ bo'yicha tahlil qilishini belgilaydi
+  labOrgans.saveClinicLabOrgans(clinic.id, [brain.id]);
+  check(
+    'klinika organni belgiladi',
+    labOrgans.clinicLabOrganIds(clinic.id).includes(brain.id),
+  );
+
+  const labReq = requests.createRequest({
+    patientId: patient.id,
+    kind: 'lab',
+    labOrganId: brain.id,
+    weightKg: 72,
+    cityId: tashkent.id,
+    budgetUzs: 500_000,
+    note: null,
+    urgency: 'normal',
+    attachments: [],
+    aiSuggested: false,
+    acceptTerms: true,
+  } as any);
+
+  check('tahlil so‘rovi yaratildi', labReq.kind === 'lab', labReq.kind);
+  check('operatsiya bo‘sh', labReq.operationId === null);
+  check('organ yozildi', labReq.labOrganId === brain.id);
+  check('vazn yozildi', labReq.weightKg === 72);
+  check('organ nomi keldi', Boolean(labReq.labOrgan), labReq.labOrgan?.nameUz);
+  check('sarlavha organ nomidan olinadi', requestTitle(labReq) === brain.nameUz, requestTitle(labReq));
+
+  // Vazn profilga ham yozildi — keyingi safar o'zi to'ladi
+  check(
+    'vazn profilga saqlandi',
+    (db.prepare('SELECT weight_kg AS w FROM users WHERE id = ?').get(patient.id) as any).w === 72,
+  );
+
+  check('so‘rov klinikaga bordi', labReq.broadcastCount >= 1, labReq.broadcastCount);
+
+  /*
+   * Organni belgilamagan klinikaga tahlil so'rovi BORMAYDI.
+   * Bu asosiy shart: tahlil qilmaydigan klinikaga so'rov yuborish
+   * uni ham, bemorni ham bezovta qilardi.
+   */
+  const otherOrgan = organs.find((o: any) => o.slug === 'liver');
+  const labReq2 = requests.createRequest({
+    patientId: patient.id,
+    kind: 'lab',
+    labOrganId: otherOrgan.id,
+    weightKg: 72,
+    cityId: tashkent.id,
+    budgetUzs: 500_000,
+    note: null,
+    urgency: 'normal',
+    attachments: [],
+    aiSuggested: false,
+    acceptTerms: true,
+  } as any);
+  check('belgilanmagan organ bo‘yicha so‘rov bormaydi', labReq2.broadcastCount === 0, labReq2.broadcastCount);
+
+  // Bosqichlar oqim bo'yicha ajraladi
+  const { stepInFlow } = require('../../../shared/types');
+  check('operatsiya bosqichi tahlilda yo‘q', stepInFlow('operation', 'lab') === false);
+  check('organ bosqichi operatsiyada yo‘q', stepInFlow('organ', 'operation') === false);
+  check('byudjet ikkalasida ham bor', stepInFlow('budget', 'lab') && stepInFlow('budget', 'operation'));
+  check('admin savoli ikkalasida ham chiqadi', stepInFlow('smoking', 'lab') === true);
+
+
   /* ═════ 20. Sana oralig'i va moslashuvchanlik ═════ */
   console.log('\n20. Sana oralig‘i');
 
@@ -2107,9 +2223,10 @@ async function main() {
   section("So'rov bosqichlari");
 
   const steps = require('../services/requestSteps');
+  const { BUILTIN_STEPS } = require('../../../shared/types');
 
   const base = steps.listSteps();
-  check('boshlang‘ich to‘qqizta tayyor bosqich', base.length === 9);
+  check('boshlang‘ich tayyor bosqichlar soni', base.length === BUILTIN_STEPS.length, base.length);
   check('hammasi builtin', base.every((s: any) => s.kind === 'builtin'));
   check('tartib o‘sib boradi', base.every((s: any, i: number) => i === 0 || s.position >= base[i - 1].position));
   check('operatsiya qulflangan', base.find((s: any) => s.key === 'operation').locked === true);
@@ -2136,7 +2253,7 @@ async function main() {
   reordered.splice(1, 0, note);
   const afterMove = steps.saveSteps(reordered, null);
   check('izoh ikkinchi o‘ringa ko‘chdi', afterMove[1].key === 'note');
-  check('ko‘chirishdan keyin ham to‘qqizta', afterMove.length === 9);
+  check('ko‘chirishdan keyin soni o‘zgarmadi', afterMove.length === BUILTIN_STEPS.length, afterMove.length);
 
   // ── Ixtiyoriy bosqichni o'chirish ──
   const off = asInput(afterMove).map((s) => (s.key === 'documents' ? { ...s, enabled: false } : s));
@@ -2206,7 +2323,7 @@ async function main() {
     },
   ];
   const withQ = steps.saveSteps(withCustom, null);
-  check('savol qo‘shildi', withQ.length === 10);
+  check('savol qo‘shildi', withQ.length === BUILTIN_STEPS.length + 1, withQ.length);
   check('savol turi saqlandi', withQ.find((s: any) => s.key === 'smoking').kind === 'choice');
   check(
     'variantlar tilga qarab keladi',
@@ -2248,7 +2365,10 @@ async function main() {
       .map((s) => ({ ...s, enabled: true, titleUz: null, titleRu: null })),
     null,
   );
-  check('sinovdan keyin tiklandi', steps.listSteps().length === 9 && steps.validateAnswers({}) === null);
+  check(
+    'sinovdan keyin tiklandi',
+    steps.listSteps().length === BUILTIN_STEPS.length && steps.validateAnswers({}) === null,
+  );
 
   /* ══════════════  To'lov bosqichi  ══════════════ */
 

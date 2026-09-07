@@ -133,6 +133,8 @@ export interface User {
   extraPhone: string | null;
   birthYear: number | null;
   gender: Gender | null;
+  /** Tahlil so'rovida avtomatik to'ldiriladi; odam o'zgartira oladi */
+  weightKg: number | null;
   /** Ism, familiya va viloyat to'ldirilgan payt. Bo'sh bo'lsa — ro'yxatdan o'tish tugallanmagan */
   profileCompletedAt: string | null;
   onboardedAt: string | null;
@@ -176,6 +178,33 @@ export interface OperationCategory {
    * ikkovini birlashtirish kerak bo'lardi.
    */
   parentId: number | null;
+  slug: string;
+  nameUz: string;
+  nameRu: string;
+  icon: string;
+}
+
+/**
+ * So'rov turi.
+ *
+ * Platforma dastlab faqat operatsiya uchun edi. Tahlil (laboratoriya,
+ * MRT, UZI kabi tekshiruvlar) butunlay boshqa savol talab qiladi:
+ * operatsiya nomi emas, QAYSI ORGAN uchun kerakligi va bemorning
+ * vazni. Shuning uchun bu ikkisi bitta oqimga tiqilmaydi — so'rovning
+ * o'zi turga ega bo'ldi va vizard shunga qarab ajraladi.
+ */
+export const REQUEST_KINDS = ['operation', 'lab'] as const;
+export type RequestKind = (typeof REQUEST_KINDS)[number];
+
+/**
+ * Tahlil qaysi organ uchun (bosh miya, jigar, ...).
+ *
+ * Operatsiyada "nima qilinadi" muhim, tahlilda esa "nima tekshiriladi".
+ * Klinika ham aynan shu ro'yxatdan o'zi qiladiganini belgilaydi va
+ * so'rov faqat o'shalarga boradi.
+ */
+export interface LabOrgan {
+  id: number;
   slug: string;
   nameUz: string;
   nameRu: string;
@@ -300,7 +329,20 @@ export type Urgency = (typeof URGENCY)[number];
 export interface MedicalRequest {
   id: number;
   patientId: number;
-  operationId: number;
+  /** Operatsiya so'rovimi yoki tahlil so'rovi */
+  kind: RequestKind;
+  /** Tahlil so'rovida bo'sh: u operatsiyaga bog'lanmaydi */
+  operationId: number | null;
+  /** Tahlil so'rovida — qaysi organ tekshiriladi */
+  labOrganId: number | null;
+  /**
+   * Bemor vazni (kg) — tahlil so'rovida so'raladi.
+   *
+   * Ko'p tekshiruvda doza va uskuna sozlamasi vaznga bog'liq, shuning
+   * uchun klinika buni oldindan bilishi kerak. O'ziga so'rov qoldirsa
+   * profildan avtomatik to'ladi.
+   */
+  weightKg: number | null;
   cityId: number;
   budgetUzs: number | null;
   /** Bemor holatini o'z so'zi bilan tavsiflaydi — majburiy */
@@ -361,8 +403,27 @@ export interface TermsDocument {
   sections: { title: string; body: string[] }[];
 }
 
+/**
+ * So'rov sarlavhasi — turi qanday bo'lsa ham.
+ *
+ * Operatsiya so'rovida operatsiya nomi, tahlilda organ nomi. Ilgari
+ * hamma joyda `request.operation.nameUz` yozilardi; tahlil so'rovida
+ * u bo'sh va shu sababli ekran yiqilardi. Endi nom bitta joydan
+ * olinadi.
+ */
+export function requestTitle(
+  req: { operation?: { nameUz: string; nameRu: string } | null; labOrgan?: { nameUz: string; nameRu: string } | null },
+  lang: Lang = 'uz',
+): string {
+  const src = req.operation ?? req.labOrgan ?? null;
+  if (!src) return '';
+  return lang === 'ru' ? src.nameRu : src.nameUz;
+}
+
 export interface RequestWithMeta extends MedicalRequest {
-  operation: Operation;
+  /** Tahlil so'rovida `null` — o'rniga `labOrgan` to'ladi */
+  operation: Operation | null;
+  labOrgan: LabOrgan | null;
   city: City;
   offersCount: number;
   /** Ilova qilingan hujjatlar (faqat ko'rish huquqi bo'lganda to'ladi) */
@@ -1031,9 +1092,14 @@ export type StepKind = (typeof STEP_KINDS)[number];
 /** Kodda ekrani bor bosqichlar — admin bularni yarata olmaydi, faqat sozlaydi. */
 export const BUILTIN_STEPS = [
   'who',
+  /** Operatsiyami yoki tahlil — oqim shu yerda ajraladi */
+  'type',
   'operation',
   'condition',
   'documents',
+  /** Faqat tahlil oqimida */
+  'weight',
+  'organ',
   'region',
   'budget',
   'date',
@@ -1046,7 +1112,43 @@ export type BuiltinStep = (typeof BUILTIN_STEPS)[number];
  * O'chirib bo'lmaydigan bosqichlar: serverdagi `createRequest` ularsiz
  * so'rovni rad etadi, ya'ni o'chirish oqimni butunlay buzardi.
  */
-export const LOCKED_STEPS: readonly BuiltinStep[] = ['operation', 'condition', 'region', 'review'];
+export const LOCKED_STEPS: readonly BuiltinStep[] = [
+  'type',
+  'operation',
+  'condition',
+  'organ',
+  'region',
+  'review',
+];
+
+/**
+ * Qaysi bosqich qaysi oqimda ko'rinadi.
+ *
+ * Bu ro'yxat KODDA turadi, admin panelida emas. Admin bosqich matnini
+ * va tartibini o'zgartira oladi, lekin tahlil so'roviga "operatsiyani
+ * tanlang" bosqichini qo'shib qo'ya olmaydi — u yerda javob bo'lishi
+ * mumkin emas va server so'rovni baribir rad etardi.
+ */
+export const STEP_FLOWS: Record<BuiltinStep, readonly RequestKind[]> = {
+  who: ['operation', 'lab'],
+  type: ['operation', 'lab'],
+  operation: ['operation'],
+  condition: ['operation'],
+  documents: ['operation'],
+  weight: ['lab'],
+  organ: ['lab'],
+  region: ['operation', 'lab'],
+  budget: ['operation', 'lab'],
+  date: ['operation'],
+  note: ['operation'],
+  review: ['operation', 'lab'],
+};
+
+/** Bosqich shu oqimda ko'rinadimi. Admin qo'shgan savollar ikkalasida ham. */
+export function stepInFlow(key: string, kind: RequestKind): boolean {
+  const flows = (STEP_FLOWS as Record<string, readonly RequestKind[] | undefined>)[key];
+  return flows ? flows.includes(kind) : true;
+}
 
 export interface StepOption {
   value: string;
@@ -1080,4 +1182,12 @@ export interface WizardStep {
   title: string | null;
   sub: string | null;
   options: { value: string; label: string }[] | null;
+  /**
+   * Bosqich qaysi oqim(lar)da ko'rinadi.
+   *
+   * Server yuboradi, chunki qaror KODDA: admin bosqich matnini
+   * o'zgartira oladi, lekin tahlil so'roviga operatsiya bosqichini
+   * qo'shib qo'ya olmaydi.
+   */
+  flows: readonly RequestKind[];
 }

@@ -5,7 +5,6 @@ import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
 import { money, timeLeft } from '@/lib/format';
-import { opName } from '@/i18n';
 import { TabBar } from '@/components/TabBar';
 import {
   AnimatedItem,
@@ -23,6 +22,7 @@ import {
   Sheet,
   SkeletonList,
 } from '@/ui';
+import { requestTitle } from '@shared/types';
 import type { RequestWithMeta } from '@shared/types';
 
 type Tab = 'active' | 'done';
@@ -132,7 +132,7 @@ export function MyRequests() {
                     qaysi so'rov ekanini ajrata olmasdi.
                   */}
                   <button className="list-item list-item--stacked" onClick={() => navigate(`/request/${request.id}`)}>
-                    <div className="list-item__title truncate">{opName(request.operation, lang)}</div>
+                    <div className="list-item__title truncate">{requestTitle(request, lang)}</div>
                     <div className="list-item__meta">
                       <span className="list-item__sub truncate">
                         {money(request.budgetUzs, lang)}
@@ -172,7 +172,7 @@ export function MyRequests() {
       <Sheet open={confirming !== null} onClose={() => setConfirming(null)} title={t('request.delete')}>
         {confirming && (
           <div className="stack">
-            <strong>{opName(confirming.operation, lang)}</strong>
+            <strong>{requestTitle(confirming, lang)}</strong>
             <Notice tone="danger">{t('request.deleteWarn')}</Notice>
             {confirming.offersCount > 0 && (
               <p className="tiny">{t('request.deleteOffers', { n: confirming.offersCount })}</p>

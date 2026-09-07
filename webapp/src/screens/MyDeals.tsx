@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { money } from '@/lib/format';
-import { opName } from '@/i18n';
 import { TabBar } from '@/components/TabBar';
 import {
   AnimatedItem,
@@ -19,6 +18,7 @@ import {
   Segment,
   SkeletonList,
 } from '@/ui';
+import { requestTitle } from '@shared/types';
 import type { DealDetail } from '@shared/types';
 
 type Tab = 'active' | 'done';
@@ -103,7 +103,7 @@ export function MyDeals() {
                 <div className="list-item__body">
                   <div className="list-item__title truncate">{deal.clinic.name}</div>
                   <div className="list-item__sub truncate">
-                    {opName(deal.request.operation, lang)} ·{' '}
+                    {requestTitle(deal.request, lang)} ·{' '}
                     {money(deal.confirmedAmountUzs ?? deal.agreedPriceUzs, lang)}
                   </div>
                 </div>

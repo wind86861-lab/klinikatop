@@ -13,7 +13,8 @@ import {
 import { listClinicRequests, markViewed, getRequest } from '../services/requests';
 import { listClinicDeals } from '../services/deals';
 import { listClinicReviews } from '../services/reviews';
-import { getPriceStats } from '../services/priceStats';
+import { statsForRequest } from '../services/priceStats';
+import { clinicLabOrganIds, listLabOrgans, saveClinicLabOrgans } from '../services/labOrgans';
 import {
   addDocument,
   createDoctor,
@@ -130,7 +131,7 @@ clinicRouter.get('/requests/:id', (req, res) => {
   res.json({
     request,
     patientCase: patientCaseForRequest(requestId),
-    stats: getPriceStats(request.operationId, request.cityId),
+    stats: statsForRequest(request),
   });
 });
 
@@ -377,3 +378,26 @@ clinicRouter.post('/commission/pay', (req, res) => {
 });
 
 
+
+/* ═════════════════  Tahlil yo'nalishlari  ═════════════════ */
+
+/**
+ * Klinika qaysi organlar bo'yicha tahlil qiladi.
+ *
+ * So'rov faqat shu ro'yxatni belgilagan klinikalarga boradi —
+ * operatsiyalardagi bilan bir xil qoida.
+ */
+clinicRouter.get('/lab-organs', (req, res) => {
+  res.json({
+    all: listLabOrgans(),
+    selected: clinicLabOrganIds(requireClinic(req)),
+  });
+});
+
+clinicRouter.put('/lab-organs', (req, res) => {
+  const body = z
+    // Bo'sh ro'yxat ham mumkin: klinika tahlilni butunlay o'chira oladi
+    .object({ organIds: z.array(z.number().int().positive()).max(64) })
+    .parse(req.body);
+  res.json({ selected: saveClinicLabOrgans(requireClinic(req), body.organIds) });
+});

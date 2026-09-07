@@ -17,7 +17,6 @@ import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
 import { spring } from '@/lib/motion';
 import { formatDate, money } from '@/lib/format';
-import { opName } from '@/i18n';
 import { AttachmentList } from '@/components/wizard/DocumentsStep';
 import {
   Avatar,
@@ -31,7 +30,7 @@ import {
   Stepper,
 } from '@/ui';
 import { Async, ClinicTabBar, useResource } from './shell';
-import { DEAL_BOARD_COLUMNS, type ChatMessage, type DealDetail } from '@shared/types';
+import { DEAL_BOARD_COLUMNS, type ChatMessage, type DealDetail , requestTitle } from '@shared/types';
 
 /* ═════════════════  11-ekran: bitimlar kanban  ═════════════════ */
 
@@ -75,7 +74,7 @@ export function DealsBoard() {
                             navigate(`/clinic/deals/${deal.id}`);
                           }}
                         >
-                          <strong className="truncate">{opName(deal.request.operation, lang)}</strong>
+                          <strong className="truncate">{requestTitle(deal.request, lang)}</strong>
                           <span className="num">{money(deal.agreedPriceUzs, lang)}</span>
                           <span className="tiny truncate">{deal.patientName}</span>
                           {deal.scheduledAt && (
@@ -180,7 +179,7 @@ export function ClinicDeal() {
               </Card>
 
               <Card className="stack" style={{ gap: 6 }}>
-                <strong>{opName(deal.request.operation, lang)}</strong>
+                <strong>{requestTitle(deal.request, lang)}</strong>
                 <p className="tiny">{deal.request.conditionText}</p>
                 {deal.request.files && deal.request.files.length > 0 && (
                   <AttachmentList files={deal.request.files} />

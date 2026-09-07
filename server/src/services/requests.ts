@@ -9,7 +9,7 @@ import { config } from '../lib/config';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { deleteFiles } from './files';
 import { formatUzs } from '../lib/format';
-import { mapCity, mapOperation, mapRequest, mapUser } from '../lib/mappers';
+import { mapCity, mapOperation, mapRequest, mapUser , mapLabOrgan } from '../lib/mappers';
 import {
   REQUEST_TRANSITIONS,
   UNKNOWN_OPERATION_SLUG,
@@ -17,9 +17,11 @@ import {
   type RequestStatus,
   type RequestWithMeta,
   type Urgency,
+  requestTitle,
+  type RequestKind,
 } from '../../../shared/types';
 import { bus, ch } from './events';
-import { findMatchingClinics } from './matching';
+import { findClinicsForLab, findMatchingClinics } from './matching';
 import { notify, notifyClinic } from './notifications';
 import { validateAnswers } from './requestSteps';
 import { TERMS_VERSION, recordAcceptance } from './terms';
@@ -34,11 +36,21 @@ const REQUEST_SELECT = `
 `;
 
 export function hydrate(row: any): RequestWithMeta {
-  const operation = db.prepare(`SELECT * FROM operations WHERE id = ?`).get(row.operation_id);
+  /*
+   * Ikki tur, ikki manba: operatsiya so'rovida `operation`, tahlil
+   * so'rovida `labOrgan` to'ladi. Ikkovi hech qachon birga bo'lmaydi.
+   */
+  const operation = row.operation_id
+    ? db.prepare(`SELECT * FROM operations WHERE id = ?`).get(row.operation_id)
+    : null;
+  const organ = row.lab_organ_id
+    ? db.prepare(`SELECT * FROM lab_organs WHERE id = ?`).get(row.lab_organ_id)
+    : null;
   const city = db.prepare(`SELECT * FROM cities WHERE id = ?`).get(row.city_id);
   return {
     ...mapRequest(row),
-    operation: mapOperation(operation),
+    operation: operation ? mapOperation(operation) : null,
+    labOrgan: organ ? mapLabOrgan(organ) : null,
     city: mapCity(city),
     offersCount: row.offers_count ?? 0,
     files: listFiles(parseJson<string[]>(row.attachments, [])),
@@ -65,7 +77,14 @@ export function assertTransition(from: RequestStatus, to: RequestStatus) {
 
 export interface CreateRequestInput {
   patientId: number;
-  operationId: number;
+  /** Operatsiya so'rovimi yoki tahlil. Berilmasa — operatsiya. */
+  kind?: RequestKind;
+  /** Operatsiya so'rovida majburiy, tahlilda ishlatilmaydi */
+  operationId?: number | null;
+  /** Tahlil so'rovida majburiy */
+  labOrganId?: number | null;
+  /** Tahlil so'rovida so'raladi (kg) */
+  weightKg?: number | null;
   cityId: number;
   budgetUzs: number | null;
   /** Holat tavsifi — bemor o'z so'zi bilan yozadi, majburiy */
@@ -185,16 +204,48 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
    * foydalanuvchini cheklamasdan.
    */
 
-  // "Bilmayman" yozuvi katalogda active=0 — u ro'yxatlarda ko'rinmaydi,
-  // lekin so'rovda tanlanishi mumkin
-  const op = db
-    .prepare(`SELECT * FROM operations WHERE id = ? AND (active = 1 OR slug = ?)`)
-    .get(input.operationId, UNKNOWN_OPERATION_SLUG);
-  if (!op) throw badRequest('unknown_operation', 'Bunday operatsiya topilmadi');
+  const kind: RequestKind = input.kind === 'lab' ? 'lab' : 'operation';
 
-  const condition = (input.conditionText ?? '').trim();
-  if (condition.length < 10) {
-    throw badRequest('condition_required', 'Holatingizni kamida bir-ikki jumlada yozing');
+  /*
+   * Ikki tur — ikki xil majburiy maydon.
+   *
+   * Operatsiyada operatsiya va holat tavsifi kerak; tahlilda esa
+   * organ va vazn. Ularni bitta tekshiruvga qo'shib bo'lmaydi:
+   * tahlil so'rovida operatsiya umuman yo'q va aksincha.
+   */
+  let op: { slug: string } | null = null;
+  let labOrganId: number | null = null;
+  let weightKg: number | null = null;
+  let condition = '';
+
+  if (kind === 'lab') {
+    const organ = db
+      .prepare(`SELECT id FROM lab_organs WHERE id = ? AND active = 1`)
+      .get(input.labOrganId ?? 0) as { id: number } | undefined;
+    if (!organ) throw badRequest('organ_required', 'Qaysi organ uchun tahlil kerakligini tanlang');
+    labOrganId = organ.id;
+
+    /*
+     * Vazn — 2 dan 400 kg gacha. Chegara keng: chaqaloq ham,
+     * kattalar ham shu oraliqda. Undan tashqarisi xato kiritish.
+     */
+    const w = Number(input.weightKg);
+    if (!Number.isFinite(w) || w < 2 || w > 400) {
+      throw badRequest('invalid_weight', 'Vaznni kilogrammda kiriting');
+    }
+    weightKg = Math.round(w);
+  } else {
+    // "Bilmayman" yozuvi katalogda active=0 — u ro'yxatlarda ko'rinmaydi,
+    // lekin so'rovda tanlanishi mumkin
+    op = db
+      .prepare(`SELECT * FROM operations WHERE id = ? AND (active = 1 OR slug = ?)`)
+      .get(input.operationId ?? 0, UNKNOWN_OPERATION_SLUG) as { slug: string } | undefined ?? null;
+    if (!op) throw badRequest('unknown_operation', 'Bunday operatsiya topilmadi');
+
+    condition = (input.conditionText ?? '').trim();
+    if (condition.length < 10) {
+      throw badRequest('condition_required', 'Holatingizni kamida bir-ikki jumlada yozing');
+    }
   }
 
   // Hujjatlar haqiqatan bemorga tegishlimi
@@ -214,7 +265,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
    * aks holda ikkita manba paydo bo'lib, qaysi biri to'g'ri degan
    * savol chiqardi.
    */
-  const unknownOp = (op as { slug: string }).slug === UNKNOWN_OPERATION_SLUG;
+  const unknownOp = op?.slug === UNKNOWN_OPERATION_SLUG;
   let fallbackCategoryId: number | null = null;
   if (unknownOp && input.fallbackCategoryId != null) {
     const cat = db
@@ -226,12 +277,14 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
   const requestId = tx(() => {
     const info = db
       .prepare(
-        `INSERT INTO requests (patient_id, operation_id, city_id, budget_uzs, condition_text, note,
+        `INSERT INTO requests (patient_id, kind, operation_id, lab_organ_id, weight_kg,
+                               city_id, budget_uzs, condition_text, note,
                                urgency, attachments, other_regions_ok, date_from, date_to, date_flexible,
                                ai_conversation, status, ai_suggested, expires_at, terms_version, terms_accepted_at,
                                for_self, subject_name, subject_birth_year, subject_gender, extra_answers,
                                fallback_category_id)
-         VALUES (@patientId, @operationId, @cityId, @budgetUzs, @conditionText, @note,
+         VALUES (@patientId, @kind, @operationId, @labOrganId, @weightKg,
+                 @cityId, @budgetUzs, @conditionText, @note,
                  @urgency, @attachments, @otherRegionsOk, @dateFrom, @dateTo, @dateFlexible,
                  @aiConversation, 'NEW', @aiSuggested, @expiresAt, @termsVersion, datetime('now'),
                  @forSelf, @subjectName, @subjectBirthYear, @subjectGender, @extraAnswers,
@@ -239,10 +292,13 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
       )
       .run({
         patientId: input.patientId,
-        operationId: input.operationId,
+        kind,
+        operationId: kind === 'lab' ? null : (input.operationId ?? null),
+        labOrganId,
+        weightKg,
         cityId: input.cityId,
         budgetUzs: input.budgetUzs,
-        conditionText: condition,
+        conditionText: condition || null,
         note: input.note,
         urgency: input.urgency,
         attachments: JSON.stringify(input.attachments ?? []),
@@ -265,6 +321,18 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
       });
 
     const id = Number(info.lastInsertRowid);
+
+    /*
+     * Vazn PROFILGA ham yoziladi — faqat o'ziga so'rov qoldirganda.
+     *
+     * Keyingi safar maydon o'zi to'ladi va odam uni qayta yozmaydi.
+     * Tanishiga so'rov qoldirsa yozilmaydi: bu boshqa odamning vazni
+     * va uni o'z profiliga saqlash xato bo'lardi.
+     */
+    if (weightKg && input.forSelf !== false) {
+      db.prepare(`UPDATE users SET weight_kg = ? WHERE id = ?`).run(weightKg, input.patientId);
+    }
+
     // Qabul alohida jadvalga ham yoziladi — so'rov o'chsa ham dalil qoladi
     recordAcceptance(input.patientId, id, input.userAgent ?? null);
     return id;
@@ -277,10 +345,23 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
 /** So'rovni mos klinikalarga bir vaqtda tarqatish (2.2 → COLLECTING). */
 export function broadcast(requestId: number): number {
   const req = getRequest(requestId);
-  const clinics = findMatchingClinics(req.operationId, req.cityId, {
-    otherRegionsOk: req.otherRegionsOk,
-    fallbackCategoryId: req.fallbackCategoryId,
-  });
+
+  /*
+   * Ikki tur, ikki yo'l: operatsiya so'rovi operatsiyani qiladigan
+   * klinikalarga, tahlil so'rovi esa o'sha ORGAN bo'yicha tekshiruv
+   * qiladigan klinikalarga boradi.
+   */
+  const clinics =
+    req.kind === 'lab'
+      ? req.labOrganId
+        ? findClinicsForLab(req.labOrganId, req.cityId, { otherRegionsOk: req.otherRegionsOk })
+        : []
+      : req.operationId
+        ? findMatchingClinics(req.operationId, req.cityId, {
+            otherRegionsOk: req.otherRegionsOk,
+            fallbackCategoryId: req.fallbackCategoryId,
+          })
+        : [];
 
   tx(() => {
     const ins = db.prepare(
@@ -298,7 +379,7 @@ export function broadcast(requestId: number): number {
       c.id,
       'new_request',
       {
-        operation: fresh.operation.nameUz,
+        operation: requestTitle(fresh),
         city: fresh.city.nameUz,
         budget: formatUzs(fresh.budgetUzs),
         requestId,
@@ -380,7 +461,7 @@ export function cancelRequest(requestId: number, patientId: number): RequestWith
   });
 
   for (const o of affected) {
-    notifyClinic(o.clinic_id, 'offer_rejected', { operation: req.operation.nameUz }, `/clinic/offers`);
+    notifyClinic(o.clinic_id, 'offer_rejected', { operation: requestTitle(req) }, `/clinic/offers`);
   }
   bus.publish(ch.request(requestId), { type: 'request:status', requestId, status: 'CANCELLED' });
   return getRequest(requestId);
@@ -435,7 +516,7 @@ export function deleteRequest(requestId: number, patientId: number): void {
   });
 
   for (const o of affected) {
-    notifyClinic(o.clinic_id, 'offer_rejected', { operation: req.operation.nameUz }, `/clinic/offers`);
+    notifyClinic(o.clinic_id, 'offer_rejected', { operation: requestTitle(req) }, `/clinic/offers`);
   }
 
   bus.publish(ch.request(requestId), { type: 'request:status', requestId, status: 'CANCELLED' });
@@ -460,7 +541,7 @@ export function processExpirations(): { expired: number; warned: number } {
 
   for (const row of soon) {
     const req = hydrate(row);
-    notify(req.patientId, 'request_expiring', { operation: req.operation.nameUz }, `/request/${req.id}`);
+    notify(req.patientId, 'request_expiring', { operation: requestTitle(req) }, `/request/${req.id}`);
     db.prepare(`UPDATE requests SET expiring_notified = 1 WHERE id = ?`).run(req.id);
   }
 
@@ -481,7 +562,7 @@ export function processExpirations(): { expired: number; warned: number } {
                    WHERE request_id = ? AND status = 'SENT'`).run(req.id);
       db.prepare(`UPDATE requests SET status = 'CANCELLED' WHERE id = ?`).run(req.id);
     });
-    notify(req.patientId, 'request_expired', { operation: req.operation.nameUz }, `/new`);
+    notify(req.patientId, 'request_expired', { operation: requestTitle(req) }, `/new`);
     bus.publish(ch.request(req.id), { type: 'request:status', requestId: req.id, status: 'CANCELLED' });
     cancelled++;
   }

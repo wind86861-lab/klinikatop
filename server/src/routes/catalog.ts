@@ -15,6 +15,7 @@ import { countMatchingClinics } from '../services/matching';
 import { getPricePulse, getTestimonials } from '../services/highlights';
 import { resolveUser } from '../middleware/auth';
 import { wizardSteps } from '../services/requestSteps';
+import { listLabOrgans } from '../services/labOrgans';
 
 export const catalogRouter = Router();
 
@@ -90,4 +91,14 @@ catalogRouter.get('/request-steps', (req, res) => {
   const user = resolveUser(req);
   const lang = user?.lang ?? (String(req.query.lang) === 'ru' ? 'ru' : 'uz');
   res.json(wizardSteps(lang));
+});
+
+/**
+ * Tahlil organlari — bemor "qaysi organ uchun" deb tanlaydigan ro'yxat.
+ *
+ * Katalog kabi OCHIQ: ro'yxatda maxfiy narsa yo'q va bemor kirmasdan
+ * ham ko'ra oladi.
+ */
+catalogRouter.get('/lab-organs', (_req, res) => {
+  res.json(listLabOrgans());
 });

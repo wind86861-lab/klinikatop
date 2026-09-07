@@ -961,6 +961,44 @@ code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/deals/$OVER_DEAL/price-c
 check "narx o'zgartirish manzili yo'q (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
 
 echo
+echo "Tahlil so'rovi"
+
+# Organlar katalogi ochiq
+ORGANS=$(curl -s "$API/catalog/lab-organs")
+ORGAN_ID=$(echo "$ORGANS" | jqv '[0].id')
+check "organlar katalogi ochiq" "$([ -n "$ORGAN_ID" ] && echo 1)" "id=$ORGAN_ID"
+
+# Organsiz tahlil so'rovi rad etiladi
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d '{"kind":"lab","cityId":1,"weightKg":70,"acceptTerms":true,"attachments":[],"aiSuggested":false}')
+check "organsiz tahlil so'rovi rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# Vaznsiz ham rad etiladi
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d "{\"kind\":\"lab\",\"cityId\":1,\"labOrganId\":$ORGAN_ID,\"acceptTerms\":true,\"attachments\":[],\"aiSuggested\":false}")
+check "vaznsiz tahlil so'rovi rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# Klinika shu organ bo'yicha tahlil qilishini belgilaydi
+SEL=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X PUT "$API/clinic/lab-organs" \
+  -d "{\"organIds\":[$ORGAN_ID]}" | jqv '.selected.length')
+check "klinika organni belgiladi" "$([ "$SEL" = "1" ] && echo 1)" "$SEL"
+
+LAB=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d "{\"kind\":\"lab\",\"cityId\":1,\"labOrganId\":$ORGAN_ID,\"weightKg\":72,\"budgetUzs\":500000,\"acceptTerms\":true,\"attachments\":[],\"aiSuggested\":false}")
+check "tahlil so'rovi yaratildi" "$([ "$(echo "$LAB" | jqv '.kind')" = "lab" ] && echo 1)" "$(echo "$LAB" | jqv '.kind')"
+check "operatsiya bo'sh" "$([ -z "$(echo "$LAB" | jqv '.operationId')" ] && echo 1)" "$(echo "$LAB" | jqv '.operationId')"
+check "organ nomi keldi" "$([ -n "$(echo "$LAB" | jqv '.labOrgan.nameUz')" ] && echo 1)" "$(echo "$LAB" | jqv '.labOrgan.nameUz')"
+check "so'rov klinikaga bordi" "$([ "$(echo "$LAB" | jqv '.broadcastCount')" -ge 1 ] && echo 1)" "$(echo "$LAB" | jqv '.broadcastCount')"
+
+# Vazn profilga yozildi — keyingi safar avtomatik to'ladi
+WEIGHT=$(curl -s "${PATIENT[@]}" "$API/me" | jqv '.user.weightKg')
+check "vazn profilga saqlandi" "$([ "$WEIGHT" = "72" ] && echo 1)" "$WEIGHT"
+
+# Bosqichlar ro'yxatida oqim belgisi bor
+FLOWS=$(curl -s "$API/catalog/request-steps" | jqv '.find(s=>s.key==="organ").flows.join(",")')
+check "organ bosqichi faqat tahlil oqimida" "$([ "$FLOWS" = "lab" ] && echo 1)" "$FLOWS"
+
+echo
 echo "19. Sana oralig'i"
 
 # O'tgan sana rad etiladi

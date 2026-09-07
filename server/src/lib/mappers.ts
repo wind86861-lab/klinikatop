@@ -36,6 +36,7 @@ export function mapUser(r: any): User {
     extraPhone: r.extra_phone ?? null,
     birthYear: r.birth_year ?? null,
     gender: r.gender ?? null,
+    weightKg: r.weight_kg ?? null,
     profileCompletedAt: iso(r.profile_completed_at ?? null),
     onboardedAt: iso(r.onboarded_at),
     bonusPoints: r.bonus_points,
@@ -139,7 +140,10 @@ export function mapRequest(r: any): MedicalRequest {
   return {
     id: r.id,
     patientId: r.patient_id,
+    kind: (r.kind ?? 'operation') as any,
     operationId: r.operation_id,
+    labOrganId: r.lab_organ_id ?? null,
+    weightKg: r.weight_kg ?? null,
     cityId: r.city_id,
     budgetUzs: r.budget_uzs,
     conditionText: r.condition_text ?? null,
@@ -257,5 +261,16 @@ export function mapNotification(r: any): Notification {
     link: r.link,
     readAt: iso(r.read_at),
     createdAt: isoReq(r.created_at),
+  };
+}
+
+/** Tahlil organi — katalog qatoridan. */
+export function mapLabOrgan(r: any) {
+  return {
+    id: r.id,
+    slug: r.slug,
+    nameUz: r.name_uz,
+    nameRu: r.name_ru,
+    icon: r.icon ?? '',
   };
 }

@@ -15,6 +15,7 @@ import {
   type DealDetail,
   type DealStatus,
   type PaymentMethod,
+  requestTitle,
 } from '../../../shared/types';
 import { bus, ch } from './events';
 import { notify, notifyClinic } from './notifications';
@@ -157,9 +158,9 @@ export function chooseOffer(
   bus.publish(ch.request(requestId), { type: 'request:status', requestId, status: 'CHOSEN' });
   bus.publish(ch.deal(dealId), { type: 'deal:status', dealId, status: 'AGREED' });
 
-  notifyClinic(offer.clinic_id, 'offer_chosen', { operation: req.operation.nameUz }, `/clinic/deals/${dealId}`);
+  notifyClinic(offer.clinic_id, 'offer_chosen', { operation: requestTitle(req) }, `/clinic/deals/${dealId}`);
   for (const r of rejected) {
-    notifyClinic(r.clinic_id, 'offer_rejected', { operation: req.operation.nameUz }, `/clinic/offers`);
+    notifyClinic(r.clinic_id, 'offer_rejected', { operation: requestTitle(req) }, `/clinic/offers`);
   }
 
   return deal;

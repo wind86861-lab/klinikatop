@@ -137,18 +137,71 @@ export function countMatchingClinics(
 export function clinicMatchesRequest(clinicId: number, requestId: number): boolean {
   const request = db
     .prepare(
-      `SELECT r.operation_id AS operationId, r.city_id AS cityId,
+      `SELECT r.kind, r.operation_id AS operationId, r.lab_organ_id AS labOrganId,
+              r.city_id AS cityId,
               r.other_regions_ok AS otherRegionsOk,
               r.fallback_category_id AS fallbackCategoryId
          FROM requests r WHERE r.id = ?`,
     )
     .get(requestId) as
-    | { operationId: number; cityId: number; otherRegionsOk: number; fallbackCategoryId: number | null }
+    | {
+        kind: string;
+        operationId: number | null;
+        labOrganId: number | null;
+        cityId: number;
+        otherRegionsOk: number;
+        fallbackCategoryId: number | null;
+      }
     | undefined;
   if (!request) return false;
 
+  // Turga qarab: tahlil so'rovida shart organ bo'yicha tekshiriladi
+  if (request.kind === 'lab') {
+    if (!request.labOrganId) return false;
+    return findClinicsForLab(request.labOrganId, request.cityId, {
+      otherRegionsOk: Boolean(request.otherRegionsOk),
+    }).some((c) => c.id === clinicId);
+  }
+
+  if (!request.operationId) return false;
   return findMatchingClinics(request.operationId, request.cityId, {
     otherRegionsOk: Boolean(request.otherRegionsOk),
     fallbackCategoryId: request.fallbackCategoryId,
   }).some((c) => c.id === clinicId);
+}
+
+
+/**
+ * Tahlil so'rovi uchun klinikalar — ORGAN bo'yicha.
+ *
+ * Operatsiyada shart "shu operatsiyani qiladimi", tahlilda "shu
+ * organ bo'yicha tekshiruv qiladimi". Boshqa shartlar bir xil:
+ * shahar mos va klinika tasdiqlangan.
+ *
+ * Organni hech kim belgilamagan bo'lsa ro'yxat BO'SH qaytadi va
+ * so'rov hech qayerga ketmaydi. Bu ataylab: tahlil qilmaydigan
+ * klinikaga so'rov yuborish uni ham, bemorni ham bezovta qilardi.
+ */
+export function findClinicsForLab(
+  organId: number,
+  cityId: number,
+  options: { otherRegionsOk?: boolean } = {},
+): ClinicPublic[] {
+  const anyCity = Boolean(options.otherRegionsOk);
+
+  const rows = db
+    .prepare(
+      `SELECT c.*
+         FROM clinics c
+         JOIN clinic_lab_organs cl ON cl.clinic_id = c.id
+        WHERE cl.organ_id = @organId
+          AND c.verification = 'approved'
+          AND (@anyCity = 1 OR c.city_id = @cityId)
+        ORDER BY (c.city_id = @cityId) DESC,
+                 (c.subscription_status = 'active') DESC,
+                 c.rating_avg DESC`,
+    )
+    .all({ organId, cityId, anyCity: anyCity ? 1 : 0 }) as any[];
+
+  return rows.map(mapClinicPublic);
 }

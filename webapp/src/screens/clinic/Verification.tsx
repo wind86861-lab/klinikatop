@@ -519,3 +519,99 @@ export async function uploadAsBase64(file: File, kind: 'uzi' | 'other' = 'other'
 }
 
 export { FileOpenButton, formatDate };
+
+
+/* ═════════════════  Tahlil yo'nalishlari  ═════════════════ */
+
+/**
+ * Klinika qaysi organlar bo'yicha tahlil qiladi.
+ *
+ * Operatsiyalar ekranidan farqi — ro'yxat TEKIS. Organlar o'nga
+ * yaqin va ularni soha/bo'lim daraxtiga solish faqat ortiqcha
+ * bosish qo'shardi.
+ *
+ * Bo'sh ro'yxat ham saqlanadi: klinika tahlil qilmasa shuni ayta
+ * olishi kerak. Operatsiyalarda bu boshqacha — u yerda kamida
+ * bittasi shart, chunki operatsiyasiz klinika platformada umuman
+ * ish ko'ra olmaydi.
+ */
+export function ClinicLabOrgans() {
+  const { t, lang, toast } = useApp();
+  const navigate = useNavigate();
+
+  const res = useResource(() => api.clinicLabOrgans());
+  const [selected, setSelected] = useState<Set<number> | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const current = selected ?? new Set(res.data?.selected ?? []);
+
+  const toggle = (id: number) => {
+    const next = new Set(current);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+    haptic.tap();
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.saveClinicLabOrgans([...current]);
+      haptic.success();
+      toast(t('lab.saved'), 'success');
+      navigate(-1);
+    } catch (err: any) {
+      haptic.error();
+      toast(err?.message ?? t('common.error'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Screen
+      title={t('lab.title')}
+      onBack={() => navigate(-1)}
+      footer={
+        <Button block loading={saving} onClick={save}>
+          {t('common.save')}
+        </Button>
+      }
+    >
+      {res.loading && (
+        <div className="stack">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} h={52} />
+          ))}
+        </div>
+      )}
+      {res.error && <Notice tone="danger">{res.error}</Notice>}
+
+      {res.data && (
+        <>
+          <Notice tone="info">{t('lab.hint')}</Notice>
+
+          <div className="stack" style={{ gap: 'var(--s-2)' }}>
+            {res.data.all.map((organ) => (
+              <Card
+                key={organ.id}
+                variant="flat"
+                className={`organrow ${current.has(organ.id) ? 'is-active' : ''}`}
+                onClick={() => toggle(organ.id)}
+              >
+                <span className="organrow__icon">{organ.icon}</span>
+                <strong style={{ flex: 1 }}>{lang === 'ru' ? organ.nameRu : organ.nameUz}</strong>
+                {current.has(organ.id) && (
+                  <span style={{ color: 'var(--primary)' }}>
+                    <IconCheck size={16} />
+                  </span>
+                )}
+              </Card>
+            ))}
+          </div>
+
+          {current.size === 0 && <Notice tone="warning">{t('lab.none')}</Notice>}
+        </>
+      )}
+    </Screen>
+  );
+}

@@ -21,6 +21,8 @@ import { tx } from '../db';
 import {
   BUILTIN_STEPS,
   LOCKED_STEPS,
+  REQUEST_KINDS,
+  STEP_FLOWS,
   STEP_KINDS,
   type BuiltinStep,
   type Lang,
@@ -98,6 +100,13 @@ export function wizardSteps(lang: Lang): WizardStep[] {
       sub: (lang === 'ru' ? s.subRu : s.subUz) || null,
       options:
         s.options?.map((o) => ({ value: o.value, label: (lang === 'ru' ? o.ru : o.uz) || o.value })) ?? null,
+      /*
+       * Oqim KODDAN olinadi, bazadan emas. Admin bosqich matnini va
+       * tartibini o'zgartiradi, lekin qaysi oqimga tegishli ekanini
+       * emas: tahlil so'roviga operatsiya bosqichini qo'shib qo'ysa,
+       * u yerda javob bo'lishi mumkin emas edi.
+       */
+      flows: STEP_FLOWS[s.key as BuiltinStep] ?? REQUEST_KINDS,
     }));
 }
 

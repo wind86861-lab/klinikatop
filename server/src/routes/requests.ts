@@ -10,16 +10,30 @@ import {
   updateRequest,
 } from '../services/requests';
 import { listRequestOffers } from '../services/offers';
-import { getPriceStats } from '../services/priceStats';
+import { statsForRequest } from '../services/priceStats';
 import { chooseOffer } from '../services/deals';
 
 export const requestsRouter = Router();
 
 const createSchema = z.object({
-  operationId: z.number().int().positive(),
+  /*
+   * So'rov turi. Berilmasa — operatsiya: eski mijozlar buni
+   * yubormaydi va ular uchun hech narsa o'zgarmasligi kerak.
+   */
+  kind: z.enum(['operation', 'lab']).default('operation'),
+  /* Operatsiya so'rovida majburiy, tahlilda bo'lmaydi */
+  operationId: z.number().int().positive().nullable().optional(),
+  /* Tahlil so'rovida majburiy */
+  labOrganId: z.number().int().positive().nullable().optional(),
+  weightKg: z.number().int().min(2).max(400).nullable().optional(),
   cityId: z.number().int().positive(),
-  // Holat tavsifi majburiy: "bilmayman" tanlansa klinika shundan aniqlaydi
-  conditionText: z.string().trim().min(10).max(2000),
+  /*
+   * Holat tavsifi — OPERATSIYA so'rovida majburiy ("bilmayman"
+   * tanlansa klinika shundan aniqlaydi). Tahlilda esa so'ralmaydi:
+   * u yerda savol "qaysi organ", tavsif emas. Majburiyligini
+   * `createRequest` turga qarab tekshiradi.
+   */
+  conditionText: z.string().trim().max(2000).optional().default(''),
   budgetUzs: z.number().int().positive().nullable().optional(),
   note: z.string().max(1000).nullable().optional(),
   urgency: z.enum(['normal', 'soon', 'urgent']).default('normal'),
@@ -72,7 +86,10 @@ requestsRouter.post('/', (req, res) => {
   const body = createSchema.parse(req.body);
   const request = createRequest({
     patientId: req.user!.id,
-    operationId: body.operationId,
+    kind: body.kind,
+    operationId: body.operationId ?? null,
+    labOrganId: body.labOrganId ?? null,
+    weightKg: body.weightKg ?? null,
     cityId: body.cityId,
     conditionText: body.conditionText,
     budgetUzs: body.budgetUzs ?? null,
@@ -104,7 +121,7 @@ requestsRouter.get('/:id', (req, res) => {
   res.json({
     request,
     offers: listRequestOffers(request.id),
-    stats: getPriceStats(request.operationId, request.cityId),
+    stats: statsForRequest(request),
   });
 });
 

@@ -35,7 +35,22 @@ import {
   Skeleton,
   Textarea,
 } from '@/ui';
-import { GENDERS, ageFromBirthYear, type ChatTurn, type Gender, type Operation, type PriceStats, type StoredFile, type Urgency, type WizardStep } from '@shared/types';
+import {
+  GENDERS,
+  REQUEST_KINDS,
+  STEP_FLOWS,
+  ageFromBirthYear,
+  type BuiltinStep,
+  type ChatTurn,
+  type Gender,
+  type LabOrgan,
+  type Operation,
+  type PriceStats,
+  type RequestKind,
+  type StoredFile,
+  type Urgency,
+  type WizardStep,
+} from '@shared/types';
 
 /** Vizard qoralamasi — bitta manba. */
 export interface Draft {
@@ -60,6 +75,12 @@ export interface Draft {
   subjectName: string;
   subjectBirthYear: number | null;
   subjectGender: Gender | null;
+  /** Operatsiya so'rovimi yoki tahlil — oqim shunga qarab ajraladi */
+  kind: RequestKind;
+  /** Tahlil so'rovida: qaysi organ tekshiriladi */
+  labOrgan: LabOrgan | null;
+  /** Tahlil so'rovida: bemor vazni (kg) */
+  weightKg: number | null;
 }
 
 /*
@@ -72,8 +93,17 @@ export interface Draft {
  * javob bermasa bemor ilovasiz qolmasligi kerak — shunda shu ishlatiladi.
  */
 const FALLBACK_STEPS: WizardStep[] = [
-  'who', 'operation', 'condition', 'documents', 'region', 'budget', 'date', 'note', 'review',
-].map((key) => ({ key, kind: 'builtin', required: false, title: null, sub: null, options: null }));
+  'who', 'type', 'operation', 'condition', 'documents', 'weight', 'organ',
+  'region', 'budget', 'date', 'note', 'review',
+].map((key) => ({
+  key,
+  kind: 'builtin' as const,
+  required: false,
+  title: null,
+  sub: null,
+  options: null,
+  flows: STEP_FLOWS[key as BuiltinStep] ?? REQUEST_KINDS,
+}));
 
 type Step = string;
 
@@ -81,7 +111,7 @@ export function NewRequest() {
   const { t, user, session, toast } = useApp();
   const navigate = useNavigate();
 
-  const [steps, setSteps] = useState<WizardStep[]>(FALLBACK_STEPS);
+  const [allSteps, setSteps] = useState<WizardStep[]>(FALLBACK_STEPS);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -89,6 +119,9 @@ export function NewRequest() {
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const [draft, setDraft] = useState<Draft>({
+    kind: 'operation',
+    labOrgan: null,
+    weightKg: null,
     operation: null,
     aiSuggested: false,
     conditionText: '',
@@ -144,6 +177,19 @@ export function NewRequest() {
     if (user?.cityId) setDraft((d) => (d.cityId === null ? { ...d, cityId: user.cityId } : d));
   }, [user?.cityId]);
 
+  /*
+   * Ko'rinadigan bosqichlar TURGA bog'liq.
+   *
+   * Operatsiya yo'lida operatsiya, holat va hujjatlar bor; tahlil
+   * yo'lida esa vazn va organ. Ularni bitta ro'yxatda qoldirib,
+   * ekranda yashirish yetarli emas edi: "3 / 9" hisoblagichi
+   * bemorga hech qachon ko'rmaydigan bosqichlarni ham sanardi.
+   */
+  const steps = useMemo(
+    () => allSteps.filter((s) => (s.flows ?? REQUEST_KINDS).includes(draft.kind)),
+    [allSteps, draft.kind],
+  );
+
   const current = steps[Math.min(index, steps.length - 1)];
   const step = current?.key ?? 'review';
   /** Bosqich kaliti bo'yicha o'rni — tartib o'zgargani uchun qidiriladi */
@@ -168,8 +214,15 @@ export function NewRequest() {
           draft.forSelf ||
           (draft.subjectName.trim().length >= 2 && draft.subjectBirthYear !== null && draft.subjectGender !== null)
         );
+      case 'type':
+        // Doim tanlangan qiymat bor, shuning uchun to'siq yo'q
+        return true;
       case 'operation':
         return draft.operation !== null;
+      case 'weight':
+        return draft.weightKg !== null && draft.weightKg >= 2 && draft.weightKg <= 400;
+      case 'organ':
+        return draft.labOrgan !== null;
       case 'condition':
         return draft.conditionText.trim().length >= 10;
       case 'region':
@@ -201,11 +254,21 @@ export function NewRequest() {
   };
 
   const submit = async () => {
-    if (!draft.operation || !draft.cityId || !termsAccepted) return;
+    /*
+     * Yuborish sharti TURGA bog'liq: operatsiya so'rovida operatsiya,
+     * tahlilda esa organ va vazn bo'lishi kerak.
+     */
+    const ready =
+      draft.kind === 'lab' ? Boolean(draft.labOrgan && draft.weightKg) : Boolean(draft.operation);
+    if (!ready || !draft.cityId || !termsAccepted) return;
+
     setSubmitting(true);
     try {
       const request = await api.createRequest({
-        operationId: draft.operation.id,
+        kind: draft.kind,
+        operationId: draft.kind === 'lab' ? null : (draft.operation?.id ?? null),
+        labOrganId: draft.kind === 'lab' ? (draft.labOrgan?.id ?? null) : null,
+        weightKg: draft.kind === 'lab' ? draft.weightKg : null,
         cityId: draft.cityId,
         conditionText: draft.conditionText.trim(),
         budgetUzs: draft.budgetUzs,
@@ -276,6 +339,44 @@ export function NewRequest() {
         >
           {step === 'who' && <WhoStep draft={draft} patch={patch} />}
 
+          {step === 'type' && (
+            <TypeStep
+              draft={draft}
+              onPick={(kind) => {
+                /*
+                 * Turni almashtirsa BOSHQA oqimning javoblari tozalanadi.
+                 *
+                 * Aks holda odam operatsiyani tanlab, keyin tahlilga
+                 * o'tsa, so'rov ikkalasini ham olib ketardi va server
+                 * qaysi biri to'g'ri ekanini bilmasdi.
+                 */
+                patch(
+                  kind === 'lab'
+                    ? { kind, operation: null, conditionText: '', files: [], aiConversation: null, fallbackCategoryId: null }
+                    : { kind, labOrgan: null, weightKg: null },
+                );
+                setDirection(1);
+                setIndex(nextAfter('type'));
+                haptic.press();
+                window.scrollTo({ top: 0 });
+              }}
+            />
+          )}
+
+          {step === 'weight' && <WeightStep draft={draft} patch={patch} />}
+          {step === 'organ' && (
+            <OrganStep
+              draft={draft}
+              onPick={(labOrgan) => {
+                patch({ labOrgan });
+                setDirection(1);
+                setIndex(nextAfter('organ'));
+                haptic.press();
+                window.scrollTo({ top: 0 });
+              }}
+            />
+          )}
+
           {step === 'operation' && (
             <OperationStep
               draft={draft}
@@ -326,6 +427,131 @@ export function NewRequest() {
         </m.div>
       </AnimatePresence>
     </Screen>
+  );
+}
+
+/* ─────────────────────────  Tur, vazn va organ  ───────────────────────── */
+
+/**
+ * So'rov turi — oqim shu yerda ikkiga ajraladi.
+ *
+ * Ikkita katta karta, uchinchisi yo'q: bemor "operatsiya kerak"
+ * yoki "tekshiruvdan o'tishim kerak" deb keladi va oralig'i yo'q.
+ */
+function TypeStep({ draft, onPick }: { draft: Draft; onPick: (kind: RequestKind) => void }) {
+  const { t } = useApp();
+
+  const cards: { kind: RequestKind; icon: string; title: string; sub: string }[] = [
+    { kind: 'operation', icon: '🩺', title: t('wz.type.operation'), sub: t('wz.type.operationSub') },
+    { kind: 'lab', icon: '🔬', title: t('wz.type.lab'), sub: t('wz.type.labSub') },
+  ];
+
+  return (
+    <>
+      <StepHead title={t('wz.type.title')} sub={t('wz.type.sub')} />
+      <div className="stack" style={{ gap: 'var(--s-3)' }}>
+        {cards.map((c) => (
+          <Card
+            key={c.kind}
+            variant={draft.kind === c.kind ? 'default' : 'flat'}
+            className={`kindcard ${draft.kind === c.kind ? 'is-active' : ''}`}
+            onClick={() => onPick(c.kind)}
+          >
+            <span className="kindcard__icon">{c.icon}</span>
+            <span className="stack" style={{ gap: 2 }}>
+              <strong>{c.title}</strong>
+              <span className="tiny">{c.sub}</span>
+            </span>
+          </Card>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Vazn — tahlil so'rovida.
+ *
+ * Ko'p tekshiruvda doza va uskuna sozlamasi vaznga bog'liq. O'ziga
+ * so'rov qoldirsa profildagi qiymat AVTOMATIK to'ladi, lekin qulflab
+ * qo'yilmaydi: odamning vazni o'zgaradi va u shu yerda tuzatishi
+ * mumkin bo'lishi kerak. Tuzatgani profilga ham yoziladi.
+ */
+function WeightStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {
+  const { t, user } = useApp();
+
+  useEffect(() => {
+    if (draft.weightKg == null && draft.forSelf && user?.weightKg) {
+      patch({ weightKg: user.weightKg });
+    }
+    // Faqat birinchi ochilishda — keyin odam o'zi boshqaradi
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <>
+      <StepHead title={t('wz.weight.title')} sub={t('wz.weight.sub')} />
+      <Field label={t('wz.weight.label')} hint={t('wz.weight.hint')}>
+        <Input
+          className="input--money num"
+          inputMode="numeric"
+          value={draft.weightKg == null ? '' : String(draft.weightKg)}
+          placeholder="70"
+          onChange={(e) => {
+            const digits = e.target.value.replace(/\D/g, '').slice(0, 3);
+            patch({ weightKg: digits ? Number(digits) : null });
+          }}
+        />
+      </Field>
+      {draft.weightKg != null && (draft.weightKg < 2 || draft.weightKg > 400) && (
+        <Notice tone="warning">{t('wz.weight.range')}</Notice>
+      )}
+    </>
+  );
+}
+
+/**
+ * Qaysi organ uchun tahlil.
+ *
+ * Ro'yxat serverdan keladi va tekis: organlar o'nga yaqin, ularni
+ * daraxtga solish faqat ortiqcha bosish qo'shardi.
+ */
+function OrganStep({ draft, onPick }: { draft: Draft; onPick: (organ: LabOrgan) => void }) {
+  const { t, lang } = useApp();
+  const [organs, setOrgans] = useState<LabOrgan[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .labOrgans()
+      .then((list) => alive && setOrgans(list))
+      .catch(() => alive && setOrgans([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return (
+    <>
+      <StepHead title={t('wz.organ.title')} sub={t('wz.organ.sub')} />
+      {organs === null ? (
+        <div className="stack">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} h={52} />)}</div>
+      ) : (
+        <div className="stack" style={{ gap: 'var(--s-2)' }}>
+          {organs.map((o) => (
+            <Card
+              key={o.id}
+              variant="flat"
+              className={`organrow ${draft.labOrgan?.id === o.id ? 'is-active' : ''}`}
+              onClick={() => onPick(o)}
+            >
+              <span className="organrow__icon">{o.icon}</span>
+              <strong>{lang === 'ru' ? o.nameRu : o.nameUz}</strong>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -831,22 +1057,47 @@ function ReviewStep({
       <StepHead title={t('wz.review.title')} sub={t('wz.review.sub')} />
 
       <Card className="stack" style={{ gap: 0 }}>
-        <ReviewRow
-          label={t('wz.review.operation')}
-          value={draft.operation ? (lang === 'ru' ? draft.operation.nameRu : draft.operation.nameUz) : empty}
-          onEdit={() => onEdit('operation')}
-        />
-        <ReviewRow
-          label={t('wz.review.condition')}
-          value={draft.conditionText}
-          multiline
-          onEdit={() => onEdit('condition')}
-        />
-        <ReviewRow
-          label={t('wz.review.docs')}
-          value={draft.files.length ? draft.files.map((f) => f.name).join(', ') : empty}
-          onEdit={() => onEdit('documents')}
-        />
+        {/*
+          Ko'rib chiqishda ham ikki oqim: tahlil so'rovida operatsiya,
+          holat va hujjatlar qatorlari umuman bo'lmaydi — ular bo'sh
+          turgan bo'lardi va "tahrirlash" tugmasi mavjud bo'lmagan
+          bosqichga olib borardi.
+        */}
+        {draft.kind === 'lab' ? (
+          <>
+            <ReviewRow
+              label={t('wz.review.organ')}
+              value={
+                draft.labOrgan ? (lang === 'ru' ? draft.labOrgan.nameRu : draft.labOrgan.nameUz) : empty
+              }
+              onEdit={() => onEdit('organ')}
+            />
+            <ReviewRow
+              label={t('wz.review.weight')}
+              value={draft.weightKg ? `${draft.weightKg} kg` : empty}
+              onEdit={() => onEdit('weight')}
+            />
+          </>
+        ) : (
+          <>
+            <ReviewRow
+              label={t('wz.review.operation')}
+              value={draft.operation ? (lang === 'ru' ? draft.operation.nameRu : draft.operation.nameUz) : empty}
+              onEdit={() => onEdit('operation')}
+            />
+            <ReviewRow
+              label={t('wz.review.condition')}
+              value={draft.conditionText}
+              multiline
+              onEdit={() => onEdit('condition')}
+            />
+            <ReviewRow
+              label={t('wz.review.docs')}
+              value={draft.files.length ? draft.files.map((f) => f.name).join(', ') : empty}
+              onEdit={() => onEdit('documents')}
+            />
+          </>
+        )}
         <ReviewRow
           label={t('wz.review.region')}
           value={`${city ? cityName(city, lang) : empty}${
@@ -859,13 +1110,17 @@ function ReviewStep({
           value={draft.budgetUzs ? money(draft.budgetUzs, lang) : empty}
           onEdit={() => onEdit('budget')}
         />
-        <ReviewRow label={t('wz.review.date')} value={dateText} onEdit={() => onEdit('date')} />
-        <ReviewRow
-          label={t('wz.review.note')}
-          value={draft.note.trim() || empty}
-          multiline
-          onEdit={() => onEdit('note')}
-        />
+        {draft.kind === 'operation' && (
+          <>
+            <ReviewRow label={t('wz.review.date')} value={dateText} onEdit={() => onEdit('date')} />
+            <ReviewRow
+              label={t('wz.review.note')}
+              value={draft.note.trim() || empty}
+              multiline
+              onEdit={() => onEdit('note')}
+            />
+          </>
+        )}
       </Card>
 
       {matching !== null && (

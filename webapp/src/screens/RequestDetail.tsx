@@ -11,7 +11,7 @@ import { channelFor, onServerEvent, subscribe } from '@/lib/ws';
 import { formatDate, money, responseSpeed, timeLeft } from '@/lib/format';
 import { haptic } from '@/lib/telegram';
 import { incomingVariants, popVariants, spring } from '@/lib/motion';
-import { cityName, opName } from '@/i18n';
+import { cityName } from '@/i18n';
 import { OfferCard } from '@/components/OfferCard';
 import { Radar } from '@/components/Visuals';
 import {
@@ -31,6 +31,7 @@ import {
   Sheet,
   SkeletonList,
 } from '@/ui';
+import { requestTitle } from '@shared/types';
 import type { OfferWithClinic, PriceStats, RequestWithMeta } from '@shared/types';
 
 type Sort = 'price' | 'rating' | 'experience';
@@ -203,7 +204,7 @@ export function RequestDetail() {
 
   return (
     <Screen
-      title={opName(request.operation, lang)}
+      title={requestTitle(request, lang)}
       subtitle={`${cityName(request.city, lang)} · ${money(request.budgetUzs, lang)}`}
       onBack={() => navigate('/')}
       footer={
