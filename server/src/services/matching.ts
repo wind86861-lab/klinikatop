@@ -159,8 +159,8 @@ export function clinicMatchesRequest(clinicId: number, requestId: number): boole
 
   // Turga qarab: tahlil so'rovida shart organ bo'yicha tekshiriladi
   if (request.kind === 'lab') {
-    if (!request.labTestId || !request.labOrganId) return false;
-    return findClinicsForLab(request.labTestId, request.labOrganId, request.cityId, {
+    if (!request.labTestId) return false;
+    return findClinicsForLab(request.labTestId, request.cityId, {
       otherRegionsOk: Boolean(request.otherRegionsOk),
     }).some((c) => c.id === clinicId);
   }
@@ -186,7 +186,6 @@ export function clinicMatchesRequest(clinicId: number, requestId: number): boole
  */
 export function findClinicsForLab(
   testId: number,
-  organId: number,
   cityId: number,
   options: { otherRegionsOk?: boolean } = {},
 ): ClinicPublic[] {
@@ -196,15 +195,15 @@ export function findClinicsForLab(
     .prepare(
       `SELECT c.*
          FROM clinics c
-         JOIN clinic_lab_services cl ON cl.clinic_id = c.id
-        WHERE cl.test_id = @testId AND cl.organ_id = @organId
+         JOIN clinic_lab_tests cl ON cl.clinic_id = c.id
+        WHERE cl.test_id = @testId
           AND c.verification = 'approved'
           AND (@anyCity = 1 OR c.city_id = @cityId)
         ORDER BY (c.city_id = @cityId) DESC,
                  (c.subscription_status = 'active') DESC,
                  c.rating_avg DESC`,
     )
-    .all({ testId, organId, cityId, anyCity: anyCity ? 1 : 0 }) as any[];
+    .all({ testId, cityId, anyCity: anyCity ? 1 : 0 }) as any[];
 
   return rows.map(mapClinicPublic);
 }

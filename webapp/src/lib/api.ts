@@ -57,8 +57,6 @@ import type {
   RequestStep,
   StepOption,
   StepKind,
-  ClinicLabService,
-  LabOrgan,
   LabTest,
   RequestKind,
 } from '@shared/types';
@@ -278,6 +276,8 @@ export interface Highlights {
 
 /** Admin panel bosqichni saqlashda yuboradigan shakl */
 export interface StepDraft {
+  /** Savol faqat shu tekshiruvda chiqadi; null — umumiy */
+  labTestId?: number | null;
   key: string;
   kind: StepKind;
   enabled: boolean;
@@ -333,28 +333,25 @@ export const api = {
   /** So'rov sehrgarining bosqichlari — admin panelidan boshqariladi */
   requestSteps: () => get<WizardStep[]>('/catalog/request-steps'),
 
-  /** Tahlil organlari — bemor "qaysi organ uchun" deb tanlaydigan ro'yxat */
-  labOrgans: () => get<LabOrgan[]>('/catalog/lab-organs'),
   /** Tekshiruvlar; har birida unga mos organlar ham keladi */
   labTests: () => get<LabTest[]>('/catalog/lab-tests'),
 
   /* ── Klinikaning tahlil xizmatlari ── */
-  clinicLabServices: () =>
-    get<{ tests: LabTest[]; organs: LabOrgan[]; selected: ClinicLabService[] }>(
-      '/clinic/lab-services',
-    ),
-  saveClinicLabServices: (services: ClinicLabService[]) =>
-    put<{ selected: ClinicLabService[] }>('/clinic/lab-services', { services }),
+  clinicLabTests: () => get<{ all: LabTest[]; selected: number[] }>('/clinic/lab-tests'),
+  saveClinicLabTests: (testIds: number[]) =>
+    put<{ selected: number[] }>('/clinic/lab-tests', { testIds }),
 
   /* ── Admin: tahlil katalogi ── */
-  adminLabTests: () => get<{ tests: LabTest[]; organs: LabOrgan[] }>('/admin/lab-tests'),
+  adminLabTests: () => get<{ tests: LabTest[] }>('/admin/lab-tests'),
   createLabTest: (body: {
     nameUz: string;
     nameRu?: string;
     icon?: string;
     position?: number;
     active?: boolean;
-    organIds: number[];
+    parentId?: number | null;
+    priceUzs?: number | null;
+    durationMin?: number | null;
   }) => post<LabTest>('/admin/lab-tests', body),
   updateLabTest: (
     id: number,
@@ -364,24 +361,14 @@ export const api = {
       icon: string;
       position: number;
       active: boolean;
-      organIds: number[];
+      parentId: number | null;
+      priceUzs: number | null;
+      durationMin: number | null;
     }>,
   ) => patch<LabTest>(`/admin/lab-tests/${id}`, body),
   deleteLabTest: (id: number) => del(`/admin/lab-tests/${id}`),
 
-  /* ── Admin: tana a'zolari ── */
-  createLabOrgan: (body: {
-    nameUz: string;
-    nameRu?: string;
-    icon?: string;
-    position?: number;
-    active?: boolean;
-  }) => post<LabOrgan>('/admin/lab-organs', body),
-  updateLabOrgan: (
-    id: number,
-    body: Partial<{ nameUz: string; nameRu: string; icon: string; position: number; active: boolean }>,
-  ) => patch<LabOrgan>(`/admin/lab-organs/${id}`, body),
-  deleteLabOrgan: (id: number) => del(`/admin/lab-organs/${id}`),
+
   unknownOperation: () => get<Operation | null>('/catalog/unknown-operation'),
   clinicProfile: (id: number) => get<{ clinic: ClinicPublic; reviews: Review[] }>(`/catalog/clinics/${id}`),
 

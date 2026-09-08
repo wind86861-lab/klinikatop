@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
+import type { LabTest } from '@shared/types';
 import { api, clinicApi } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
 import { EASE, popVariants } from '@/lib/motion';
@@ -525,59 +526,42 @@ export { FileOpenButton, formatDate };
 /* ═════════════════  Tahlil xizmatlari  ═════════════════ */
 
 /**
- * Klinika qaysi tekshiruvni qaysi organ bo'yicha qiladi.
+ * Klinika qaysi tekshiruvlarni qiladi.
  *
- * Ikki daraja, chunki bitta ro'yxat yetarli emas edi: MRT
- * qiladigan klinika qon tahlilini qilmasligi mumkin, garchi
- * ikkalasi ham "jigar" bo'lsa ham.
+ * Katalog ikki darajali: MRT, MSKT — guruh, ichida esa aniq
+ * tekshiruvlar. Guruh sarlavhasi bosilsa butun guruh yoqiladi:
+ * hamma MRT ni qiladigan klinika 24 ta katakni bittalab bosishi
+ * kerak emas.
  *
- * Ko'rinishi OPERATSIYALAR katalogidagidek — yig'iladigan ro'yxat.
- * Ilgari har tekshiruvning organlari bir vaqtda ochiq turardi va
- * ekran uzun devorga aylanardi. Tekshiruvlar soni o'sgani sari bu
- * yomonlashardi: kerakli bittasini topish uchun o'nlab yorliqni
- * ko'zdan kechirish kerak edi.
- *
- * Bir vaqtda BITTA tekshiruv ochiq bo'ladi: ro'yxat qisqa qoladi va
- * qaysi biri bilan ishlayotgani ko'rinib turadi.
+ * Bo'sh ro'yxat ham saqlanadi: klinika tahlil qilmasa shuni ayta
+ * olishi kerak.
  */
 export function ClinicLabServices() {
   const { t, lang, toast } = useApp();
   const navigate = useNavigate();
 
-  const res = useResource(() => api.clinicLabServices());
-  const [selected, setSelected] = useState<Set<string> | null>(null);
+  const res = useResource(() => api.clinicLabTests());
+  const [selected, setSelected] = useState<Set<number> | null>(null);
   const [open, setOpen] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const key = (testId: number, organId: number) => `${testId}:${organId}`;
-  const current =
-    selected ?? new Set((res.data?.selected ?? []).map((s) => key(s.testId, s.organId)));
+  const current = selected ?? new Set(res.data?.selected ?? []);
+  const all = res.data?.all ?? [];
+  const name = (x: LabTest) => (lang === 'ru' ? x.nameRu : x.nameUz);
 
-  const organName = (id: number) => {
-    const o = res.data?.organs.find((x) => x.id === id);
-    return o ? (lang === 'ru' ? o.nameRu : o.nameUz) : String(id);
-  };
-
-  const toggle = (testId: number, organId: number) => {
+  const toggle = (id: number) => {
     const next = new Set(current);
-    const k = key(testId, organId);
-    next.has(k) ? next.delete(k) : next.add(k);
+    next.has(id) ? next.delete(id) : next.add(id);
     setSelected(next);
     haptic.tap();
   };
 
-  /**
-   * Butun tekshiruvni yoqish yoki bo'shatish.
-   *
-   * MRT ni to'liq qiladigan klinika o'nta katakni bittalab bosishi
-   * kerak emas.
-   */
-  const toggleTest = (testId: number, organIds: number[]) => {
-    const allOn = organIds.every((o) => current.has(key(testId, o)));
+  const toggleGroup = (ids: number[]) => {
+    const allOn = ids.every((id) => current.has(id));
     const next = new Set(current);
-    for (const o of organIds) {
-      if (allOn) next.delete(key(testId, o));
-      else next.add(key(testId, o));
+    for (const id of ids) {
+      if (allOn) next.delete(id);
+      else next.add(id);
     }
     setSelected(next);
     haptic.tap();
@@ -586,11 +570,7 @@ export function ClinicLabServices() {
   const save = async () => {
     setSaving(true);
     try {
-      const services = [...current].map((k) => {
-        const [testId, organId] = k.split(':').map(Number);
-        return { testId, organId };
-      });
-      await api.saveClinicLabServices(services);
+      await api.saveClinicLabTests([...current]);
       haptic.success();
       toast(t('lab.saved'), 'success');
       navigate(-1);
@@ -626,71 +606,94 @@ export function ClinicLabServices() {
           <Notice tone="info">{t('lab.hint')}</Notice>
 
           <div className="cat__tree">
-            {res.data.tests.map((test) => {
-              const isOpen = open === test.id;
-              const on = test.organIds.filter((o) => current.has(key(test.id, o))).length;
-              const allOn = on === test.organIds.length && on > 0;
+            {all
+              .filter((x) => x.parentId === null)
+              .map((g) => {
+                const kids = all.filter((x) => x.parentId === g.id);
 
-              return (
-                <div key={test.id} className="cat__branch">
-                  <button
-                    type="button"
-                    className={`cat__head ${isOpen ? 'is-open' : ''}`}
-                    onClick={() => setOpen(isOpen ? null : test.id)}
-                  >
-                    <span className={`cat__caret ${isOpen ? 'is-open' : ''}`}>›</span>
-                    <span className="labtest__icon">{test.icon}</span>
-                    <span className="cat__name truncate">
-                      {lang === 'ru' ? test.nameRu : test.nameUz}
-                    </span>
-                    <span className={`cat__count ${on > 0 ? 'is-on' : ''} num`}>
-                      {on}/{test.organIds.length}
-                    </span>
-                  </button>
-
-                  <AnimatePresence initial={false}>
-                    {isOpen && (
-                      <m.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2, ease: EASE }}
-                        style={{ overflow: 'hidden' }}
+                /* Bolasi yo'q guruh — o'zi bitta tekshiruv */
+                if (kids.length === 0) {
+                  return (
+                    <div key={g.id} className="cat__branch">
+                      <button
+                        type="button"
+                        className="cat__head"
+                        onClick={() => toggle(g.id)}
                       >
-                        <div className="cat__body">
-                          <div className="cat__section">
-                            <div className="cat__sectionHead">
-                              <span className="cat__sectionName">{t('lab.organs')}</span>
-                              <button
-                                type="button"
-                                className="cat__all"
-                                onClick={() => toggleTest(test.id, test.organIds)}
-                              >
-                                {allOn ? t('ops.clearAll') : t('lab.selectAll')}
-                              </button>
-                            </div>
+                        <span className="labtest__icon">{g.icon}</span>
+                        <span className="cat__name truncate">{name(g)}</span>
+                        {current.has(g.id) && (
+                          <span style={{ color: 'var(--primary)' }}>
+                            <IconCheck size={16} />
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  );
+                }
 
-                            <div className="cat__ops">
-                              {test.organIds.map((organId) => (
-                                <Chip
-                                  key={organId}
-                                  size="sm"
-                                  active={current.has(key(test.id, organId))}
-                                  onClick={() => toggle(test.id, organId)}
+                const isOpen = open === g.id;
+                const on = kids.filter((x) => current.has(x.id)).length;
+                const allOn = on === kids.length;
+
+                return (
+                  <div key={g.id} className="cat__branch">
+                    <button
+                      type="button"
+                      className={`cat__head ${isOpen ? 'is-open' : ''}`}
+                      onClick={() => setOpen(isOpen ? null : g.id)}
+                    >
+                      <span className={`cat__caret ${isOpen ? 'is-open' : ''}`}>›</span>
+                      <span className="labtest__icon">{g.icon}</span>
+                      <span className="cat__name truncate">{name(g)}</span>
+                      <span className={`cat__count ${on > 0 ? 'is-on' : ''} num`}>
+                        {on}/{kids.length}
+                      </span>
+                    </button>
+
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <m.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: EASE }}
+                          style={{ overflow: 'hidden' }}
+                        >
+                          <div className="cat__body">
+                            <div className="cat__section">
+                              <div className="cat__sectionHead">
+                                <span className="cat__sectionName">{t('lab.tests')}</span>
+                                <button
+                                  type="button"
+                                  className="cat__all"
+                                  onClick={() => toggleGroup(kids.map((x) => x.id))}
                                 >
-                                  {current.has(key(test.id, organId)) && <IconCheck size={11} />}
-                                  {organName(organId)}
-                                </Chip>
-                              ))}
+                                  {allOn ? t('ops.clearAll') : t('lab.selectAll')}
+                                </button>
+                              </div>
+
+                              <div className="cat__ops">
+                                {kids.map((x) => (
+                                  <Chip
+                                    key={x.id}
+                                    size="sm"
+                                    active={current.has(x.id)}
+                                    onClick={() => toggle(x.id)}
+                                  >
+                                    {current.has(x.id) && <IconCheck size={11} />}
+                                    {name(x)}
+                                  </Chip>
+                                ))}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </m.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              );
-            })}
+                        </m.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
           </div>
 
           {current.size === 0 && <Notice tone="warning">{t('lab.none')}</Notice>}

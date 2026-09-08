@@ -1853,137 +1853,90 @@ async function main() {
   /* ═════ Tahlil so'rovi ═════ */
   console.log('\nTahlil so‘rovi');
 
-  const labOrgans = require('../services/labOrgans');
+  const labs = require('../services/labOrgans');
   const { requestTitle } = require('../../../shared/types');
-  const organs = labOrgans.listLabOrgans();
-  check('organlar katalogi to‘ldirilgan', organs.length >= 5, organs.length);
 
-  const brain = organs.find((o: any) => o.slug === 'brain');
-  check('bosh miya ro‘yxatda bor', Boolean(brain));
-
-  /* ── Tekshiruvlar va juftliklar ── */
-
-  const tests = labOrgans.listLabTests();
-  check('tekshiruvlar katalogi to‘ldirilgan', tests.length >= 5, tests.length);
-
-  const mrt = tests.find((x: any) => x.slug === 'mrt');
-  const blood = tests.find((x: any) => x.slug === 'blood');
-  check('MRT bor va organlari bor', Boolean(mrt) && mrt.organIds.length > 0, mrt?.organIds?.length);
-  check('MRT bosh miyani qamraydi', mrt.organIds.includes(brain.id));
+  const tests = labs.listLabTests();
+  check('tekshiruvlar katalogi to‘ldirilgan', tests.length >= 50, tests.length);
 
   /*
-   * Mantiqsiz juftlik yo'q: qon tahlili umurtqa uchun qilinmaydi.
-   * Bemorga bunday variant ko'rsatilmasligi kerak, server ham qabul
-   * qilmasligi kerak.
+   * Katalog ikki darajali: MRT va MSKT — guruh, ichida esa aniq
+   * tekshiruvlar. Guruhni tanlab bo'lmaydi.
    */
-  const spine = organs.find((o: any) => o.slug === 'spine');
-  check('qon tahlili umurtqani qamramaydi', !blood.organIds.includes(spine.id));
-  check('juftlik tekshiruvi ishlaydi', labOrgans.isValidPair(mrt.id, brain.id) === true);
-  check('mantiqsiz juftlik rad etiladi', labOrgans.isValidPair(blood.id, spine.id) === false);
+  const mrtGroup = tests.find((x: any) => x.slug === 'mrt');
+  const msktGroup = tests.find((x: any) => x.slug === 'mskt');
+  check('MRT guruhi bor', Boolean(mrtGroup) && mrtGroup.hasChildren === true);
+  check('MSKT guruhi bor', Boolean(msktGroup) && msktGroup.hasChildren === true);
+
+  const mrtKids = tests.filter((x: any) => x.parentId === mrtGroup.id);
+  const msktKids = tests.filter((x: any) => x.parentId === msktGroup.id);
+  check('MRT ichida 24 ta tekshiruv', mrtKids.length === 24, mrtKids.length);
+  check('MSKT ichida 32 ta tekshiruv', msktKids.length === 32, msktKids.length);
+  check('tekshiruvda narx bor', mrtKids.every((x: any) => x.priceUzs > 0));
+  check('tekshiruvda davomiylik bor', mrtKids.every((x: any) => x.durationMin > 0));
+
+  const mrt = mrtKids.find((x: any) => x.nameUz.includes('Tizza'));
+  const blood = tests.find((x: any) => x.slug === 'blood');
+  check('tizza MRT topildi', Boolean(mrt), mrt?.nameUz);
 
   /*
    * Tahlil so'rovi operatsiyaga bog'lanmaydi va holat tavsifi
-   * so'ralmaydi — o'rniga organ va vazn majburiy.
+   * so'ralmaydi — o'rniga tekshiruv va vazn majburiy.
    */
-  throws(
-    'organsiz tahlil so‘rovi rad etiladi',
-    () =>
-      requests.createRequest({
-        patientId: patient.id,
-        kind: 'lab',
-        labTestId: mrt.id,
-        cityId: tashkent.id,
-        weightKg: 70,
-        budgetUzs: 500_000,
-        note: null,
-        urgency: 'normal',
-        attachments: [],
-        aiSuggested: false,
-        acceptTerms: true,
-      } as any),
-    'organ_required',
-  );
-
-  throws(
-    'vaznsiz tahlil so‘rovi rad etiladi',
-    () =>
-      requests.createRequest({
-        patientId: patient.id,
-        kind: 'lab',
-        labTestId: mrt.id,
-        labOrganId: brain.id,
-        cityId: tashkent.id,
-        budgetUzs: 500_000,
-        note: null,
-        urgency: 'normal',
-        attachments: [],
-        aiSuggested: false,
-        acceptTerms: true,
-      } as any),
-    'invalid_weight',
-  );
-
-  // Klinika shu JUFTLIKNI qilishini belgilaydi
-  labOrgans.saveClinicLabServices(clinic.id, [{ testId: mrt.id, organId: brain.id }]);
-  check(
-    'klinika juftlikni belgiladi',
-    labOrgans.clinicLabServices(clinic.id).some((sv: any) => sv.testId === mrt.id && sv.organId === brain.id),
-  );
-
-  // Admin ruxsat bermagan juftlik saqlanmaydi
-  check(
-    'mantiqsiz juftlik saqlanmaydi',
-    labOrgans.saveClinicLabServices(clinic.id, [
-      { testId: mrt.id, organId: brain.id },
-      { testId: blood.id, organId: spine.id },
-    ]).length === 1,
-  );
-
-  throws(
-    'mantiqsiz juftlik bilan so‘rov rad etiladi',
-    () =>
-      requests.createRequest({
-        patientId: patient.id,
-        kind: 'lab',
-        labTestId: blood.id,
-        labOrganId: spine.id,
-        weightKg: 70,
-        cityId: tashkent.id,
-        note: null,
-        urgency: 'normal',
-        attachments: [],
-        aiSuggested: false,
-        acceptTerms: true,
-      } as any),
-    'pair_not_allowed',
-  );
-
-  const labReq = requests.createRequest({
+  const labBody = (extra: Record<string, unknown>) => ({
     patientId: patient.id,
     kind: 'lab',
-    labTestId: mrt.id,
-    labOrganId: brain.id,
-    weightKg: 72,
     cityId: tashkent.id,
-    budgetUzs: 500_000,
+    budgetUzs: 300_000,
     note: null,
     urgency: 'normal',
     attachments: [],
     aiSuggested: false,
     acceptTerms: true,
-  } as any);
+    ...extra,
+  });
+
+  throws(
+    'tekshiruvsiz tahlil so‘rovi rad etiladi',
+    () => requests.createRequest(labBody({ weightKg: 70 }) as any),
+    'test_required',
+  );
+
+  throws(
+    'vaznsiz tahlil so‘rovi rad etiladi',
+    () => requests.createRequest(labBody({ labTestId: mrt.id }) as any),
+    'invalid_weight',
+  );
+
+  /*
+   * GURUHNI tanlab bo'lmaydi: "MRT" degan javob klinikaga hech
+   * narsa aytmaydi, chunki MRT ning o'zi 24 xil.
+   */
+  throws(
+    'guruhni tanlab bo‘lmaydi',
+    () => requests.createRequest(labBody({ labTestId: mrtGroup.id, weightKg: 70 }) as any),
+    'test_is_group',
+  );
+
+  // Byudjet 200 ming so'mdan past bo'lmaydi
+  throws(
+    'juda past byudjet rad etiladi',
+    () =>
+      requests.createRequest(labBody({ labTestId: mrt.id, weightKg: 70, budgetUzs: 150_000 }) as any),
+    'invalid_budget',
+  );
+
+  // Klinika shu tekshiruvni qilishini belgilaydi
+  labs.saveClinicLabTests(clinic.id, [mrt.id]);
+  check('klinika tekshiruvni belgiladi', labs.clinicLabTestIds(clinic.id).includes(mrt.id));
+
+  const labReq = requests.createRequest(labBody({ labTestId: mrt.id, weightKg: 72 }) as any);
 
   check('tahlil so‘rovi yaratildi', labReq.kind === 'lab', labReq.kind);
   check('operatsiya bo‘sh', labReq.operationId === null);
-  check('organ yozildi', labReq.labOrganId === brain.id);
+  check('tekshiruv yozildi', labReq.labTestId === mrt.id);
   check('vazn yozildi', labReq.weightKg === 72);
-  check('organ nomi keldi', Boolean(labReq.labOrgan), labReq.labOrgan?.nameUz);
-  check('tekshiruv nomi keldi', Boolean(labReq.labTest), labReq.labTest?.nameUz);
-  check(
-    'sarlavha tekshiruv va organdan yig‘iladi',
-    requestTitle(labReq) === `${mrt.nameUz} · ${brain.nameUz}`,
-    requestTitle(labReq),
-  );
+  check('sarlavha tekshiruv nomidan olinadi', requestTitle(labReq) === mrt.nameUz, requestTitle(labReq));
 
   // Vazn profilga ham yozildi — keyingi safar o'zi to'ladi
   check(
@@ -1993,87 +1946,124 @@ async function main() {
 
   check('so‘rov klinikaga bordi', labReq.broadcastCount >= 1, labReq.broadcastCount);
 
+  // Byudjet tahlilda yuz minglardan boshlanadi
+  const cheap = requests.createRequest(
+    labBody({ labTestId: mrt.id, weightKg: 72, budgetUzs: 200_000 }) as any,
+  );
+  check('200 ming so‘mlik byudjet qabul qilindi', cheap.budgetUzs === 200_000);
+
   /*
-   * Organni belgilamagan klinikaga tahlil so'rovi BORMAYDI.
-   * Bu asosiy shart: tahlil qilmaydigan klinikaga so'rov yuborish
-   * uni ham, bemorni ham bezovta qilardi.
+   * Belgilanmagan tekshiruv bo'yicha so'rov klinikaga BORMAYDI:
+   * qilmaydigan ishiga so'rov yuborish uni ham, bemorni ham
+   * bezovta qilardi.
    */
-  const otherOrgan = organs.find((o: any) => o.slug === 'liver');
-  const labReq2 = requests.createRequest({
-    patientId: patient.id,
-    kind: 'lab',
-    labTestId: mrt.id,
-    labOrganId: otherOrgan.id,
-    weightKg: 72,
-    cityId: tashkent.id,
-    budgetUzs: 500_000,
-    note: null,
-    urgency: 'normal',
-    attachments: [],
-    aiSuggested: false,
-    acceptTerms: true,
-  } as any);
-  check('belgilanmagan juftlik bo‘yicha so‘rov bormaydi', labReq2.broadcastCount === 0, labReq2.broadcastCount);
+  const other = requests.createRequest(labBody({ labTestId: blood.id, weightKg: 72 }) as any);
+  check('belgilanmagan tekshiruv bo‘yicha so‘rov bormaydi', other.broadcastCount === 0, other.broadcastCount);
+
+  /* ── Admin katalogni qo'lda to'ldiradi ── */
+
+  const made = labs.createLabTest({
+    nameUz: 'Sinov tekshiruvi',
+    nameRu: 'Тест',
+    icon: '🧪',
+    parentId: mrtGroup.id,
+    priceUzs: 250_000,
+    durationMin: 20,
+  });
+  check('admin tekshiruv qo‘shdi', made.id > 0 && made.nameUz === 'Sinov tekshiruvi');
+  check('tekshiruv guruhga kirdi', made.parentId === mrtGroup.id);
+  check('narx saqlandi', made.priceUzs === 250_000);
+
+  throws(
+    'ichida tekshiruvi bor guruh o‘chirilmaydi',
+    () => labs.deleteLabTest(mrtGroup.id),
+    'test_has_children',
+  );
+  check('yangi tekshiruv ro‘yxatda ko‘rinadi', labs.listLabTests().some((x: any) => x.id === made.id));
+
+  throws(
+    'nomsiz tekshiruv qabul qilinmaydi',
+    () => labs.createLabTest({ nameUz: 'x' } as any),
+    'name_required',
+  );
+
+  // Ishlatilgan tekshiruvni o'chirib bo'lmaydi — yashirish kerak
+  throws(
+    'so‘rovda ishlatilgan tekshiruv o‘chirilmaydi',
+    () => labs.deleteLabTest(mrt.id),
+    'test_in_use',
+  );
+  labs.deleteLabTest(made.id);
+  check('ishlatilmagan tekshiruv o‘chirildi', !labs.listLabTests(true).some((x: any) => x.id === made.id));
+
+  /* ── Tahlilga MOS savol ── */
+
+  const steps2 = require('../services/requestSteps');
+  const baseSteps = steps2.listSteps().map((x: any) => ({
+    key: x.key,
+    kind: x.kind,
+    enabled: x.enabled,
+    required: x.required,
+    titleUz: x.titleUz,
+    titleRu: x.titleRu,
+    subUz: x.subUz,
+    subRu: x.subRu,
+    options: x.options,
+    labTestId: x.labTestId ?? null,
+  }));
+
+  steps2.saveSteps(
+    [
+      ...baseSteps,
+      {
+        key: 'metal_implant',
+        kind: 'boolean',
+        enabled: true,
+        required: true,
+        titleUz: 'Tanangizda metall implant bormi?',
+        titleRu: null,
+        subUz: null,
+        subRu: null,
+        options: null,
+        labTestId: mrt.id,
+      },
+    ],
+    null,
+  );
+
+  check(
+    'savol MRT so‘rovida chiqadi',
+    steps2.customSteps(mrt.id).some((x: any) => x.key === 'metal_implant'),
+  );
+  check(
+    'savol boshqa tekshiruvda chiqmaydi',
+    !steps2.customSteps(blood.id).some((x: any) => x.key === 'metal_implant'),
+  );
+  check(
+    'savol operatsiya so‘rovida chiqmaydi',
+    !steps2.customSteps(null).some((x: any) => x.key === 'metal_implant'),
+  );
+
+  throws(
+    'MRT so‘rovida savol majburiy',
+    () => requests.createRequest(labBody({ labTestId: mrt.id, weightKg: 72 }) as any),
+    'answer_required',
+  );
+
+  const answered = requests.createRequest(
+    labBody({ labTestId: mrt.id, weightKg: 72, extraAnswers: { metal_implant: false } }) as any,
+  );
+  check('javob berilgach so‘rov o‘tdi', answered.kind === 'lab');
+  check('javob saqlandi', (answered.extraAnswers as any)?.metal_implant === false);
+
+  // Sinovdan keyin tozalaymiz
+  steps2.saveSteps(baseSteps, null);
 
   // Bosqichlar oqim bo'yicha ajraladi
   const { stepInFlow } = require('../../../shared/types');
   check('operatsiya bosqichi tahlilda yo‘q', stepInFlow('operation', 'lab') === false);
-  check('organ bosqichi operatsiyada yo‘q', stepInFlow('organ', 'operation') === false);
   check('tekshiruv bosqichi faqat tahlilda', stepInFlow('test', 'lab') && !stepInFlow('test', 'operation'));
   check('byudjet ikkalasida ham bor', stepInFlow('budget', 'lab') && stepInFlow('budget', 'operation'));
-  check('admin savoli ikkalasida ham chiqadi', stepInFlow('smoking', 'lab') === true);
-
-
-  /* ── Admin katalogni qo'lda to'ldiradi ── */
-
-  const madeOrgan = labOrgans.createLabOrgan({ nameUz: 'Quloq', nameRu: 'Ухо', icon: '👂' });
-  check('admin tana a‘zosi qo‘shdi', madeOrgan.id > 0 && madeOrgan.nameUz === 'Quloq');
-  check(
-    'yangi a‘zo ro‘yxatda ko‘rinadi',
-    labOrgans.listLabOrgans().some((o: any) => o.id === madeOrgan.id),
-  );
-
-  const madeTest = labOrgans.createLabTest({
-    nameUz: 'Audiometriya',
-    nameRu: 'Аудиометрия',
-    icon: '🎧',
-    organIds: [madeOrgan.id],
-  });
-  check('admin tekshiruv qo‘shdi', madeTest.organIds.includes(madeOrgan.id));
-  check('yangi juftlik amal qiladi', labOrgans.isValidPair(madeTest.id, madeOrgan.id) === true);
-
-  throws(
-    'organsiz tekshiruv qabul qilinmaydi',
-    () => labOrgans.createLabTest({ nameUz: 'Bo‘sh', organIds: [] } as any),
-    'organs_required',
-  );
-
-  /*
-   * Admin organni tekshiruvdan olib tashlasa, klinikaning endi
-   * mos kelmaydigan juftligi ham olib tashlanadi — aks holda hech
-   * kim tanlay olmaydigan so'rov o'sha klinikaga borardi.
-   */
-  labOrgans.saveClinicLabServices(clinic.id, [
-    { testId: mrt.id, organId: brain.id },
-    { testId: madeTest.id, organId: madeOrgan.id },
-  ]);
-  labOrgans.updateLabTest(madeTest.id, { organIds: [brain.id] });
-  check(
-    'mos kelmay qolgan juftlik klinikadan olindi',
-    !labOrgans.clinicLabServices(clinic.id).some((sv: any) => sv.organId === madeOrgan.id),
-  );
-
-  // Ishlatilgan a'zoni o'chirib bo'lmaydi — yashirish kerak
-  throws(
-    'so‘rovda ishlatilgan a‘zo o‘chirilmaydi',
-    () => labOrgans.deleteLabOrgan(brain.id),
-    'organ_in_use',
-  );
-  labOrgans.deleteLabOrgan(madeOrgan.id);
-  check(
-    'ishlatilmagan a‘zo o‘chirildi',
-    !labOrgans.listLabOrgans(true).some((o: any) => o.id === madeOrgan.id),
-  );
 
 
   /* ═════ 20. Sana oralig'i va moslashuvchanlik ═════ */

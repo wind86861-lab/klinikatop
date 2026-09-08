@@ -13,7 +13,7 @@
 import { db, tx } from '../db';
 import { badRequest, notFound } from '../lib/errors';
 import { mapLabOrgan, mapLabTest } from '../lib/mappers';
-import type { ClinicLabService, LabOrgan, LabTest } from '../../../shared/types';
+import type { LabOrgan, LabTest } from '../../../shared/types';
 
 /**
  * Nomdan barqaror kalit yasaydi.
@@ -116,66 +116,71 @@ export function deleteLabOrgan(id: number): void {
 
 /* ─────────────────────────  Tekshiruvlar  ───────────────────────── */
 
-function organIdsOf(testId: number): number[] {
-  return (
-    db.prepare(`SELECT organ_id FROM lab_test_organs WHERE test_id = ?`).all(testId) as {
-      organ_id: number;
-    }[]
-  ).map((r) => r.organ_id);
-}
-
+/**
+ * Butun katalog — guruhlar va ularning tekshiruvlari birga.
+ *
+ * Daraxt emas, TEKIS ro'yxat qaytadi: har yozuvda `parentId` bor va
+ * mijoz guruhlashni o'zi qiladi. Shunda bitta so'rov yetadi va
+ * qidiruv ham oddiy massiv ustida ishlaydi.
+ */
 export function listLabTests(includeHidden = false): LabTest[] {
   const rows = db
     .prepare(
-      `SELECT * FROM lab_tests ${includeHidden ? '' : 'WHERE active = 1'} ORDER BY position, id`,
+      `SELECT t.*,
+              (SELECT COUNT(*) FROM lab_tests c
+                WHERE c.parent_id = t.id ${includeHidden ? '' : 'AND c.active = 1'}) AS kids
+         FROM lab_tests t
+        ${includeHidden ? '' : 'WHERE t.active = 1'}
+        ORDER BY COALESCE(t.parent_id, t.id), t.parent_id IS NOT NULL, t.position, t.id`,
     )
     .all() as any[];
-  return rows.map((r) => mapLabTest(r, organIdsOf(r.id)));
+  return rows.map((r) => mapLabTest(r, (r.kids ?? 0) > 0));
+}
+
+/**
+ * Bemor tanlay oladigan tekshiruvlar — faqat BARGLAR.
+ *
+ * Bolasi bor yozuv papka: uni tanlash "MRT kerak" deyish bilan
+ * barobar bo'lardi va klinika qaysi MRT ekanini bilmasdi.
+ */
+export function selectableLabTestIds(): Set<number> {
+  return new Set(
+    (
+      db
+        .prepare(
+          `SELECT t.id FROM lab_tests t
+            WHERE t.active = 1
+              AND NOT EXISTS (SELECT 1 FROM lab_tests c WHERE c.parent_id = t.id AND c.active = 1)`,
+        )
+        .all() as { id: number }[]
+    ).map((r) => r.id),
+  );
 }
 
 export function getLabTest(id: number): LabTest {
   const row = db.prepare(`SELECT * FROM lab_tests WHERE id = ?`).get(id) as any;
   if (!row) throw notFound('Tekshiruv topilmadi');
-  return mapLabTest(row, organIdsOf(id));
-}
-
-/** Bu juftlik admin ruxsat berganmi. */
-export function isValidPair(testId: number, organId: number): boolean {
-  return Boolean(
-    db
-      .prepare(
-        `SELECT 1 FROM lab_test_organs lo
-           JOIN lab_tests t ON t.id = lo.test_id AND t.active = 1
-           JOIN lab_organs o ON o.id = lo.organ_id AND o.active = 1
-          WHERE lo.test_id = ? AND lo.organ_id = ?`,
-      )
-      .get(testId, organId),
-  );
+  const kids = db.prepare(`SELECT COUNT(*) n FROM lab_tests WHERE parent_id = ?`).get(id) as {
+    n: number;
+  };
+  return mapLabTest(row, kids.n > 0);
 }
 
 export interface LabTestInput {
   nameUz: string;
-  nameRu: string;
+  nameRu?: string;
   icon?: string;
   position?: number;
   active?: boolean;
-  /** Shu tekshiruvga mos organlar — kamida bittasi */
-  organIds: number[];
-}
-
-function cleanOrganIds(ids: number[]): number[] {
-  const valid = new Set(listLabOrgans(true).map((o) => o.id));
-  const clean = [...new Set(ids)].filter((id) => valid.has(id));
-  if (!clean.length) {
-    throw badRequest('organs_required', 'Kamida bitta organ tanlang — bemor shundan tanlaydi');
-  }
-  return clean;
+  /** Qaysi guruhga kiradi (MRT, MSKT). `null` — o'zi guruh */
+  parentId?: number | null;
+  priceUzs?: number | null;
+  durationMin?: number | null;
 }
 
 export function createLabTest(input: LabTestInput): LabTest {
   const nameUz = input.nameUz.trim();
   if (nameUz.length < 2) throw badRequest('name_required', 'Tekshiruv nomini yozing');
-  const organIds = cleanOrganIds(input.organIds);
 
   return tx(() => {
     let slug = slugify(nameUz);
@@ -186,8 +191,9 @@ export function createLabTest(input: LabTestInput): LabTest {
 
     const info = db
       .prepare(
-        `INSERT INTO lab_tests (slug, name_uz, name_ru, icon, position, active)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO lab_tests (slug, name_uz, name_ru, icon, position, active,
+                                parent_id, price_uzs, duration_min)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         slug,
@@ -196,12 +202,12 @@ export function createLabTest(input: LabTestInput): LabTest {
         (input.icon ?? '').slice(0, 8),
         input.position ?? 999,
         input.active === false ? 0 : 1,
+        input.parentId ?? null,
+        input.priceUzs ?? null,
+        input.durationMin ?? null,
       );
 
-    const id = Number(info.lastInsertRowid);
-    const link = db.prepare(`INSERT OR IGNORE INTO lab_test_organs (test_id, organ_id) VALUES (?, ?)`);
-    for (const o of organIds) link.run(id, o);
-    return getLabTest(id);
+    return getLabTest(Number(info.lastInsertRowid));
   });
 }
 
@@ -210,7 +216,8 @@ export function updateLabTest(id: number, input: Partial<LabTestInput>): LabTest
 
   return tx(() => {
     db.prepare(
-      `UPDATE lab_tests SET name_uz = ?, name_ru = ?, icon = ?, position = ?, active = ?
+      `UPDATE lab_tests SET name_uz = ?, name_ru = ?, icon = ?, position = ?, active = ?,
+                            parent_id = ?, price_uzs = ?, duration_min = ?
         WHERE id = ?`,
     ).run(
       (input.nameUz ?? current.nameUz).trim().slice(0, 120),
@@ -218,28 +225,15 @@ export function updateLabTest(id: number, input: Partial<LabTestInput>): LabTest
       (input.icon ?? current.icon).slice(0, 8),
       input.position ?? 999,
       input.active === false ? 0 : 1,
+      /*
+       * O'ziga o'zi ota bo'lib qolmasin — bunday yozuv ro'yxatda
+       * hech qachon ko'rinmasdi.
+       */
+      input.parentId === id ? null : (input.parentId ?? current.parentId),
+      input.priceUzs !== undefined ? input.priceUzs : current.priceUzs,
+      input.durationMin !== undefined ? input.durationMin : current.durationMin,
       id,
     );
-
-    if (input.organIds) {
-      const organIds = cleanOrganIds(input.organIds);
-      db.prepare(`DELETE FROM lab_test_organs WHERE test_id = ?`).run(id);
-      const link = db.prepare(`INSERT OR IGNORE INTO lab_test_organs (test_id, organ_id) VALUES (?, ?)`);
-      for (const o of organIds) link.run(id, o);
-
-      /*
-       * Endi mos kelmaydigan klinika juftliklari olib tashlanadi.
-       *
-       * Aks holda klinika "MRT + jigar" ni yoqib qo'ygan bo'lar, admin
-       * esa jigarni MRT ro'yxatidan olib tashlagan bo'lardi — va
-       * hech kim tanlay olmaydigan so'rov o'sha klinikaga borardi.
-       */
-      db.prepare(
-        `DELETE FROM clinic_lab_services
-          WHERE test_id = ?
-            AND organ_id NOT IN (SELECT organ_id FROM lab_test_organs WHERE test_id = ?)`,
-      ).run(id, id);
-    }
 
     return getLabTest(id);
   });
@@ -252,6 +246,14 @@ export function updateLabTest(id: number, input: Partial<LabTestInput>): LabTest
  * haqida ekanini yo'qotardi. Bunday holatda uni YASHIRISH kerak.
  */
 export function deleteLabTest(id: number): void {
+  const kids = db.prepare(`SELECT 1 FROM lab_tests WHERE parent_id = ?`).get(id);
+  if (kids) {
+    throw badRequest(
+      'test_has_children',
+      'Bu guruh ichida tekshiruvlar bor — avval ularni o‘chiring yoki boshqa guruhga o‘tkazing',
+    );
+  }
+
   const used = db.prepare(`SELECT 1 FROM requests WHERE lab_test_id = ?`).get(id);
   if (used) {
     throw badRequest(
@@ -264,12 +266,12 @@ export function deleteLabTest(id: number): void {
 
 /* ─────────────────────────  Klinika xizmatlari  ───────────────────────── */
 
-export function clinicLabServices(clinicId: number): ClinicLabService[] {
+export function clinicLabTestIds(clinicId: number): number[] {
   return (
-    db
-      .prepare(`SELECT test_id, organ_id FROM clinic_lab_services WHERE clinic_id = ?`)
-      .all(clinicId) as { test_id: number; organ_id: number }[]
-  ).map((r) => ({ testId: r.test_id, organId: r.organ_id }));
+    db.prepare(`SELECT test_id FROM clinic_lab_tests WHERE clinic_id = ?`).all(clinicId) as {
+      test_id: number;
+    }[]
+  ).map((r) => r.test_id);
 }
 
 /**
@@ -278,36 +280,19 @@ export function clinicLabServices(clinicId: number): ClinicLabService[] {
  * Bo'sh ro'yxat ham QABUL QILINADI: klinika tahlil xizmatini
  * butunlay o'chirib qo'yishi mumkin bo'lishi kerak.
  *
- * Admin ruxsat bermagan juftlik jimgina tashlab yuboriladi — mijoz
- * eskirgan ro'yxat bilan ishlayotgan bo'lishi mumkin.
+ * Mavjud bo'lmagan tur jimgina tashlab yuboriladi — mijoz eskirgan
+ * ro'yxat bilan ishlayotgan bo'lishi mumkin.
  */
-export function saveClinicLabServices(
-  clinicId: number,
-  services: ClinicLabService[],
-): ClinicLabService[] {
-  const allowed = new Set(
-    (
-      db.prepare(`SELECT test_id, organ_id FROM lab_test_organs`).all() as {
-        test_id: number;
-        organ_id: number;
-      }[]
-    ).map((r) => `${r.test_id}:${r.organ_id}`),
-  );
-
-  const clean = [
-    ...new Map(
-      services
-        .filter((s) => allowed.has(`${s.testId}:${s.organId}`))
-        .map((s) => [`${s.testId}:${s.organId}`, s]),
-    ).values(),
-  ];
+export function saveClinicLabTests(clinicId: number, testIds: number[]): number[] {
+  const valid = new Set(listLabTests(true).map((x) => x.id));
+  const clean = [...new Set(testIds)].filter((id) => valid.has(id));
 
   tx(() => {
-    db.prepare(`DELETE FROM clinic_lab_services WHERE clinic_id = ?`).run(clinicId);
+    db.prepare(`DELETE FROM clinic_lab_tests WHERE clinic_id = ?`).run(clinicId);
     const ins = db.prepare(
-      `INSERT OR IGNORE INTO clinic_lab_services (clinic_id, test_id, organ_id) VALUES (?, ?, ?)`,
+      `INSERT OR IGNORE INTO clinic_lab_tests (clinic_id, test_id) VALUES (?, ?)`,
     );
-    for (const s of clean) ins.run(clinicId, s.testId, s.organId);
+    for (const id of clean) ins.run(clinicId, id);
   });
 
   return clean;

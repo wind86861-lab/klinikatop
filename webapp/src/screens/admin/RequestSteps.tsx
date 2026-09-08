@@ -20,7 +20,7 @@
  * etadi, shuning uchun ularni o'chirish imkoniyati umuman berilmaydi —
  * "mumkin, lekin keyin buziladi" degan holat eng yomoni.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api, type StepDraft } from '@/lib/api';
@@ -28,7 +28,7 @@ import { haptic } from '@/lib/telegram';
 import { spring } from '@/lib/motion';
 import { Button, Card, Chip, Field, Input, Notice, Section, Sheet, Skeleton, Textarea } from '@/ui';
 import { Async, useResource } from '@/screens/clinic/shell';
-import { BUILTIN_STEPS, type RequestStep, type StepKind, type StepOption } from '@shared/types';
+import { BUILTIN_STEPS, type LabTest, type RequestStep, type StepKind, type StepOption } from '@shared/types';
 
 /** Tayyor bosqichlarning admin panelidagi nomi va nima qilishi. */
 const BUILTIN_INFO: Record<string, { name: string; what: string }> = {
@@ -101,6 +101,21 @@ export function RequestStepsScreen() {
       return list;
     });
 
+  /* Savolni tekshiruvga bog'lash uchun ro'yxat kerak */
+  const [labTests, setLabTests] = useState<LabTest[]>([]);
+  useEffect(() => {
+    let alive = true;
+    api
+      .labTests()
+      .then((list) => alive && setLabTests(list))
+      .catch(() => {
+        /* ro'yxatsiz ham savol qo'shish mumkin — u umumiy bo'ladi */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const save = async (server: RequestStep[]) => {
     setSaving(true);
     try {
@@ -114,6 +129,7 @@ export function RequestStepsScreen() {
         subUz: s.subUz,
         subRu: s.subRu,
         options: s.options,
+        labTestId: s.labTestId ?? null,
       }));
       const next = await api.saveRequestSteps(body);
       res.set(next);
@@ -218,6 +234,7 @@ export function RequestStepsScreen() {
             <Sheet open={adding} onClose={() => setAdding(false)} title="Yangi savol">
               <NewQuestion
                 taken={list.map((s) => s.key)}
+                labTests={labTests}
                 onDone={(row) => {
                   upsert(server, row);
                   setAdding(false);
@@ -404,8 +421,22 @@ function OptionsEditor({
 
 /* ─────────────────────────  Yangi savol  ───────────────────────── */
 
-function NewQuestion({ taken, onDone }: { taken: string[]; onDone: (row: RequestStep) => void }) {
+function NewQuestion({
+  taken,
+  labTests,
+  onDone,
+}: {
+  taken: string[];
+  labTests: LabTest[];
+  onDone: (row: RequestStep) => void;
+}) {
   const [kind, setKind] = useState<StepKind>('choice');
+  /*
+   * Savol qaysi tekshiruvga tegishli. `null` — umumiy: hamma
+   * so'rovda chiqadi. "Qon suyultiruvchi dori ichasizmi" degan
+   * savol MRT da o'rinli, qon tahlilida esa keraksiz.
+   */
+  const [labTestId, setLabTestId] = useState<number | null>(null);
   const [titleUz, setTitleUz] = useState('');
   const [titleRu, setTitleRu] = useState('');
   const [options, setOptions] = useState<StepOption[]>([
@@ -454,6 +485,19 @@ function NewQuestion({ taken, onDone }: { taken: string[]; onDone: (row: Request
         <Input value={titleRu} onChange={(e) => setTitleRu(e.target.value)} maxLength={120} />
       </Field>
 
+      <Field label="Qaysi so‘rovda chiqadi" hint="Tekshiruv tanlansa — savol faqat o‘sha tahlilda so‘raladi">
+        <div className="chips">
+          <Chip active={labTestId === null} onClick={() => setLabTestId(null)}>
+            Hammasida
+          </Chip>
+          {labTests.map((x) => (
+            <Chip key={x.id} active={labTestId === x.id} onClick={() => setLabTestId(x.id)}>
+              {x.icon} {x.nameUz}
+            </Chip>
+          ))}
+        </div>
+      </Field>
+
       {needsOptions && <OptionsEditor options={options} onChange={setOptions} />}
 
       <p className="muted">Kalit: <code>{key}</code></p>
@@ -477,6 +521,7 @@ function NewQuestion({ taken, onDone }: { taken: string[]; onDone: (row: Request
             options: needsOptions
               ? options.map((o, i) => ({ value: o.value || `v${i + 1}`, uz: o.uz.trim(), ru: o.ru.trim() || o.uz.trim() }))
               : null,
+            labTestId,
           })
         }
       >

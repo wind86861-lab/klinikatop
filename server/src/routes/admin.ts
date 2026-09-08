@@ -44,16 +44,7 @@ function logModeration(userId: number, entity: string, entityId: number, action:
   ).run(userId, entity, entityId, action, note);
 }
 import { requireRole } from '../middleware/auth';
-import {
-  createLabOrgan,
-  createLabTest,
-  deleteLabOrgan,
-  deleteLabTest,
-  listLabOrgans,
-  listLabTests,
-  updateLabOrgan,
-  updateLabTest,
-} from '../services/labOrgans';
+import { createLabTest, deleteLabTest, listLabTests, updateLabTest } from '../services/labOrgans';
 import {
   getMetrics,
   listDisputes,
@@ -373,6 +364,8 @@ adminRouter.put('/request-steps', (req, res) => {
             subUz: z.string().max(240).nullable().optional(),
             subRu: z.string().max(240).nullable().optional(),
             options: z.array(stepOption).nullable().optional(),
+            /* Savol faqat shu tekshiruvda chiqadi; null — umumiy */
+            labTestId: z.number().int().positive().nullable().optional(),
           }),
         )
         .min(1)
@@ -516,7 +509,7 @@ adminRouter.delete('/ai-keys/:id', requireRole('admin'), (req, res) => {
  * ko'rsatiladi.
  */
 adminRouter.get('/lab-tests', requireRole('admin'), (_req, res) => {
-  res.json({ tests: listLabTests(true), organs: listLabOrgans(true) });
+  res.json({ tests: listLabTests(true) });
 });
 
 const labTestSchema = z.object({
@@ -525,7 +518,10 @@ const labTestSchema = z.object({
   icon: z.string().trim().max(8).optional().default(''),
   position: z.number().int().min(0).max(9999).optional(),
   active: z.boolean().optional(),
-  organIds: z.array(z.number().int().positive()).min(1).max(64),
+  /* Qaysi guruhga kiradi (MRT, MSKT); null — o'zi guruh */
+  parentId: z.number().int().positive().nullable().optional(),
+  priceUzs: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  durationMin: z.number().int().min(0).max(600).nullable().optional(),
 });
 
 adminRouter.post('/lab-tests', requireRole('admin'), (req, res) => {
@@ -542,30 +538,4 @@ adminRouter.delete('/lab-tests/:id', requireRole('admin'), (req, res) => {
   res.status(204).end();
 });
 
-/**
- * Tana a'zolari — admin QO'LDA kiritadi.
- *
- * Ro'yxat oldindan bilib bo'lmaydi: klinikalar qaysi yo'nalishda
- * ishlashiga qarab u kengayadi. Kodda tursa har qo'shimcha deploy
- * kutardi.
- */
-const labOrganSchema = z.object({
-  nameUz: z.string().trim().min(2).max(120),
-  nameRu: z.string().trim().max(120).optional().default(''),
-  icon: z.string().trim().max(8).optional().default(''),
-  position: z.number().int().min(0).max(9999).optional(),
-  active: z.boolean().optional(),
-});
 
-adminRouter.post('/lab-organs', requireRole('admin'), (req, res) => {
-  res.status(201).json(createLabOrgan(labOrganSchema.parse(req.body)));
-});
-
-adminRouter.patch('/lab-organs/:id', requireRole('admin'), (req, res) => {
-  res.json(updateLabOrgan(Number(req.params.id), labOrganSchema.partial().parse(req.body)));
-});
-
-adminRouter.delete('/lab-organs/:id', requireRole('admin'), (req, res) => {
-  deleteLabOrgan(Number(req.params.id));
-  res.status(204).end();
-});

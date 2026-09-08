@@ -49,6 +49,7 @@ interface Row {
   sub_uz: string | null;
   sub_ru: string | null;
   options: string | null;
+  lab_test_id: number | null;
 }
 
 function parseOptions(raw: string | null): StepOption[] | null {
@@ -76,6 +77,7 @@ function mapStep(r: Row): RequestStep {
     subUz: r.sub_uz,
     subRu: r.sub_ru,
     options: parseOptions(r.options),
+    labTestId: r.lab_test_id ?? null,
   };
 }
 
@@ -107,12 +109,28 @@ export function wizardSteps(lang: Lang): WizardStep[] {
        * u yerda javob bo'lishi mumkin emas edi.
        */
       flows: STEP_FLOWS[s.key as BuiltinStep] ?? REQUEST_KINDS,
+      labTestId: s.labTestId ?? null,
     }));
 }
 
 /** Admin yaratgan savollar — javob tekshiruvi shularga qarab qilinadi. */
-export function customSteps(): RequestStep[] {
-  return listSteps().filter((s) => s.enabled && s.kind !== 'builtin');
+/**
+ * Admin yaratgan savollar.
+ *
+ * `labTestId` berilgan savol FAQAT o'sha tekshiruvda chiqadi: "qon
+ * suyultiruvchi dori ichasizmi" degan savol MRT da o'rinli, qon
+ * tahlilida esa keraksiz.
+ *
+ * Tekshiruv berilmasa umumiy savollar qaytadi — tahlilga bog'langan
+ * savollar operatsiya so'rovida hech qachon chiqmaydi.
+ */
+export function customSteps(labTestId?: number | null): RequestStep[] {
+  return listSteps().filter(
+    (s) =>
+      s.enabled &&
+      s.kind !== 'builtin' &&
+      (s.labTestId == null || s.labTestId === labTestId),
+  );
 }
 
 /* ─────────────────────────────  Saqlash  ───────────────────────────── */
@@ -128,6 +146,8 @@ export interface StepInput {
   subUz?: string | null;
   subRu?: string | null;
   options?: StepOption[] | null;
+  /** Savol faqat shu tekshiruvda chiqadi; `null` — umumiy */
+  labTestId?: number | null;
 }
 
 const KEY_RE = /^[a-z][a-z0-9_]{1,38}$/;
@@ -222,6 +242,11 @@ export function saveSteps(input: StepInput[], adminId: number | null): RequestSt
       subUz: clean(raw.subUz, 240),
       subRu: clean(raw.subRu, 240),
       options: validateOptions(raw.kind, raw.options),
+      /*
+       * Savol qaysi tekshiruvga tegishli. Tayyor bosqichda bu
+       * ma'nosiz — u oqim bo'yicha allaqachon ajratilgan.
+       */
+      labTestId: raw.kind === 'builtin' ? null : (raw.labTestId ?? null),
     };
   });
 
@@ -237,14 +262,17 @@ export function saveSteps(input: StepInput[], adminId: number | null): RequestSt
 
     const upsert = db.prepare(
       `INSERT INTO request_steps (key, kind, position, enabled, required, locked,
-                                  title_uz, title_ru, sub_uz, sub_ru, options, updated_by, updated_at)
+                                  title_uz, title_ru, sub_uz, sub_ru, options,
+                                  lab_test_id, updated_by, updated_at)
        VALUES (@key, @kind, @position, @enabled, @required, @locked,
-               @titleUz, @titleRu, @subUz, @subRu, @options, @adminId, datetime('now'))
+               @titleUz, @titleRu, @subUz, @subRu, @options,
+               @labTestId, @adminId, datetime('now'))
        ON CONFLICT (key) DO UPDATE SET
          position = excluded.position, enabled = excluded.enabled, required = excluded.required,
          title_uz = excluded.title_uz, title_ru = excluded.title_ru,
          sub_uz   = excluded.sub_uz,   sub_ru   = excluded.sub_ru,
-         options  = excluded.options,  updated_by = excluded.updated_by,
+         options  = excluded.options,  lab_test_id = excluded.lab_test_id,
+         updated_by = excluded.updated_by,
          updated_at = datetime('now')`,
     );
     for (const p of prepared) upsert.run({ ...p, adminId });
@@ -263,8 +291,8 @@ export function saveSteps(input: StepInput[], adminId: number | null): RequestSt
  * Bu holatda so'rovni rad etish emas, ortiqchasini e'tiborsiz qoldirish
  * to'g'ri — bemor aybdor emas.
  */
-export function validateAnswers(raw: unknown): string | null {
-  const steps = customSteps();
+export function validateAnswers(raw: unknown, labTestId?: number | null): string | null {
+  const steps = customSteps(labTestId);
   if (steps.length === 0) return null;
 
   const input: Record<string, unknown> =

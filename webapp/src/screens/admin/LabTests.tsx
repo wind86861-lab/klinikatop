@@ -1,24 +1,24 @@
 /**
- * Admin: tahlil katalogi — tekshiruvlar va ularga mos organlar.
+ * Admin: tahlil katalogi.
  *
- * Nima uchun kerak: bemor tahlil so'rovida ikkita savolga javob
- * beradi — QANDAY tekshiruv (MRT, UZI, qon tahlili) va QAYSI organ
- * uchun. Qaysi organ qaysi tekshiruvga mos kelishi tibbiy qaror va u
- * o'zgarib turadi: yangi uskuna kelsa ro'yxat kengayadi.
+ * Bemor tahlil so'rovida bitta savolga javob beradi — QANDAY
+ * tekshiruv kerak. Ro'yxatni admin qo'lda to'ldiradi va u o'zgarib
+ * turadi: yangi uskuna kelsa kengayadi, eskisi yashiriladi. Kodda
+ * tursa har o'zgarish deploy kutardi.
  *
- * Bu kodda turgan bo'lsa, har o'zgarish deploy kutardi. Shuning uchun
- * u shu yerda: admin tekshiruv qo'shadi, organlarini belgilaydi va
- * bemor darhol shu ro'yxatni ko'radi.
+ * Tana a'zosi ALOHIDA daraja emas — u nomning o'ziga kiradi ("Bosh
+ * miya MRT"). Ikki daraja nazariy jihatdan toza edi, lekin amalda
+ * ortiqcha: katalogni to'ldiradigan odam uchun ham, bemor uchun ham.
  *
- * Juftlik MUHIM: bemorga "qon tahlili + umurtqa" degan variant
- * ko'rsatilmasligi kerak — u hech qaysi klinikaga tushmaydi.
+ * Tekshiruvga MOS SAVOL "So'rov bosqichlari" ekranidan qo'shiladi:
+ * savol yaratilayotganda qaysi tekshiruvda chiqishi tanlanadi.
  */
 import { useState } from 'react';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { Async, useResource } from '@/screens/clinic/shell';
-import { Button, Chip, Field, Input, Notice, Sheet } from '@/ui';
-import type { LabOrgan, LabTest } from '@shared/types';
+import { Button, Chip, Field, Input, Sheet } from '@/ui';
+import type { LabTest } from '@shared/types';
 import { PageHeader, Toolbar, Empty } from './ui';
 
 interface Draft {
@@ -26,11 +26,21 @@ interface Draft {
   nameUz: string;
   nameRu: string;
   icon: string;
-  organIds: number[];
-  active: boolean;
+  /** Qaysi guruhga kiradi (MRT, MSKT); null — o'zi guruh */
+  parentId: number | null;
+  priceUzs: string;
+  durationMin: string;
 }
 
-const EMPTY: Draft = { id: null, nameUz: '', nameRu: '', icon: '', organIds: [], active: true };
+const EMPTY: Draft = {
+  id: null,
+  nameUz: '',
+  nameRu: '',
+  icon: '',
+  parentId: null,
+  priceUzs: '',
+  durationMin: '',
+};
 
 export function LabTests() {
   const { toast } = useApp();
@@ -38,63 +48,22 @@ export function LabTests() {
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
-  const [openTest, setOpenTest] = useState<number | null>(null);
 
-  /*
-   * Tana a'zolarini ham SHU YERDA boshqaramiz.
-   *
-   * Ular alohida bo'lim bo'lishi mumkin edi, lekin ikkovi bir
-   * ishning ikki yarmi: tekshiruv qo'shayotgan odam unga mos
-   * a'zoni ham o'sha zahoti kiritishi kerak bo'ladi. Bo'limlar
-   * orasida sakrash faqat xalaqit berardi.
-   */
-  const [organDraft, setOrganDraft] = useState<{ id: number | null; nameUz: string; nameRu: string; icon: string } | null>(
-    null,
-  );
+  const [openGroup, setOpenGroup] = useState<number | null>(null);
 
-  const saveOrgan = async () => {
-    if (!organDraft) return;
-    if (organDraft.nameUz.trim().length < 2) {
-      toast('Nomini yozing', 'error');
-      return;
-    }
-    setSaving(true);
-    try {
-      const body = {
-        nameUz: organDraft.nameUz.trim(),
-        nameRu: organDraft.nameRu.trim() || organDraft.nameUz.trim(),
-        icon: organDraft.icon.trim(),
-      };
-      if (organDraft.id) await api.updateLabOrgan(organDraft.id, body);
-      else await api.createLabOrgan(body);
-      toast('Saqlandi', 'success');
-      setOrganDraft(null);
-      res.reload();
-    } catch (err: any) {
-      toast(err?.message ?? 'Xatolik', 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const removeOrgan = async (o: LabOrgan) => {
-    try {
-      await api.deleteLabOrgan(o.id);
-      toast('O‘chirildi', 'success');
-      res.reload();
-    } catch (err: any) {
-      // Ishlatilgan a'zo o'chirilmaydi — server sababini aytadi
-      toast(err?.message ?? 'Xatolik', 'error');
-    }
-  };
-
-  const organName = (organs: LabOrgan[], id: number) => organs.find((o) => o.id === id)?.nameUz ?? String(id);
-
-  const open = (t: LabTest | null) =>
+  const open = (t: LabTest | null, parentId: number | null = null) =>
     setDraft(
       t
-        ? { id: t.id, nameUz: t.nameUz, nameRu: t.nameRu, icon: t.icon, organIds: [...t.organIds], active: true }
-        : { ...EMPTY },
+        ? {
+            id: t.id,
+            nameUz: t.nameUz,
+            nameRu: t.nameRu,
+            icon: t.icon,
+            parentId: t.parentId,
+            priceUzs: t.priceUzs == null ? '' : String(t.priceUzs),
+            durationMin: t.durationMin == null ? '' : String(t.durationMin),
+          }
+        : { ...EMPTY, parentId },
     );
 
   const save = async () => {
@@ -103,18 +72,16 @@ export function LabTests() {
       toast('Tekshiruv nomini yozing', 'error');
       return;
     }
-    if (!draft.organIds.length) {
-      toast('Kamida bitta organ tanlang', 'error');
-      return;
-    }
     setSaving(true);
     try {
+      const num = (v: string) => (v.trim() ? Number(v.replace(/\D/g, '')) : null);
       const body = {
         nameUz: draft.nameUz.trim(),
         nameRu: draft.nameRu.trim() || draft.nameUz.trim(),
         icon: draft.icon.trim(),
-        organIds: draft.organIds,
-        active: draft.active,
+        parentId: draft.parentId,
+        priceUzs: num(draft.priceUzs),
+        durationMin: num(draft.durationMin),
       };
       if (draft.id) await api.updateLabTest(draft.id, body);
       else await api.createLabTest(body);
@@ -134,7 +101,7 @@ export function LabTests() {
       toast('O‘chirildi', 'success');
       res.reload();
     } catch (err: any) {
-      // Ishlatilgan tekshiruv o'chirilmaydi — server sababini aytadi
+      // So'rovda ishlatilgan tekshiruv o'chirilmaydi — server sababini aytadi
       toast(err?.message ?? 'Xatolik', 'error');
     }
   };
@@ -143,7 +110,7 @@ export function LabTests() {
     <>
       <PageHeader
         title="Tahlil katalogi"
-        description="Tekshiruvlar va ularga mos organlar. Bemor shu ro‘yxatdan tanlaydi."
+        description="Avval guruh (MRT, MSKT), ichida esa aniq tekshiruv. Bemor guruhni ochib, kerakli tekshiruvni tanlaydi."
       />
 
       <Toolbar>
@@ -153,51 +120,71 @@ export function LabTests() {
       </Toolbar>
 
       <Async resource={res}>
-        {(data: { tests: LabTest[]; organs: LabOrgan[] }) =>
-          data.tests.length === 0 ? (
+        {(data: { tests: LabTest[] }) => {
+          const groups = data.tests.filter((x) => x.parentId === null);
+          const kidsOf = (id: number) => data.tests.filter((x) => x.parentId === id);
+
+          return groups.length === 0 ? (
             <Empty title="Tekshiruv yo‘q" hint="Birinchisini qo‘shing — bemor shundan tanlaydi." />
           ) : (
             /*
-              Yig'iladigan ro'yxat — operatsiyalar katalogidagidek.
-              Tekshiruvlar soni o'sgani sari hammasining organlarini
-              bir vaqtda ochiq ko'rsatish ekranni uzun devorga
-              aylantiradi va keraklisini topish qiyinlashadi.
+              Katalog ikki darajali: guruh (MRT, MSKT) va uning
+              ichidagi aniq tekshiruvlar. Ellikdan ortiq yozuvni
+              tekis ro'yxatda ko'rsatish keraklisini topib bo'lmaydigan
+              devor bo'lardi.
             */
             <div className="cat__tree">
-              {data.tests.map((t) => {
-                const isOpen = openTest === t.id;
+              {groups.map((g) => {
+                const kids = kidsOf(g.id);
+                const isOpen = openGroup === g.id;
+
                 return (
-                  <div key={t.id} className="cat__branch">
+                  <div key={g.id} className="cat__branch">
                     <div className="labrow">
                       <button
                         type="button"
                         className={`cat__head ${isOpen ? 'is-open' : ''}`}
                         style={{ flex: 1 }}
-                        onClick={() => setOpenTest(isOpen ? null : t.id)}
+                        onClick={() => setOpenGroup(isOpen ? null : g.id)}
                       >
-                        <span className={`cat__caret ${isOpen ? 'is-open' : ''}`}>›</span>
-                        <span className="labtest__icon">{t.icon}</span>
-                        <span className="cat__name truncate">{t.nameUz}</span>
-                        <span className="cat__count num">{t.organIds.length}</span>
+                        {kids.length > 0 && (
+                          <span className={`cat__caret ${isOpen ? 'is-open' : ''}`}>›</span>
+                        )}
+                        <span className="labtest__icon">{g.icon}</span>
+                        <span className="cat__name truncate">{g.nameUz}</span>
+                        <span className="cat__count num">{kids.length}</span>
                       </button>
 
                       <div className="row" style={{ gap: 4, paddingRight: 'var(--s-3)' }}>
-                        <Button size="sm" variant="ghost" onClick={() => open(t)}>
+                        <Button size="sm" variant="ghost" onClick={() => open(null, g.id)}>
+                          Ichiga qo‘shish
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => open(g)}>
                           Tahrirlash
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => remove(t)}>
+                        <Button size="sm" variant="ghost" onClick={() => remove(g)}>
                           O‘chirish
                         </Button>
                       </div>
                     </div>
 
-                    {isOpen && (
+                    {isOpen && kids.length > 0 && (
                       <div className="cat__body">
-                        <div className="cat__ops">
-                          {t.organIds.map((id) => (
-                            <span className="badge badge--neutral" key={id}>
-                              {organName(data.organs, id)}
-                            </span>
+                        <div className="stack" style={{ gap: 'var(--s-2)' }}>
+                          {kids.map((x) => (
+                            <div key={x.id} className="labrow labrow--card">
+                              <span style={{ flex: 1 }}>{x.nameUz}</span>
+                              {x.priceUzs != null && (
+                                <span className="tiny num">{x.priceUzs.toLocaleString('uz-UZ')}</span>
+                              )}
+                              {x.durationMin != null && <span className="tiny">{x.durationMin} daq</span>}
+                              <Button size="sm" variant="ghost" onClick={() => open(x)}>
+                                Tahrirlash
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => remove(x)}>
+                                O‘chirish
+                              </Button>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -206,77 +193,9 @@ export function LabTests() {
                 );
               })}
             </div>
-          )
-        }
+          );
+        }}
       </Async>
-
-      {/* ── Tana a'zolari ── */}
-      <Async resource={res}>
-        {(data: { tests: LabTest[]; organs: LabOrgan[] }) => (
-          <>
-            <PageHeader
-              title="Tana a‘zolari"
-              description="Bemor tekshiruvni tanlagach shu ro‘yxatdan qidiradi."
-            />
-            <Toolbar>
-              <Button size="sm" onClick={() => setOrganDraft({ id: null, nameUz: '', nameRu: '', icon: '' })}>
-                Yangi a‘zo
-              </Button>
-            </Toolbar>
-
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-              {data.organs.map((o) => (
-                <span key={o.id} className="organchip">
-                  <span>{o.icon}</span>
-                  <button
-                    type="button"
-                    className="organchip__name"
-                    onClick={() => setOrganDraft({ id: o.id, nameUz: o.nameUz, nameRu: o.nameRu, icon: o.icon })}
-                  >
-                    {o.nameUz}
-                  </button>
-                  <button type="button" className="organchip__x" aria-label="O‘chirish" onClick={() => removeOrgan(o)}>
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          </>
-        )}
-      </Async>
-
-      <Sheet
-        open={organDraft !== null}
-        onClose={() => setOrganDraft(null)}
-        title={organDraft?.id ? 'A‘zoni tahrirlash' : 'Yangi tana a‘zosi'}
-      >
-        {organDraft && (
-          <div className="stack">
-            <Field label="Nomi (uz)">
-              <Input
-                value={organDraft.nameUz}
-                placeholder="Bosh miya"
-                onChange={(e) => setOrganDraft({ ...organDraft, nameUz: e.target.value })}
-              />
-            </Field>
-            <Field label="Nomi (ru)" hint="Bo‘sh qoldirilsa o‘zbekchasi ishlatiladi">
-              <Input
-                value={organDraft.nameRu}
-                onChange={(e) => setOrganDraft({ ...organDraft, nameRu: e.target.value })}
-              />
-            </Field>
-            <Field label="Belgi" hint="Bitta emoji">
-              <Input
-                value={organDraft.icon}
-                onChange={(e) => setOrganDraft({ ...organDraft, icon: e.target.value })}
-              />
-            </Field>
-            <Button block loading={saving} onClick={saveOrgan}>
-              Saqlash
-            </Button>
-          </div>
-        )}
-      </Sheet>
 
       <Sheet
         open={draft !== null}
@@ -285,41 +204,56 @@ export function LabTests() {
       >
         {draft && (
           <div className="stack">
-            <Field label="Nomi (uz)">
-              <Input value={draft.nameUz} onChange={(e) => setDraft({ ...draft, nameUz: e.target.value })} />
+            <Field label="Nomi (uz)" hint="Tana a‘zosi bilan birga: “Bosh miya MRT”">
+              <Input
+                value={draft.nameUz}
+                placeholder="Bosh miya MRT"
+                onChange={(e) => setDraft({ ...draft, nameUz: e.target.value })}
+              />
             </Field>
             <Field label="Nomi (ru)" hint="Bo‘sh qoldirilsa o‘zbekchasi ishlatiladi">
               <Input value={draft.nameRu} onChange={(e) => setDraft({ ...draft, nameRu: e.target.value })} />
             </Field>
-            <Field label="Belgi" hint="Bitta emoji — ro‘yxatda ko‘rinadi">
+            <Field label="Belgi" hint="Bitta emoji — guruh ro‘yxatida ko‘rinadi">
               <Input value={draft.icon} onChange={(e) => setDraft({ ...draft, icon: e.target.value })} />
             </Field>
 
-            <Field label="Qaysi organlar uchun">
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                {(res.data?.organs ?? []).map((o) => (
-                  <Chip
-                    key={o.id}
-                    size="sm"
-                    active={draft.organIds.includes(o.id)}
-                    onClick={() =>
-                      setDraft({
-                        ...draft,
-                        organIds: draft.organIds.includes(o.id)
-                          ? draft.organIds.filter((x) => x !== o.id)
-                          : [...draft.organIds, o.id],
-                      })
-                    }
-                  >
-                    {o.nameUz}
-                  </Chip>
-                ))}
+            <Field label="Guruh" hint="Bo‘sh qoldirilsa yozuvning o‘zi guruh bo‘ladi">
+              <div className="chips">
+                <Chip active={draft.parentId === null} onClick={() => setDraft({ ...draft, parentId: null })}>
+                  Guruhsiz
+                </Chip>
+                {(res.data?.tests ?? [])
+                  .filter((x) => x.parentId === null && x.id !== draft.id)
+                  .map((g) => (
+                    <Chip
+                      key={g.id}
+                      active={draft.parentId === g.id}
+                      onClick={() => setDraft({ ...draft, parentId: g.id })}
+                    >
+                      {g.icon} {g.nameUz}
+                    </Chip>
+                  ))}
               </div>
             </Field>
 
-            {draft.organIds.length === 0 && (
-              <Notice tone="warning">Kamida bitta organ tanlang — bemor shundan tanlaydi.</Notice>
-            )}
+            <Field label="Narx (so‘m)" hint="Ma‘lumot uchun — bemor byudjetni shunga qarab qo‘yadi">
+              <Input
+                inputMode="numeric"
+                value={draft.priceUzs}
+                placeholder="300000"
+                onChange={(e) => setDraft({ ...draft, priceUzs: e.target.value })}
+              />
+            </Field>
+
+            <Field label="Davomiyligi (daqiqa)">
+              <Input
+                inputMode="numeric"
+                value={draft.durationMin}
+                placeholder="15"
+                onChange={(e) => setDraft({ ...draft, durationMin: e.target.value })}
+              />
+            </Field>
 
             <Button block loading={saving} onClick={save}>
               Saqlash

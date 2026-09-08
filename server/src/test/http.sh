@@ -963,55 +963,61 @@ check "narx o'zgartirish manzili yo'q (404)" "$([ "$code" = 404 ] && echo 1)" "$
 echo
 echo "Tahlil so'rovi"
 
-# Organlar katalogi ochiq
-ORGANS=$(curl -s "$API/catalog/lab-organs")
-ORGAN_ID=$(echo "$ORGANS" | jqv '[0].id')
-check "organlar katalogi ochiq" "$([ -n "$ORGAN_ID" ] && echo 1)" "id=$ORGAN_ID"
+# Tekshiruvlar katalogi ochiq — ikki darajali
+TESTS=$(curl -s "$API/catalog/lab-tests")
+GROUP_ID=$(echo "$TESTS" | jqv '.find(x=>x.slug==="mrt").id')
+TEST_ID=$(echo "$TESTS" | jqv '.find(x=>x.parentId&&x.hasChildren===false).id')
+check "tekshiruvlar katalogi ochiq" "$([ -n "$TEST_ID" ] && echo 1)" "id=$TEST_ID"
+check "MRT guruhi bolalari bilan keldi" "$(echo "$TESTS" | jqv '.filter(x=>x.parentId).length>=50?1:""')" ""
+
+# Guruhni tanlab bo'lmaydi — aniq tekshiruv kerak
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d "{\"kind\":\"lab\",\"cityId\":1,\"labTestId\":$GROUP_ID,\"weightKg\":70,\"acceptTerms\":true,\"attachments\":[],\"aiSuggested\":false}")
+check "guruhni tanlab bo'lmaydi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+# 200 ming so'mdan past byudjet rad etiladi
+code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
+  -d "{\"kind\":\"lab\",\"cityId\":1,\"labTestId\":$TEST_ID,\"weightKg\":70,\"budgetUzs\":150000,\"acceptTerms\":true,\"attachments\":[],\"aiSuggested\":false}")
+check "150 ming so'mlik byudjet rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
 # Tekshiruvsiz tahlil so'rovi rad etiladi
 code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
   -d '{"kind":"lab","cityId":1,"weightKg":70,"acceptTerms":true,"attachments":[],"aiSuggested":false}')
 check "tekshiruvsiz tahlil so'rovi rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
-# Tekshiruvlar katalogi va unga mos organlar
-TESTS=$(curl -s "$API/catalog/lab-tests")
-TEST_ID=$(echo "$TESTS" | jqv '[0].id')
-ORGAN_ID=$(echo "$TESTS" | jqv '[0].organIds[0]')
-check "tekshiruvlar katalogi ochiq" "$([ -n "$TEST_ID" ] && echo 1)" "id=$TEST_ID"
-check "tekshiruvda mos organlar bor" "$([ -n "$ORGAN_ID" ] && echo 1)" "organ=$ORGAN_ID"
-
-# Klinika shu JUFTLIKNI qilishini belgilaydi
-SEL=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X PUT "$API/clinic/lab-services" \
-  -d "{\"services\":[{\"testId\":$TEST_ID,\"organId\":$ORGAN_ID}]}" | jqv '.selected.length')
-check "klinika juftlikni belgiladi" "$([ "$SEL" = "1" ] && echo 1)" "$SEL"
+# Klinika shu tekshiruvni qilishini belgilaydi
+SEL=$(curl -s "${CLINIC[@]}" "${JSON[@]}" -X PUT "$API/clinic/lab-tests" \
+  -d "{\"testIds\":[$TEST_ID]}" | jqv '.selected.length')
+check "klinika tekshiruvni belgiladi" "$([ "$SEL" = "1" ] && echo 1)" "$SEL"
 
 LAB=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
-  -d "{\"kind\":\"lab\",\"cityId\":1,\"labTestId\":$TEST_ID,\"labOrganId\":$ORGAN_ID,\"weightKg\":72,\"budgetUzs\":500000,\"acceptTerms\":true,\"attachments\":[],\"aiSuggested\":false}")
+  -d "{\"kind\":\"lab\",\"cityId\":1,\"labTestId\":$TEST_ID,\"weightKg\":72,\"budgetUzs\":200000,\"acceptTerms\":true,\"attachments\":[],\"aiSuggested\":false}")
 check "tahlil so'rovi yaratildi" "$([ "$(echo "$LAB" | jqv '.kind')" = "lab" ] && echo 1)" "$(echo "$LAB" | jqv '.kind')"
 check "operatsiya bo'sh" "$([ -z "$(echo "$LAB" | jqv '.operationId')" ] && echo 1)" "$(echo "$LAB" | jqv '.operationId')"
-check "organ nomi keldi" "$([ -n "$(echo "$LAB" | jqv '.labOrgan.nameUz')" ] && echo 1)" "$(echo "$LAB" | jqv '.labOrgan.nameUz')"
 check "tekshiruv nomi keldi" "$([ -n "$(echo "$LAB" | jqv '.labTest.nameUz')" ] && echo 1)" "$(echo "$LAB" | jqv '.labTest.nameUz')"
+check "200 ming so'mlik byudjet qabul qilindi" "$([ "$(echo "$LAB" | jqv '.budgetUzs')" = "200000" ] && echo 1)" "$(echo "$LAB" | jqv '.budgetUzs')"
 check "so'rov klinikaga bordi" "$([ "$(echo "$LAB" | jqv '.broadcastCount')" -ge 1 ] && echo 1)" "$(echo "$LAB" | jqv '.broadcastCount')"
 
 # Vazn profilga yozildi — keyingi safar avtomatik to'ladi
 WEIGHT=$(curl -s "${PATIENT[@]}" "$API/me" | jqv '.user.weightKg')
 check "vazn profilga saqlandi" "$([ "$WEIGHT" = "72" ] && echo 1)" "$WEIGHT"
 
-# Bosqichlar ro'yxatida oqim belgisi bor
-FLOWS=$(curl -s "$API/catalog/request-steps" | jqv '.find(s=>s.key==="organ").flows.join(",")')
-check "organ bosqichi faqat tahlil oqimida" "$([ "$FLOWS" = "lab" ] && echo 1)" "$FLOWS"
+# Bosqichlar: tekshiruv vazndan OLDIN va faqat tahlil oqimida
+ORDER=$(curl -s "$API/catalog/request-steps" | jqv '.map(s=>s.key).join(",")')
+check "tekshiruv vazndan oldin" "$(node -e "const o='$ORDER'.split(',');process.stdout.write(o.indexOf('test')<o.indexOf('weight')?'1':'')")" "$ORDER"
 TFLOWS=$(curl -s "$API/catalog/request-steps" | jqv '.find(s=>s.key==="test").flows.join(",")')
 check "tekshiruv bosqichi faqat tahlil oqimida" "$([ "$TFLOWS" = "lab" ] && echo 1)" "$TFLOWS"
+check "organ bosqichi olib tashlandi" "$(node -e "process.stdout.write('$ORDER'.includes('organ')?'':'1')")" "$ORDER"
 
-# Admin qo'lda tana a'zosi qo'sha oladi
-NEW_ORGAN=$(curl -s "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/lab-organs" \
-  -d '{"nameUz":"Sinov a\u2018zosi","icon":"\ud83e\uddea"}' | jqv '.id')
-check "admin tana a'zosi qo'shdi" "$([ -n "$NEW_ORGAN" ] && echo 1)" "id=$NEW_ORGAN"
-code=$(status "${MOD[@]}" -X DELETE "$API/admin/lab-organs/$NEW_ORGAN")
-check "ishlatilmagan a'zo o'chirildi (204)" "$([ "$code" = 204 ] && echo 1)" "$code"
+# Admin qo'lda tekshiruv qo'sha oladi
+NEW_TEST=$(curl -s "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/lab-tests" \
+  -d '{"nameUz":"Sinov tekshiruvi","icon":"\ud83e\uddea"}' | jqv '.id')
+check "admin tekshiruv qo'shdi" "$([ -n "$NEW_TEST" ] && echo 1)" "id=$NEW_TEST"
+code=$(status "${MOD[@]}" -X DELETE "$API/admin/lab-tests/$NEW_TEST")
+check "ishlatilmagan tekshiruv o'chirildi (204)" "$([ "$code" = 204 ] && echo 1)" "$code"
 
 # Klinika hisobi admin katalogiga tegolmaydi
-code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/admin/lab-organs" -d '{"nameUz":"Yolgon"}')
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/admin/lab-tests" -d '{"nameUz":"Yolgon"}')
 check "klinika katalogga tegolmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
 
 echo

@@ -9,7 +9,7 @@ import { config } from '../lib/config';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { deleteFiles } from './files';
 import { formatUzs } from '../lib/format';
-import { mapCity, mapOperation, mapRequest, mapUser , mapLabOrgan, mapLabTest } from '../lib/mappers';
+import { mapCity, mapLabTest, mapOperation, mapRequest, mapUser } from '../lib/mappers';
 import {
   REQUEST_TRANSITIONS,
   UNKNOWN_OPERATION_SLUG,
@@ -22,7 +22,7 @@ import {
 } from '../../../shared/types';
 import { bus, ch } from './events';
 import { findClinicsForLab, findMatchingClinics } from './matching';
-import { isValidPair } from './labOrgans';
+import { selectableLabTestIds } from './labOrgans';
 import { notify, notifyClinic } from './notifications';
 import { validateAnswers } from './requestSteps';
 import { TERMS_VERSION, recordAcceptance } from './terms';
@@ -39,13 +39,10 @@ const REQUEST_SELECT = `
 export function hydrate(row: any): RequestWithMeta {
   /*
    * Ikki tur, ikki manba: operatsiya so'rovida `operation`, tahlil
-   * so'rovida `labOrgan` to'ladi. Ikkovi hech qachon birga bo'lmaydi.
+   * so'rovida `labTest` to'ladi. Ikkovi hech qachon birga bo'lmaydi.
    */
   const operation = row.operation_id
     ? db.prepare(`SELECT * FROM operations WHERE id = ?`).get(row.operation_id)
-    : null;
-  const organ = row.lab_organ_id
-    ? db.prepare(`SELECT * FROM lab_organs WHERE id = ?`).get(row.lab_organ_id)
     : null;
   const test = row.lab_test_id
     ? db.prepare(`SELECT * FROM lab_tests WHERE id = ?`).get(row.lab_test_id)
@@ -55,7 +52,6 @@ export function hydrate(row: any): RequestWithMeta {
     ...mapRequest(row),
     operation: operation ? mapOperation(operation) : null,
     labTest: test ? mapLabTest(test) : null,
-    labOrgan: organ ? mapLabOrgan(organ) : null,
     city: mapCity(city),
     offersCount: row.offers_count ?? 0,
     files: listFiles(parseJson<string[]>(row.attachments, [])),
@@ -88,8 +84,6 @@ export interface CreateRequestInput {
   operationId?: number | null;
   /** Tahlil so'rovida majburiy: qanday tekshiruv */
   labTestId?: number | null;
-  /** Tahlil so'rovida majburiy: qaysi organ */
-  labOrganId?: number | null;
   /** Tahlil so'rovida so'raladi (kg) */
   weightKg?: number | null;
   cityId: number;
@@ -222,7 +216,6 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
    */
   let op: { slug: string } | null = null;
   let labTestId: number | null = null;
-  let labOrganId: number | null = null;
   let weightKg: number | null = null;
   let condition = '';
 
@@ -231,25 +224,19 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
       .prepare(`SELECT id FROM lab_tests WHERE id = ? AND active = 1`)
       .get(input.labTestId ?? 0) as { id: number } | undefined;
     if (!test) throw badRequest('test_required', 'Qanday tekshiruv kerakligini tanlang');
-    labTestId = test.id;
-
-    const organ = db
-      .prepare(`SELECT id FROM lab_organs WHERE id = ? AND active = 1`)
-      .get(input.labOrganId ?? 0) as { id: number } | undefined;
-    if (!organ) throw badRequest('organ_required', 'Qaysi organ uchun tahlil kerakligini tanlang');
-    labOrganId = organ.id;
 
     /*
-     * Juftlik ADMIN ruxsat berganidan bo'lishi shart.
+     * GURUHNI tanlab bo'lmaydi.
      *
-     * Ilova ro'yxatni o'zi cheklaydi, lekin unga ishonib bo'lmaydi:
-     * eskirgan ro'yxat bilan ochilgan ilova ham, qo'lda yuborilgan
-     * so'rov ham mantiqsiz juftlik yuborishi mumkin ("qon tahlili +
-     * umurtqa"). Bunday so'rov hech qaysi klinikaga tushmasdi.
+     * "MRT" degan javob klinikaga hech narsa aytmaydi: MRT ning
+     * o'zi 24 xil va har birining narxi boshqa. Ilova ro'yxatni
+     * o'zi cheklaydi, lekin unga ishonib bo'lmaydi.
      */
-    if (!isValidPair(labTestId, labOrganId)) {
-      throw badRequest('pair_not_allowed', 'Bu tekshiruv shu organ uchun qilinmaydi');
+    if (!selectableLabTestIds().has(test.id)) {
+      throw badRequest('test_is_group', 'Guruh ichidan aniq tekshiruvni tanlang');
     }
+    labTestId = test.id;
+
 
     /*
      * Vazn — 2 dan 400 kg gacha. Chegara keng: chaqaloq ham,
@@ -278,12 +265,22 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
   assertOwnedFiles(input.attachments ?? [], input.patientId);
   const city = db.prepare(`SELECT * FROM cities WHERE id = ?`).get(input.cityId);
   if (!city) throw badRequest('unknown_city', 'Bunday shahar topilmadi');
-  if (input.budgetUzs != null && (input.budgetUzs < 100_000 || input.budgetUzs > 2_000_000_000)) {
+  /*
+   * Byudjet chegarasi turga bog'liq: tahlil yuz minglar bilan
+   * o'lchanadi, operatsiya esa millionlar bilan.
+   */
+  const minBudget = kind === 'lab' ? 200_000 : 500_000;
+  if (input.budgetUzs != null && (input.budgetUzs < minBudget || input.budgetUzs > 2_000_000_000)) {
     throw badRequest('invalid_budget', 'Byudjet noto‘g‘ri');
   }
 
   // Admin qo'shgan savollar: majburiylari to'ldirilganmi
-  const extraAnswers = validateAnswers(input.extraAnswers ?? null);
+  /*
+   * Javoblar TEKSHIRUVGA qarab tekshiriladi: tahlilga bog'langan
+   * savol boshqa tekshiruvda ham, operatsiya so'rovida ham
+   * so'ralmaydi.
+   */
+  const extraAnswers = validateAnswers(input.extraAnswers ?? null, labTestId);
 
   /*
    * Soha zaxirasi FAQAT operatsiya noma'lum bo'lganda ma'noga ega.
@@ -309,7 +306,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
                                ai_conversation, status, ai_suggested, expires_at, terms_version, terms_accepted_at,
                                for_self, subject_name, subject_birth_year, subject_gender, extra_answers,
                                fallback_category_id)
-         VALUES (@patientId, @kind, @operationId, @labTestId, @labOrganId, @weightKg,
+         VALUES (@patientId, @kind, @operationId, @labTestId, NULL, @weightKg,
                  @cityId, @budgetUzs, @conditionText, @note,
                  @urgency, @attachments, @otherRegionsOk, @dateFrom, @dateTo, @dateFlexible,
                  @aiConversation, 'NEW', @aiSuggested, @expiresAt, @termsVersion, datetime('now'),
@@ -321,7 +318,6 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
         kind,
         operationId: kind === 'lab' ? null : (input.operationId ?? null),
         labTestId,
-        labOrganId,
         weightKg,
         cityId: input.cityId,
         budgetUzs: input.budgetUzs,
@@ -380,10 +376,8 @@ export function broadcast(requestId: number): number {
    */
   const clinics =
     req.kind === 'lab'
-      ? req.labTestId && req.labOrganId
-        ? findClinicsForLab(req.labTestId, req.labOrganId, req.cityId, {
-            otherRegionsOk: req.otherRegionsOk,
-          })
+      ? req.labTestId
+        ? findClinicsForLab(req.labTestId, req.cityId, { otherRegionsOk: req.otherRegionsOk })
         : []
       : req.operationId
         ? findMatchingClinics(req.operationId, req.cityId, {

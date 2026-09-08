@@ -43,7 +43,6 @@ import {
   type BuiltinStep,
   type ChatTurn,
   type Gender,
-  type LabOrgan,
   type LabTest,
   type Operation,
   type PriceStats,
@@ -80,8 +79,6 @@ export interface Draft {
   kind: RequestKind;
   /** Tahlil so'rovida: qanday tekshiruv (MRT, UZI, ...) */
   labTest: LabTest | null;
-  /** Tahlil so'rovida: qaysi organ tekshiriladi */
-  labOrgan: LabOrgan | null;
   /** Tahlil so'rovida: bemor vazni (kg) */
   weightKg: number | null;
 }
@@ -96,7 +93,7 @@ export interface Draft {
  * javob bermasa bemor ilovasiz qolmasligi kerak — shunda shu ishlatiladi.
  */
 const FALLBACK_STEPS: WizardStep[] = [
-  'who', 'type', 'operation', 'condition', 'documents', 'weight', 'test', 'organ',
+  'who', 'type', 'operation', 'condition', 'documents', 'test', 'weight',
   'region', 'budget', 'date', 'note', 'review',
 ].map((key) => ({
   key,
@@ -124,7 +121,6 @@ export function NewRequest() {
   const [draft, setDraft] = useState<Draft>({
     kind: 'operation',
     labTest: null,
-    labOrgan: null,
     weightKg: null,
     operation: null,
     aiSuggested: false,
@@ -227,8 +223,6 @@ export function NewRequest() {
         return draft.weightKg !== null && draft.weightKg >= 2 && draft.weightKg <= 400;
       case 'test':
         return draft.labTest !== null;
-      case 'organ':
-        return draft.labOrgan !== null;
       case 'condition':
         return draft.conditionText.trim().length >= 10;
       case 'region':
@@ -265,9 +259,7 @@ export function NewRequest() {
      * tahlilda esa organ va vazn bo'lishi kerak.
      */
     const ready =
-      draft.kind === 'lab'
-        ? Boolean(draft.labTest && draft.labOrgan && draft.weightKg)
-        : Boolean(draft.operation);
+      draft.kind === 'lab' ? Boolean(draft.labTest && draft.weightKg) : Boolean(draft.operation);
     if (!ready || !draft.cityId || !termsAccepted) return;
 
     setSubmitting(true);
@@ -276,7 +268,6 @@ export function NewRequest() {
         kind: draft.kind,
         operationId: draft.kind === 'lab' ? null : (draft.operation?.id ?? null),
         labTestId: draft.kind === 'lab' ? (draft.labTest?.id ?? null) : null,
-        labOrganId: draft.kind === 'lab' ? (draft.labOrgan?.id ?? null) : null,
         weightKg: draft.kind === 'lab' ? draft.weightKg : null,
         cityId: draft.cityId,
         conditionText: draft.conditionText.trim(),
@@ -362,7 +353,7 @@ export function NewRequest() {
                 patch(
                   kind === 'lab'
                     ? { kind, operation: null, conditionText: '', files: [], aiConversation: null, fallbackCategoryId: null }
-                    : { kind, labTest: null, labOrgan: null, weightKg: null },
+                    : { kind, labTest: null, weightKg: null },
                 );
                 setDirection(1);
                 setIndex(nextAfter('type'));
@@ -377,32 +368,9 @@ export function NewRequest() {
             <TestStep
               draft={draft}
               onPick={(labTest) => {
-                /*
-                 * Tekshiruv almashsa ORGAN tozalanadi: har tekshiruvning
-                 * o'z organlari bor va eskisi yangisiga mos kelmasligi
-                 * mumkin ("qon tahlili + umurtqa" degan juftlik yo'q).
-                 */
-                patch({
-                  labTest,
-                  labOrgan:
-                    draft.labOrgan && labTest.organIds.includes(draft.labOrgan.id)
-                      ? draft.labOrgan
-                      : null,
-                });
+                patch({ labTest });
                 setDirection(1);
                 setIndex(nextAfter('test'));
-                haptic.press();
-                window.scrollTo({ top: 0 });
-              }}
-            />
-          )}
-          {step === 'organ' && (
-            <OrganStep
-              draft={draft}
-              onPick={(labOrgan) => {
-                patch({ labOrgan });
-                setDirection(1);
-                setIndex(nextAfter('organ'));
                 haptic.press();
                 window.scrollTo({ top: 0 });
               }}
@@ -543,78 +511,29 @@ function WeightStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
 }
 
 /**
- * Qanday tekshiruv — MRT, UZI, qon tahlili va hokazo.
+ * Qanday tekshiruv kerak.
  *
- * Organdan OLDIN so'raladi: "bosh miya" degan javob MRT ni ham, KT
- * ni ham anglatishi mumkin va ularning narxi butunlay boshqa.
- * Tekshiruv ma'lum bo'lgach organ ro'yxati ham qisqaradi.
+ * Katalog IKKI DARAJALI: avval modallik (MRT, MSKT), ichida esa aniq
+ * tekshiruv. "MRT" degan javobning o'zi klinikaga hech narsa
+ * aytmaydi — MRT ning o'zi 24 xil va har birining narxi boshqa.
+ * Lekin ellikdan ortiq yozuvni bitta tekis ro'yxatda ko'rsatish ham
+ * ishlamaydi.
+ *
+ * Shuning uchun yig'iladigan guruhlar, ustiga qidiruv: nomini
+ * bilgan odam yozadi va guruhlarni ochib o'tirmaydi. Qidiruv har
+ * so'z boshidan mos keladi — "tizza" deb yozilsa ham "Tizza bo'g'imi
+ * MRT" topiladi.
  */
 function TestStep({ draft, onPick }: { draft: Draft; onPick: (test: LabTest) => void }) {
   const { t, lang } = useApp();
-  const [tests, setTests] = useState<LabTest[] | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    api
-      .labTests()
-      .then((list) => alive && setTests(list))
-      .catch(() => alive && setTests([]));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  return (
-    <>
-      <StepHead title={t('wz.test.title')} sub={t('wz.test.sub')} />
-      {tests === null ? (
-        <div className="stack">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} h={52} />
-          ))}
-        </div>
-      ) : (
-        <div className="stack" style={{ gap: 'var(--s-2)' }}>
-          {tests.map((x) => (
-            <Card
-              key={x.id}
-              variant="flat"
-              className={`organrow ${draft.labTest?.id === x.id ? 'is-active' : ''}`}
-              onClick={() => onPick(x)}
-            >
-              <span className="organrow__icon">{x.icon}</span>
-              <strong>{lang === 'ru' ? x.nameRu : x.nameUz}</strong>
-            </Card>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-/**
- * Qaysi organ uchun tahlil — YOZIB QIDIRILADI.
- *
- * Ro'yxatni admin qo'lda to'ldiradi va u o'sib boradi: yigirmata
- * a'zoni varaqlab o'tirish tez charchatadi, ayniqsa telefonda.
- * Odam esa nima kerakligini biladi — "bosh" deb yozsa yetarli.
- *
- * Ro'yxat TANLANGAN TEKSHIRUVGA mos a'zolar bilan cheklanadi: qaysi
- * a'zo qaysi tekshiruvga to'g'ri kelishini admin belgilaydi va
- * bemorga mantiqsiz juftlik ko'rsatilmasligi kerak.
- *
- * Qidiruv nomning HAR QAYSI so'zi boshidan mos keladi: "miya" deb
- * yozilsa ham "Bosh miya" topiladi.
- */
-function OrganStep({ draft, onPick }: { draft: Draft; onPick: (organ: LabOrgan) => void }) {
-  const { t, lang } = useApp();
-  const [all, setAll] = useState<LabOrgan[] | null>(null);
+  const [all, setAll] = useState<LabTest[] | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
     let alive = true;
     api
-      .labOrgans()
+      .labTests()
       .then((list) => alive && setAll(list))
       .catch(() => alive && setAll([]));
     return () => {
@@ -622,31 +541,55 @@ function OrganStep({ draft, onPick }: { draft: Draft; onPick: (organ: LabOrgan) 
     };
   }, []);
 
-  const allowed = draft.labTest?.organIds ?? null;
-  const pool = useMemo(
-    () => (all && allowed ? all.filter((o) => allowed.includes(o.id)) : (all ?? [])),
-    [all, allowed],
-  );
+  const name = (x: LabTest) => (lang === 'ru' ? x.nameRu : x.nameUz);
 
-  const name = (o: LabOrgan) => (lang === 'ru' ? o.nameRu : o.nameUz);
+  const groups = useMemo(() => (all ?? []).filter((x) => x.parentId === null), [all]);
+  const childrenOf = (id: number) => (all ?? []).filter((x) => x.parentId === id);
 
+  /*
+   * Qidiruvda guruhlar ochilmaydi — mos kelgan tekshiruvlar bitta
+   * ro'yxatda chiqadi. Guruh nomi ostida ko'rsatiladi, chunki
+   * "Bosh miya MRT" va "Bosh miya MSKT" yonma-yon turishi mumkin.
+   */
   const found = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return pool;
-    return pool.filter((o) => {
-      const words = `${o.nameUz} ${o.nameRu}`.toLowerCase().split(/[^\p{L}\p{N}]+/u);
-      return words.some((w) => w.startsWith(q));
-    });
-  }, [pool, query]);
+    if (!q) return null;
+    return (all ?? [])
+      .filter((x) => !x.hasChildren)
+      .filter((x) => {
+        const words = `${x.nameUz} ${x.nameRu}`.toLowerCase().split(/[^\p{L}\p{N}]+/u);
+        return words.some((w) => w.startsWith(q));
+      })
+      .slice(0, 40);
+  }, [all, query]);
+
+  const groupName = (x: LabTest) => {
+    const parent = (all ?? []).find((g) => g.id === x.parentId);
+    return parent ? name(parent) : '';
+  };
+
+  const Row = ({ x, sub }: { x: LabTest; sub?: string }) => (
+    <Card
+      variant="flat"
+      className={`organrow ${draft.labTest?.id === x.id ? 'is-active' : ''}`}
+      onClick={() => onPick(x)}
+    >
+      <span className="stack" style={{ gap: 2, flex: 1 }}>
+        <strong>{name(x)}</strong>
+        {sub && <span className="tiny">{sub}</span>}
+      </span>
+      {x.priceUzs != null && <span className="tiny num">{t('wz.test.from', { n: money(x.priceUzs, lang) })}</span>}
+    </Card>
+  );
 
   return (
     <>
-      <StepHead title={t('wz.organ.title')} sub={t('wz.organ.sub')} />
+      <StepHead title={t('wz.test.title')} sub={t('wz.test.sub')} />
 
-      <Field label={t('wz.organ.search')}>
+      <Field label={t('wz.test.search')}>
         <Input
           value={query}
-          placeholder={t('wz.organ.searchHint')}
+          placeholder={t('wz.test.searchHint')}
           onChange={(e) => setQuery(e.target.value)}
         />
       </Field>
@@ -657,21 +600,65 @@ function OrganStep({ draft, onPick }: { draft: Draft; onPick: (organ: LabOrgan) 
             <Skeleton key={i} h={52} />
           ))}
         </div>
-      ) : found.length === 0 ? (
-        <Notice tone="warning">{t('wz.organ.none')}</Notice>
+      ) : found ? (
+        found.length === 0 ? (
+          <Notice tone="warning">{t('wz.test.none')}</Notice>
+        ) : (
+          <div className="stack" style={{ gap: 'var(--s-2)' }}>
+            {found.map((x) => (
+              <Row key={x.id} x={x} sub={groupName(x)} />
+            ))}
+          </div>
+        )
       ) : (
-        <div className="stack" style={{ gap: 'var(--s-2)' }}>
-          {found.map((o) => (
-            <Card
-              key={o.id}
-              variant="flat"
-              className={`organrow ${draft.labOrgan?.id === o.id ? 'is-active' : ''}`}
-              onClick={() => onPick(o)}
-            >
-              <span className="organrow__icon">{o.icon}</span>
-              <strong>{name(o)}</strong>
-            </Card>
-          ))}
+        <div className="cat__tree">
+          {groups.map((g) => {
+            const kids = childrenOf(g.id);
+            /* Bolasi yo'q guruh — o'zi tanlanadigan tekshiruv */
+            if (kids.length === 0) {
+              return (
+                <div key={g.id} className="cat__branch">
+                  <Row x={g} />
+                </div>
+              );
+            }
+
+            const isOpen = open === g.id;
+            return (
+              <div key={g.id} className="cat__branch">
+                <button
+                  type="button"
+                  className={`cat__head ${isOpen ? 'is-open' : ''}`}
+                  onClick={() => setOpen(isOpen ? null : g.id)}
+                >
+                  <span className={`cat__caret ${isOpen ? 'is-open' : ''}`}>›</span>
+                  <span className="labtest__icon">{g.icon}</span>
+                  <span className="cat__name truncate">{name(g)}</span>
+                  <span className="cat__count num">{kids.length}</span>
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <m.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: EASE }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <div className="cat__body">
+                        <div className="stack" style={{ gap: 'var(--s-2)' }}>
+                          {kids.map((x) => (
+                            <Row key={x.id} x={x} />
+                          ))}
+                        </div>
+                      </div>
+                    </m.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
       )}
     </>
@@ -802,12 +789,29 @@ function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
     };
   }, [draft.operation, draft.cityId]);
 
+  /*
+   * Oraliq TURGA bog'liq.
+   *
+   * Operatsiya millionlar bilan o'lchanadi, tahlil esa yuz minglar
+   * bilan: qon tahlili 200 ming so'm bo'lishi mumkin. Bitta oraliq
+   * ikkalasiga to'g'ri kelmaydi — tahlil so'rovida slayder eng
+   * chapida ham juda katta raqamni ko'rsatardi va bemor byudjetni
+   * to'g'ri qo'ya olmasdi.
+   */
+  const isLab = draft.kind === 'lab';
+  const floor = isLab ? 200_000 : 500_000;
+
   const range = useMemo(() => {
-    if (!stats?.min || !stats.max) return { min: 1_000_000, max: 100_000_000, step: 500_000 };
-    const min = Math.max(500_000, Math.floor(stats.min * 0.5));
+    if (!stats?.min || !stats.max) {
+      return isLab
+        ? { min: 200_000, max: 20_000_000, step: 50_000 }
+        : { min: 1_000_000, max: 100_000_000, step: 500_000 };
+    }
+    const min = Math.max(floor, Math.floor(stats.min * 0.5));
     const max = Math.ceil(stats.max * 1.4);
-    return { min, max, step: Math.max(100_000, Math.round((max - min) / 100 / 100_000) * 100_000) };
-  }, [stats]);
+    const rawStep = Math.round((max - min) / 100 / 50_000) * 50_000;
+    return { min, max, step: Math.max(isLab ? 50_000 : 100_000, rawStep) };
+  }, [stats, isLab, floor]);
 
   const belowRange = draft.budgetUzs != null && stats?.p25 != null && draft.budgetUzs < stats.p25;
   /* Tegilmagan slayder shu yerda turadi — bu taklif, tanlov emas */
@@ -1194,13 +1198,6 @@ function ReviewStep({
                 draft.labTest ? (lang === 'ru' ? draft.labTest.nameRu : draft.labTest.nameUz) : empty
               }
               onEdit={() => onEdit('test')}
-            />
-            <ReviewRow
-              label={t('wz.review.organ')}
-              value={
-                draft.labOrgan ? (lang === 'ru' ? draft.labOrgan.nameRu : draft.labOrgan.nameUz) : empty
-              }
-              onEdit={() => onEdit('organ')}
             />
             <ReviewRow
               label={t('wz.review.weight')}

@@ -210,14 +210,12 @@ export interface LabOrgan {
 }
 
 /**
- * Tekshiruv turi — MRT, UZI, qon tahlili va hokazo.
+ * Tekshiruv turi — "Bosh miya MRT", "Qon tahlili" va hokazo.
  *
- * Yolg'iz organ yetarli emas edi: "bosh miya" degan javob MRT ni
- * ham, KT ni ham, qon tahlilini ham anglatishi mumkin — klinika esa
- * ularning hammasini qilmaydi va narxi butunlay boshqa.
- *
- * Qaysi organ qaysi tekshiruvga mos kelishini ADMIN belgilaydi:
- * bemorga faqat mantiqiy juftliklar ko'rsatiladi.
+ * A'zo ALOHIDA daraja emas: u nomning o'ziga kiradi. Ikki daraja
+ * ("MRT" + "bosh miya") nazariy jihatdan toza edi, lekin amalda
+ * ortiqcha — katalogni to'ldiradigan odam uchun ham, bemor uchun
+ * ham. Bitta ro'yxat, bitta savol.
  */
 export interface LabTest {
   id: number;
@@ -225,14 +223,16 @@ export interface LabTest {
   nameUz: string;
   nameRu: string;
   icon: string;
-  /** Shu tekshiruvga mos organlar */
-  organIds: number[];
-}
-
-/** Klinika yoqqan juftlik: qaysi tekshiruvni qaysi organ bo'yicha qiladi. */
-export interface ClinicLabService {
-  testId: number;
-  organId: number;
+  /**
+   * Guruh — MRT, MSKT kabi modallik. `null` bo'lsa yozuvning o'zi
+   * guruh yoki bo'linmaydigan tekshiruv.
+   */
+  parentId: number | null;
+  /** Bolasi bor yozuv TANLANMAYDI: u papka, tekshiruv emas */
+  hasChildren: boolean;
+  /** Ma'lumot uchun: bemor byudjetni shunga qarab qo'yadi */
+  priceUzs: number | null;
+  durationMin: number | null;
 }
 
 export interface Operation {
@@ -359,7 +359,10 @@ export interface MedicalRequest {
   operationId: number | null;
   /** Tahlil so'rovida — qanday tekshiruv (MRT, UZI, ...) */
   labTestId: number | null;
-  /** Tahlil so'rovida — qaysi organ tekshiriladi */
+  /**
+   * Eski so'rovlarda qolgan a'zo. Yangi so'rovlarda ishlatilmaydi —
+   * a'zo endi tekshiruv nomining o'ziga kiradi.
+   */
   labOrganId: number | null;
   /**
    * Bemor vazni (kg) — tahlil so'rovida so'raladi.
@@ -441,29 +444,19 @@ export function requestTitle(
   req: {
     operation?: { nameUz: string; nameRu: string } | null;
     labTest?: { nameUz: string; nameRu: string } | null;
-    labOrgan?: { nameUz: string; nameRu: string } | null;
   },
   lang: Lang = 'uz',
 ): string {
   const name = (x: { nameUz: string; nameRu: string } | null | undefined) =>
     x ? (lang === 'ru' ? x.nameRu : x.nameUz) : '';
 
-  if (req.operation) return name(req.operation);
-
-  /*
-   * Tahlilda ikkovi birga: "MRT · Bosh miya". Yolg'iz tekshiruv
-   * nomi qaysi organ ekanini aytmaydi, yolg'iz organ esa qanday
-   * tekshiruv kerakligini.
-   */
-  const parts = [name(req.labTest), name(req.labOrgan)].filter(Boolean);
-  return parts.join(' · ');
+  return name(req.operation ?? req.labTest);
 }
 
 export interface RequestWithMeta extends MedicalRequest {
-  /** Tahlil so'rovida `null` — o'rniga `labTest` va `labOrgan` to'ladi */
+  /** Tahlil so'rovida `null` — o'rniga `labTest` to'ladi */
   operation: Operation | null;
   labTest: LabTest | null;
-  labOrgan: LabOrgan | null;
   city: City;
   offersCount: number;
   /** Ilova qilingan hujjatlar (faqat ko'rish huquqi bo'lganda to'ladi) */
@@ -1138,9 +1131,8 @@ export const BUILTIN_STEPS = [
   'condition',
   'documents',
   /** Faqat tahlil oqimida */
-  'weight',
   'test',
-  'organ',
+  'weight',
   'region',
   'budget',
   'date',
@@ -1158,7 +1150,6 @@ export const LOCKED_STEPS: readonly BuiltinStep[] = [
   'operation',
   'condition',
   'test',
-  'organ',
   'region',
   'review',
 ];
@@ -1177,9 +1168,8 @@ export const STEP_FLOWS: Record<BuiltinStep, readonly RequestKind[]> = {
   operation: ['operation'],
   condition: ['operation'],
   documents: ['operation'],
-  weight: ['lab'],
   test: ['lab'],
-  organ: ['lab'],
+  weight: ['lab'],
   region: ['operation', 'lab'],
   budget: ['operation', 'lab'],
   date: ['operation'],
@@ -1202,6 +1192,8 @@ export interface StepOption {
 export interface RequestStep {
   id: number;
   key: string;
+  /** Savol faqat shu tekshiruvda chiqadi; `null` — umumiy */
+  labTestId?: number | null;
   kind: StepKind;
   position: number;
   enabled: boolean;
@@ -1233,4 +1225,12 @@ export interface WizardStep {
    * qo'shib qo'ya olmaydi.
    */
   flows: readonly RequestKind[];
+  /**
+   * Savol faqat SHU tekshiruvda chiqadi.
+   *
+   * `null` — umumiy savol, hamma so'rovda ko'rinadi. "Qon
+   * suyultiruvchi dori ichasizmi" degan savol MRT da o'rinli, qon
+   * tahlilida esa keraksiz.
+   */
+  labTestId?: number | null;
 }

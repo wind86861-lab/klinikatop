@@ -265,15 +265,18 @@ export function mapNotification(r: any): Notification {
   };
 }
 
-/** Tekshiruv turi — katalog qatoridan. Organlar alohida qo'shiladi. */
-export function mapLabTest(r: any, organIds: number[] = []) {
+/** Tekshiruv turi — katalog qatoridan. */
+export function mapLabTest(r: any, hasChildren = false) {
   return {
     id: r.id,
     slug: r.slug,
     nameUz: r.name_uz,
     nameRu: r.name_ru,
     icon: r.icon ?? '',
-    organIds,
+    parentId: r.parent_id ?? null,
+    hasChildren,
+    priceUzs: r.price_uzs ?? null,
+    durationMin: r.duration_min ?? null,
   };
 }
 

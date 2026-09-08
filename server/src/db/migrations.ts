@@ -1676,6 +1676,206 @@ export const MIGRATIONS: Migration[] = [
       for (const r of old) move.run(r.clinic_id, r.organ_id);
     },
   },
+  {
+    /**
+     * ORGAN darajasi olib tashlandi — endi faqat tekshiruv turi.
+     *
+     * Ikki daraja ("MRT" + "bosh miya") nazariy jihatdan toza edi,
+     * lekin amalda ortiqcha: katalogni to'ldiradigan odam uchun ham,
+     * bemor uchun ham. Endi tur o'z ichiga a'zoni oladi — "Bosh miya
+     * MRT" bitta yozuv bo'ladi. Bitta ro'yxat, bitta savol.
+     *
+     * Jadvallar SAQLANADI: eski so'rovlarda `lab_organ_id` bo'lishi
+     * mumkin va uni yo'q qilish ularning ma'nosini o'chirardi. Ular
+     * shunchaki oqimda ishlatilmaydi.
+     *
+     * Klinika aktivatsiyasi ham soddalashadi: juftlik emas, tur.
+     */
+    id: '031_lab_tests_only',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS clinic_lab_tests (
+          clinic_id INTEGER NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+          test_id   INTEGER NOT NULL REFERENCES lab_tests(id) ON DELETE CASCADE,
+          PRIMARY KEY (clinic_id, test_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_clinic_lab_tests ON clinic_lab_tests(test_id);
+      `);
+
+      // Juftliklardan turlarni ajratib olamiz — klinika xizmatini yo'qotmasin
+      db.exec(`
+        INSERT OR IGNORE INTO clinic_lab_tests (clinic_id, test_id)
+        SELECT DISTINCT clinic_id, test_id FROM clinic_lab_services
+      `);
+
+      /*
+       * Tahlilga MOS SAVOL: admin har tekshiruvga o'z savolini
+       * qo'sha oladi. "Qonli bosimingiz bormi" degan savol MRT da
+       * o'rinli, qon tahlilida esa keraksiz — ularni bitta umumiy
+       * ro'yxatda tutib bo'lmasdi.
+       *
+       * `NULL` — savol umumiy, hamma so'rovda chiqadi (hozirgi xulq).
+       */
+      addColumn(db, 'request_steps', 'lab_test_id', 'INTEGER REFERENCES lab_tests(id) ON DELETE CASCADE');
+
+      // Organ bosqichi endi yo'q
+      db.prepare(`DELETE FROM request_steps WHERE key = 'organ'`).run();
+
+      /*
+       * Tartib: tekshiruv VAZNDAN OLDIN.
+       *
+       * Avval nima kerakligi aniqlanadi, keyin shaxsiy o'lchov
+       * so'raladi — teskarisi mantiqsiz tuyuladi.
+       */
+      db.prepare(`UPDATE request_steps SET position = 12 WHERE key = 'test'`).run();
+      db.prepare(`UPDATE request_steps SET position = 16 WHERE key = 'weight'`).run();
+    },
+  },
+  {
+    /**
+     * TAHLIL KATALOGI IKKI DARAJALI bo'ldi: modallik va tekshiruv.
+     *
+     * "MRT" degan yozuvning o'zi bemorga yetarli emas — MRT ning
+     * o'zi 24 xil bo'ladi va har birining narxi ham, davomiyligi
+     * ham boshqa. Lekin 56 ta yozuvni bitta tekis ro'yxatda
+     * ko'rsatish ham ishlamaydi.
+     *
+     * Shuning uchun: avval MRT yoki MSKT tanlanadi, ichida esa aniq
+     * tekshiruv. Guruh `parent_id` bilan ifodalanadi — alohida
+     * jadval qilinsa har so'rovda ikkovini birlashtirish kerak
+     * bo'lardi.
+     *
+     * Bolasi bor guruhni TANLAB bo'lmaydi: u shunchaki papka.
+     * Bolasi yo'q yozuv esa o'zi tanlanadi — shunda "Qon tahlili"
+     * kabi bo'linmaydigan tekshiruvlar ham shu ro'yxatda qoladi.
+     *
+     * Narx va davomiylik ma'lumot uchun: bemor byudjetni shunga
+     * qarab qo'yadi, klinika esa o'z narxini beradi.
+     */
+    id: '032_lab_test_tree',
+    up: (db) => {
+      addColumn(db, 'lab_tests', 'parent_id', 'INTEGER REFERENCES lab_tests(id) ON DELETE CASCADE');
+      addColumn(db, 'lab_tests', 'price_uzs', 'INTEGER');
+      addColumn(db, 'lab_tests', 'duration_min', 'INTEGER');
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_lab_tests_parent ON lab_tests(parent_id, position)`);
+
+      // Guruh nomlarini aniqlashtiramiz
+      db.prepare(`UPDATE lab_tests SET name_uz = ?, name_ru = ?, icon = ? WHERE slug = 'mrt'`).run(
+        'MRT (Magnit Rezonansli Tomografiya)',
+        'МРТ (магнитно-резонансная томография)',
+        '🧲',
+      );
+
+      /*
+       * Eski "KT" yozuvi MSKT ga aylanadi: bu bir xil tekshiruv va
+       * ikkitasini yonma-yon qoldirish bemorni chalkashtirardi.
+       */
+      db.prepare(`UPDATE lab_tests SET slug = 'mskt', name_uz = ?, name_ru = ?, icon = ? WHERE slug = 'kt'`).run(
+        'MSKT (Multispiral Kompyuter Tomografiya)',
+        'МСКТ (мультиспиральная компьютерная томография)',
+        '🖥️',
+      );
+
+      const parentId = (slug: string): number | null => {
+        const r = db.prepare(`SELECT id FROM lab_tests WHERE slug = ?`).get(slug) as
+          | { id: number }
+          | undefined;
+        return r?.id ?? null;
+      };
+
+      const ins = db.prepare(
+        `INSERT OR IGNORE INTO lab_tests
+           (slug, name_uz, name_ru, icon, position, active, parent_id, price_uzs, duration_min)
+         VALUES (?, ?, ?, '', ?, 1, ?, ?, ?)`,
+      );
+
+      /* Kalit nomdan yasaladi — lotin bo'lmagan belgilar tushadi */
+      const slugOf = (name: string, i: number, prefix: string) => {
+        const base = name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .slice(0, 44);
+        return `${prefix}-${base || i}`.slice(0, 60);
+      };
+
+      const MRT: [string, string, number, number][] = [
+        ['Bel-dumg\'aza umurtqalari MRT', 'МРТ поясничных позвонков', 300000, 15],
+        ['Bilak sohasi MRT (bir tomon)', 'МРТ область предплечья', 300000, 15],
+        ['Bo\'yin umurtqalari MRT', 'МРТ шейных позвонков', 300000, 15],
+        ['Boldir-to\'piq bo\'g\'imi MRT', 'МРТ голено-стопного сустава', 450000, 15],
+        ['Bosh miya va bosh suyagi MRT', 'МРТ головного мозга', 300000, 15],
+        ['Bosh miya va ko\'z orbitalari MRT', 'МРТ головного мозга и глазных орбит', 400000, 15],
+        ['Bosh miya MRT (tanlangan nerv traktografiyasi bilan)', 'МРТ головного мозга с трактографией', 400000, 15],
+        ['Bosh miya MRT angiografiya bilan + Fiesta', 'МРТ головного мозга с ангиографией + Fiesta', 600000, 30],
+        ['Bosh miya va gipofiz MRT', 'МРТ головного мозга и гипофиза', 400000, 15],
+        ['Dumg\'aza umurtqalari MRT', 'МРТ сакральных позвонков', 300000, 15],
+        ['Elka sohasi MRT (bir tomon)', 'МРТ плечевой области', 300000, 15],
+        ['Elka bo\'g\'imi MRT', 'МРТ плечевого сустава', 300000, 15],
+        ['Kichik chanoq bo\'shlig\'i MRT', 'МРТ малого таза', 450000, 15],
+        ['Ko\'krak qafasi MRT', 'МРТ грудной клетки', 450000, 15],
+        ['Ko\'krak umurtqalari MRT', 'МРТ грудных позвонков', 300000, 15],
+        ['MRT-xolangiografiya (rekonstruksiya bilan)', 'МРТ холангиография с реконструкцией', 500000, 15],
+        ['Qo\'l panja sohasi MRT (1 tomon)', 'МРТ кисти', 300000, 15],
+        ['Qorin bo\'shlig\'i MRT', 'МРТ брюшной полости', 450000, 15],
+        ['Son sohasi MRT (bir tomon)', 'МРТ область бедра', 300000, 15],
+        ['Son-chanoq bo\'g\'imi MRT', 'МРТ тазобедренного сустава', 300000, 15],
+        ['Son-chanoq bo\'g\'imlari MRT', 'МРТ тазо-бедренного сустава', 400000, 15],
+        ['Tirsak bo\'g\'imi MRT (bir tomon)', 'МРТ локтевого сустава', 400000, 15],
+        ['Tizza bo\'g\'imi MRT', 'МРТ коленного сустава', 500000, 15],
+        ['Yurak MRT', 'МРТ сердца', 500000, 15]
+      ];
+
+      const MSKT: [string, string, number, number][] = [
+        ['Aorta ravog\'i MSKTA', 'МСКТА дуги аорты', 600000, 15],
+        ['Bel-dumg\'aza umurtqalari MSKT', 'МСКТ крестцово-поясничного отдела', 400000, 15],
+        ['Bilak suyagi MSKT (bir tomon)', 'МСКТ костей предплечья', 400000, 15],
+        ['Bo\'yin sohasi MSKT', 'МСКТ шейной области', 300000, 15],
+        ['Bo\'yin umurtqalari MSKT', 'МСКТ шейных позвонков', 400000, 15],
+        ['Boldir suyaklari MSKT (bir tomon)', 'МСКТ костей голени', 400000, 15],
+        ['Bosh miya va ko\'z orbitalari MSKT', 'МСКТ головного мозга и орбит', 400000, 15],
+        ['Bosh miya MSKT', 'МСКТ головного мозга', 350000, 15],
+        ['Bosh miya va burun yondosh bo\'shliqlari (PPN) MSKT', 'МСКТ головного мозга и ППН', 350000, 15],
+        ['Burun yondosh bo\'shliqlari (PPN) MSKT', 'МСКТ ППН', 350000, 15],
+        ['Buyrak usti bezlari MSKT', 'МСКТ надпочечников', 400000, 15],
+        ['Chanoq suyaklari MSKT', 'МСКТ костей таза', 300000, 15],
+        ['Dum sohasi MSKT', 'МСКТ копчика', 400000, 15],
+        ['Elka bo\'g\'imi MSKT (bir tomon)', 'МСКТ плечевого сустава', 400000, 15],
+        ['Elka suyagi MSKT (bir tomon)', 'МСКТ плечевой кости', 400000, 15],
+        ['Kichik chanoq MSKT', 'МСКТ малого таза', 300000, 15],
+        ['Ko\'krak aortasi MSKTA', 'МСКТА грудной аорты', 800000, 15],
+        ['Ko\'krak qafasi MSKT', 'МСКТ грудной клетки', 300000, 15],
+        ['Ko\'krak umurtqalari MSKT', 'МСКТ грудных позвонков', 400000, 15],
+        ['MSKT peroral kontrast bilan (diafragma churrasi)', 'МСКТ с пероральным контрастированием пищевода и желудка', 500000, 15],
+        ['MSKTA koronarografiya (yurak tekshiruvi)', 'МСКТА коронарография', 1200000, 15],
+        ['Qorin bo\'shlig\'i MSKT', 'МСКТ брюшной полости', 300000, 15],
+        ['Qorin aortasi MSKTA', 'МСКТА брюшной аорты', 600000, 15],
+        ['Qorin bo\'shlig\'ini 3 fazali MSKT', 'Трёхфазная МСКТ брюшной полости', 800000, 15],
+        ['Qorin orti bo\'shlig\'i MSKT', 'МСКТ забрюшинного пространства', 300000, 15],
+        ['Son suyagi MSKT (bir tomon)', 'МСКТ бедренной кости', 400000, 15],
+        ['Tirsak bo\'g\'imi MSKT (bir tomon)', 'МСКТ локтевого сустава', 400000, 15],
+        ['Urologik kompleks MSKT', 'МСКТ урологического комплекса', 400000, 15],
+        ['Viliziy xalqasi uch fazali MSKT angiografiyasi', '3-фазная МСКТ ангиография виллизиева круга', 600000, 15],
+        ['Yuqori ko\'krak sohasi (o\'mrov, kurak) MSKT', 'МСКТ верхнего плечевого пояса', 400000, 15],
+        ['Yuz suyaklari MSKT', 'МСКТ костей лицевого скелета', 350000, 15],
+        ['Urologik kompleks MSKT (ekskretor urografiya bilan)', 'МСКТ с экскреторной урографией', 500000, 15]
+      ];
+
+      const mrtId = parentId('mrt');
+      const msktId = parentId('mskt');
+
+      if (mrtId) {
+        MRT.forEach(([uz, ru, price, mins], i) =>
+          ins.run(slugOf(uz, i, 'mrt'), uz, ru, i * 10, mrtId, price, mins),
+        );
+      }
+      if (msktId) {
+        MSKT.forEach(([uz, ru, price, mins], i) =>
+          ins.run(slugOf(uz, i, 'mskt'), uz, ru, i * 10, msktId, price, mins),
+        );
+      }
+    },
+  },
 ];
 
 /**

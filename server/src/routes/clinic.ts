@@ -14,7 +14,7 @@ import { listClinicRequests, markViewed, getRequest } from '../services/requests
 import { listClinicDeals } from '../services/deals';
 import { listClinicReviews } from '../services/reviews';
 import { statsForRequest } from '../services/priceStats';
-import { clinicLabServices, listLabOrgans, listLabTests, saveClinicLabServices } from '../services/labOrgans';
+import { clinicLabTestIds, listLabTests, saveClinicLabTests } from '../services/labOrgans';
 import {
   addDocument,
   createDoctor,
@@ -382,33 +382,22 @@ clinicRouter.post('/commission/pay', (req, res) => {
 /* ═════════════════  Tahlil xizmatlari  ═════════════════ */
 
 /**
- * Klinika qaysi tekshiruvni qaysi organ bo'yicha qiladi.
+ * Klinika qaysi tekshiruvlarni qiladi.
  *
- * So'rov faqat shu JUFTLIKNI yoqqan klinikalarga boradi. Yolg'iz
- * organ yetarli emas edi: MRT qiladigan klinika qon tahlilini
- * qilmasligi mumkin, garchi ikkovi ham "jigar" bo'lsa ham.
+ * So'rov faqat shu turni yoqqan klinikalarga boradi —
+ * operatsiyalardagi bilan bir xil qoida.
  */
-clinicRouter.get('/lab-services', (req, res) => {
+clinicRouter.get('/lab-tests', (req, res) => {
   res.json({
-    tests: listLabTests(),
-    organs: listLabOrgans(),
-    selected: clinicLabServices(requireClinic(req)),
+    all: listLabTests(),
+    selected: clinicLabTestIds(requireClinic(req)),
   });
 });
 
-clinicRouter.put('/lab-services', (req, res) => {
+clinicRouter.put('/lab-tests', (req, res) => {
   const body = z
     // Bo'sh ro'yxat ham mumkin: klinika tahlilni butunlay o'chira oladi
-    .object({
-      services: z
-        .array(
-          z.object({
-            testId: z.number().int().positive(),
-            organId: z.number().int().positive(),
-          }),
-        )
-        .max(400),
-    })
+    .object({ testIds: z.array(z.number().int().positive()).max(200) })
     .parse(req.body);
-  res.json({ selected: saveClinicLabServices(requireClinic(req), body.services) });
+  res.json({ selected: saveClinicLabTests(requireClinic(req), body.testIds) });
 });

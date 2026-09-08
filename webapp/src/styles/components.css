@@ -5169,9 +5169,15 @@
 }
 .organchip__x:hover { color: var(--danger, #c0392b); }
 
-/* Admin: tekshiruv qatori — sarlavha va amallar yonma-yon */
+/* Admin: tekshiruv qatori — nom va amallar yonma-yon */
 .labrow {
   display: flex;
   align-items: center;
   gap: var(--s-2);
+}
+.labrow--card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s-2) var(--s-3);
 }
