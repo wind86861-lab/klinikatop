@@ -1759,28 +1759,55 @@ export const MIGRATIONS: Migration[] = [
       addColumn(db, 'lab_tests', 'duration_min', 'INTEGER');
       db.exec(`CREATE INDEX IF NOT EXISTS idx_lab_tests_parent ON lab_tests(parent_id, position)`);
 
-      // Guruh nomlarini aniqlashtiramiz
-      db.prepare(`UPDATE lab_tests SET name_uz = ?, name_ru = ?, icon = ? WHERE slug = 'mrt'`).run(
-        'MRT (Magnit Rezonansli Tomografiya)',
-        'МРТ (магнитно-резонансная томография)',
-        '🧲',
-      );
-
       /*
-       * Eski "KT" yozuvi MSKT ga aylanadi: bu bir xil tekshiruv va
-       * ikkitasini yonma-yon qoldirish bemorni chalkashtirardi.
+       * Guruhni TOPAMIZ yoki YARATAMIZ.
+       *
+       * Ro'yxatga tayanib bo'lmaydi: admin allaqachon yozuvlarni
+       * o'chirgan yoki qayta nomlagan bo'lishi mumkin. Kalit bo'yicha
+       * qidiramiz, eski kaliti bo'lsa qayta nomlaymiz, umuman yo'q
+       * bo'lsa yangisini yasaymiz — har uch holatda ham guruh paydo
+       * bo'ladi va bolalari joyiga tushadi.
        */
-      db.prepare(`UPDATE lab_tests SET slug = 'mskt', name_uz = ?, name_ru = ?, icon = ? WHERE slug = 'kt'`).run(
-        'MSKT (Multispiral Kompyuter Tomografiya)',
-        'МСКТ (мультиспиральная компьютерная томография)',
-        '🖥️',
-      );
-
-      const parentId = (slug: string): number | null => {
-        const r = db.prepare(`SELECT id FROM lab_tests WHERE slug = ?`).get(slug) as
+      const ensureGroup = (
+        slug: string,
+        legacySlug: string | null,
+        nameUz: string,
+        nameRu: string,
+        icon: string,
+        position: number,
+      ): number => {
+        const found = db.prepare(`SELECT id FROM lab_tests WHERE slug = ?`).get(slug) as
           | { id: number }
           | undefined;
-        return r?.id ?? null;
+        if (found) {
+          db.prepare(
+            `UPDATE lab_tests SET name_uz = ?, name_ru = ?, icon = ?, active = 1, parent_id = NULL
+              WHERE id = ?`,
+          ).run(nameUz, nameRu, icon, found.id);
+          return found.id;
+        }
+
+        if (legacySlug) {
+          const legacy = db.prepare(`SELECT id FROM lab_tests WHERE slug = ?`).get(legacySlug) as
+            | { id: number }
+            | undefined;
+          if (legacy) {
+            db.prepare(
+              `UPDATE lab_tests SET slug = ?, name_uz = ?, name_ru = ?, icon = ?, active = 1,
+                                    parent_id = NULL
+                WHERE id = ?`,
+            ).run(slug, nameUz, nameRu, icon, legacy.id);
+            return legacy.id;
+          }
+        }
+
+        const info = db
+          .prepare(
+            `INSERT INTO lab_tests (slug, name_uz, name_ru, icon, position, active)
+             VALUES (?, ?, ?, ?, ?, 1)`,
+          )
+          .run(slug, nameUz, nameRu, icon, position);
+        return Number(info.lastInsertRowid);
       };
 
       const ins = db.prepare(
@@ -1861,19 +1888,34 @@ export const MIGRATIONS: Migration[] = [
         ['Urologik kompleks MSKT (ekskretor urografiya bilan)', 'МСКТ с экскреторной урографией', 500000, 15]
       ];
 
-      const mrtId = parentId('mrt');
-      const msktId = parentId('mskt');
+      const mrtId = ensureGroup(
+        'mrt',
+        null,
+        'MRT (Magnit Rezonansli Tomografiya)',
+        'МРТ (магнитно-резонансная томография)',
+        '🧲',
+        0,
+      );
 
-      if (mrtId) {
-        MRT.forEach(([uz, ru, price, mins], i) =>
-          ins.run(slugOf(uz, i, 'mrt'), uz, ru, i * 10, mrtId, price, mins),
-        );
-      }
-      if (msktId) {
-        MSKT.forEach(([uz, ru, price, mins], i) =>
-          ins.run(slugOf(uz, i, 'mskt'), uz, ru, i * 10, msktId, price, mins),
-        );
-      }
+      /*
+       * Eski "KT" yozuvi MSKT ga aylanadi: bu bir xil tekshiruv va
+       * ikkitasini yonma-yon qoldirish bemorni chalkashtirardi.
+       */
+      const msktId = ensureGroup(
+        'mskt',
+        'kt',
+        'MSKT (Multispiral Kompyuter Tomografiya)',
+        'МСКТ (мультиспиральная компьютерная томография)',
+        '🖥️',
+        10,
+      );
+
+      MRT.forEach(([uz, ru, price, mins], i) =>
+        ins.run(slugOf(uz, i, 'mrt'), uz, ru, i * 10, mrtId, price, mins),
+      );
+      MSKT.forEach(([uz, ru, price, mins], i) =>
+        ins.run(slugOf(uz, i, 'mskt'), uz, ru, i * 10, msktId, price, mins),
+      );
     },
   },
 ];
