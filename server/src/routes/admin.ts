@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { STEP_KINDS } from '../../../shared/types';
+import { REQUEST_KINDS, STEP_KINDS } from '../../../shared/types';
 import { listSteps, saveSteps } from '../services/requestSteps';
 import { listPendingCommissionPayments, reviewCommissionPayment } from '../services/clinicCabinet';
 import {
@@ -364,7 +364,8 @@ adminRouter.put('/request-steps', (req, res) => {
             subUz: z.string().max(240).nullable().optional(),
             subRu: z.string().max(240).nullable().optional(),
             options: z.array(stepOption).nullable().optional(),
-            /* Savol faqat shu tekshiruvda chiqadi; null — umumiy */
+            /* Savol qamrovi: tur va daraxt shoxi; ikkalasi ham null — hammasida */
+            requestKind: z.enum(REQUEST_KINDS).nullable().optional(),
             labTestId: z.number().int().positive().nullable().optional(),
           }),
         )
@@ -520,7 +521,6 @@ const labTestSchema = z.object({
   active: z.boolean().optional(),
   /* Qaysi guruhga kiradi (MRT, MSKT); null — o'zi guruh */
   parentId: z.number().int().positive().nullable().optional(),
-  priceUzs: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
   durationMin: z.number().int().min(0).max(600).nullable().optional(),
 });
 

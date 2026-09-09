@@ -24,8 +24,10 @@ import {
   REQUEST_KINDS,
   STEP_FLOWS,
   STEP_KINDS,
+  stepMatchesScope,
   type BuiltinStep,
   type Lang,
+  type RequestKind,
   type RequestStep,
   type StepKind,
   type StepOption,
@@ -49,6 +51,7 @@ interface Row {
   sub_uz: string | null;
   sub_ru: string | null;
   options: string | null;
+  request_kind: string | null;
   lab_test_id: number | null;
 }
 
@@ -77,6 +80,7 @@ function mapStep(r: Row): RequestStep {
     subUz: r.sub_uz,
     subRu: r.sub_ru,
     options: parseOptions(r.options),
+    requestKind: (r.request_kind as RequestKind | null) ?? null,
     labTestId: r.lab_test_id ?? null,
   };
 }
@@ -109,27 +113,38 @@ export function wizardSteps(lang: Lang): WizardStep[] {
        * u yerda javob bo'lishi mumkin emas edi.
        */
       flows: STEP_FLOWS[s.key as BuiltinStep] ?? REQUEST_KINDS,
+      requestKind: s.requestKind ?? null,
       labTestId: s.labTestId ?? null,
     }));
 }
 
-/** Admin yaratgan savollar — javob tekshiruvi shularga qarab qilinadi. */
 /**
- * Admin yaratgan savollar.
+ * Admin yaratgan savollar — javob tekshiruvi shularga qarab qilinadi.
  *
- * `labTestId` berilgan savol FAQAT o'sha tekshiruvda chiqadi: "qon
- * suyultiruvchi dori ichasizmi" degan savol MRT da o'rinli, qon
- * tahlilida esa keraksiz.
- *
- * Tekshiruv berilmasa umumiy savollar qaytadi — tahlilga bog'langan
- * savollar operatsiya so'rovida hech qachon chiqmaydi.
+ * Savol daraxtning bir shoxiga bog'langan bo'lishi mumkin: butun
+ * turga (hamma tahlil so'rovi), guruhga (hamma MRT) yoki bitta
+ * tekshiruvga. Guruh uchun bemor tanlagan tekshiruvning OTASI ham
+ * hisobga olinadi — aks holda "MRT ga qo'shildi" degan savol MRT
+ * ichidagi hech bir tekshiruvda chiqmagan bo'lardi.
  */
-export function customSteps(labTestId?: number | null): RequestStep[] {
+export interface StepScope {
+  kind: RequestKind;
+  labTestId?: number | null;
+}
+
+export function customSteps(scope: StepScope): RequestStep[] {
+  const labTestId = scope.labTestId ?? null;
+  const parent = labTestId
+    ? ((db.prepare(`SELECT parent_id FROM lab_tests WHERE id = ?`).get(labTestId) as
+        | { parent_id: number | null }
+        | undefined)?.parent_id ?? null)
+    : null;
+
   return listSteps().filter(
     (s) =>
       s.enabled &&
       s.kind !== 'builtin' &&
-      (s.labTestId == null || s.labTestId === labTestId),
+      stepMatchesScope(s, { kind: scope.kind, labTestId, labTestParentId: parent }),
   );
 }
 
@@ -146,7 +161,9 @@ export interface StepInput {
   subUz?: string | null;
   subRu?: string | null;
   options?: StepOption[] | null;
-  /** Savol faqat shu tekshiruvda chiqadi; `null` — umumiy */
+  /** Savol faqat shu turdagi so'rovda; `null` — ikkalasida ham */
+  requestKind?: RequestKind | null;
+  /** Savol daraxtning shu shoxida; `null` — butun turda */
   labTestId?: number | null;
 }
 
@@ -176,6 +193,34 @@ function validateOptions(kind: StepKind, options: StepOption[] | null | undefine
     return { value, uz, ru: clean(o.ru, 80) ?? uz };
   });
   return JSON.stringify(cleaned);
+}
+
+/**
+ * Savol qaysi so'rovlarda chiqishini tekshiradi va normallashtiradi.
+ *
+ * Tayyor bosqichda qamrov ma'nosiz — u oqim bo'yicha allaqachon
+ * ajratilgan, shuning uchun ikkalasi ham tozalanadi.
+ *
+ * Tekshiruv ko'rsatilsa tur AVTOMATIK `lab` bo'ladi: admin panelida
+ * "operatsiya + MRT" degan ziddiyatni tanlab bo'lmaydi, lekin API
+ * ga to'g'ridan-to'g'ri kelgan so'rov shunday yozib yuborishi va
+ * savol hech qayerda chiqmay qolishi mumkin edi.
+ */
+function scopeOf(raw: StepInput): { requestKind: RequestKind | null; labTestId: number | null } {
+  if (raw.kind === 'builtin') return { requestKind: null, labTestId: null };
+
+  const labTestId = raw.labTestId ?? null;
+  if (labTestId !== null) {
+    const exists = db.prepare(`SELECT id FROM lab_tests WHERE id = ?`).get(labTestId);
+    if (!exists) throw badRequest('unknown_lab_test', 'Bunday tekshiruv yo‘q');
+    return { requestKind: 'lab', labTestId };
+  }
+
+  const requestKind = raw.requestKind ?? null;
+  if (requestKind !== null && !REQUEST_KINDS.includes(requestKind)) {
+    throw badRequest('invalid_request_kind', `Noma'lum so‘rov turi: ${requestKind}`);
+  }
+  return { requestKind, labTestId: null };
 }
 
 /**
@@ -242,11 +287,7 @@ export function saveSteps(input: StepInput[], adminId: number | null): RequestSt
       subUz: clean(raw.subUz, 240),
       subRu: clean(raw.subRu, 240),
       options: validateOptions(raw.kind, raw.options),
-      /*
-       * Savol qaysi tekshiruvga tegishli. Tayyor bosqichda bu
-       * ma'nosiz — u oqim bo'yicha allaqachon ajratilgan.
-       */
-      labTestId: raw.kind === 'builtin' ? null : (raw.labTestId ?? null),
+      ...scopeOf(raw),
     };
   });
 
@@ -263,15 +304,16 @@ export function saveSteps(input: StepInput[], adminId: number | null): RequestSt
     const upsert = db.prepare(
       `INSERT INTO request_steps (key, kind, position, enabled, required, locked,
                                   title_uz, title_ru, sub_uz, sub_ru, options,
-                                  lab_test_id, updated_by, updated_at)
+                                  request_kind, lab_test_id, updated_by, updated_at)
        VALUES (@key, @kind, @position, @enabled, @required, @locked,
                @titleUz, @titleRu, @subUz, @subRu, @options,
-               @labTestId, @adminId, datetime('now'))
+               @requestKind, @labTestId, @adminId, datetime('now'))
        ON CONFLICT (key) DO UPDATE SET
          position = excluded.position, enabled = excluded.enabled, required = excluded.required,
          title_uz = excluded.title_uz, title_ru = excluded.title_ru,
          sub_uz   = excluded.sub_uz,   sub_ru   = excluded.sub_ru,
          options  = excluded.options,  lab_test_id = excluded.lab_test_id,
+         request_kind = excluded.request_kind,
          updated_by = excluded.updated_by,
          updated_at = datetime('now')`,
     );
@@ -291,8 +333,8 @@ export function saveSteps(input: StepInput[], adminId: number | null): RequestSt
  * Bu holatda so'rovni rad etish emas, ortiqchasini e'tiborsiz qoldirish
  * to'g'ri — bemor aybdor emas.
  */
-export function validateAnswers(raw: unknown, labTestId?: number | null): string | null {
-  const steps = customSteps(labTestId);
+export function validateAnswers(raw: unknown, scope: StepScope): string | null {
+  const steps = customSteps(scope);
   if (steps.length === 0) return null;
 
   const input: Record<string, unknown> =
@@ -329,6 +371,20 @@ export function validateAnswers(raw: unknown, labTestId?: number | null): string
       case 'boolean':
         out[step.key] = value === true || value === 'true' || value === 1;
         break;
+      case 'date': {
+        /*
+         * Faqat `YYYY-MM-DD`. Kelajak yoki o'tmish ekani tekshirilmaydi:
+         * "qachonga rejalashtiryapsiz" ham, "oxirgi tekshiruv qachon
+         * bo'lgan" ham bir xil turdagi savol.
+         */
+        const s = String(value).trim().slice(0, 10);
+        const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00Z`) : null;
+        if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) {
+          throw badRequest('answer_invalid', `"${step.titleUz ?? step.key}" — sanani tanlang`);
+        }
+        out[step.key] = s;
+        break;
+      }
       case 'choice': {
         const s = String(value);
         if (!allowed.has(s)) throw badRequest('answer_invalid', `"${step.key}" — noma'lum variant`);
@@ -377,7 +433,11 @@ export function readAnswers(rawJson: string | null, lang: Lang): { label: string
     if (Array.isArray(value)) text = value.map((v) => optLabel(String(v))).join(', ');
     else if (typeof value === 'boolean') text = value ? (lang === 'ru' ? 'Да' : 'Ha') : (lang === 'ru' ? 'Нет' : 'Yo‘q');
     else if (step.kind === 'choice') text = optLabel(String(value));
-    else text = String(value);
+    else if (step.kind === 'date') {
+      // Saqlashda ISO qulay, o'qishda mahalliy tartib tanish
+      const [y, m, d] = String(value).split('-');
+      text = y && m && d ? `${d}.${m}.${y}` : String(value);
+    } else text = String(value);
 
     if (text) out.push({ label, value: text });
   }

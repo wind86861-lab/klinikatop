@@ -1918,6 +1918,37 @@ export const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    /**
+     * Admin savoli endi DARAXTNING ISTALGAN SHOXIGA bog'lanadi.
+     *
+     * Ilgari faqat bitta bog'lanish bor edi — aniq tekshiruv. Ya'ni
+     * "MRT dan oldin metall implant bormi" degan savolni 24 ta MRT
+     * turining har biriga alohida qo'shish kerak edi, keyin katalogga
+     * yigirma beshinchisi qo'shilsa — savol unda chiqmay qolardi.
+     *
+     * Endi savol uch darajaning birortasiga tegishli bo'ladi:
+     *
+     *   hammasida            — request_kind NULL,  lab_test_id NULL
+     *   butun operatsiya /   — request_kind bor,   lab_test_id NULL
+     *     butun tahlil
+     *   guruh yoki tekshiruv — request_kind 'lab', lab_test_id bor
+     *
+     * Guruhga bog'langan savol ichidagi hamma tekshiruvda chiqadi,
+     * shu jumladan ertaga qo'shiladiganida ham.
+     *
+     * Eski yozuvlar: tekshiruvga bog'langani — tahlil so'rovi, chunki
+     * boshqa turda u baribir hech qachon chiqmagan.
+     */
+    id: '033_step_scope',
+    up: (db) => {
+      addColumn(db, 'request_steps', 'request_kind', 'TEXT');
+      db.prepare(
+        `UPDATE request_steps SET request_kind = 'lab'
+          WHERE lab_test_id IS NOT NULL AND request_kind IS NULL`,
+      ).run();
+    },
+  },
 ];
 
 /**

@@ -438,7 +438,6 @@ export const uz = {
   'wz.test.search': 'Qidiruv',
   'wz.test.searchHint': 'Masalan: tizza, bosh miya, qorin…',
   'wz.test.none': 'Bunday tekshiruv topilmadi. Boshqacha yozib ko‘ring.',
-  'wz.test.from': '{n} dan',
   'wz.review.test': 'Tekshiruv',
   'wz.organ.title': 'Qaysi organ uchun?',
   'wz.organ.sub': 'Tekshiriladigan sohani tanlang',

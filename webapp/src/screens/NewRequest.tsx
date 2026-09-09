@@ -7,7 +7,7 @@
  * Holat bitta joyda (`draft`) turadi; har qadam faqat o'z bo'lagini o'zgartiradi.
  * Orqaga qaytish hech narsani yo'qotmaydi.
  */
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
@@ -20,6 +20,7 @@ import { TermsCheckbox, TermsSheet } from '@/components/Terms';
 import { OperationStep } from '@/components/wizard/OperationStep';
 import { DocumentsStep } from '@/components/wizard/DocumentsStep';
 import { CustomStep } from '@/components/wizard/CustomStep';
+import { DateField } from '@/components/wizard/DateField';
 import { PriceChart } from '@/components/Visuals';
 import {
   Button,
@@ -27,7 +28,6 @@ import {
   Chip,
   CountUp,
   Field,
-  IconClock,
   Input,
   Notice,
   Screen,
@@ -40,6 +40,7 @@ import {
   REQUEST_KINDS,
   STEP_FLOWS,
   ageFromBirthYear,
+  stepMatchesScope,
   type BuiltinStep,
   type ChatTurn,
   type Gender,
@@ -186,8 +187,25 @@ export function NewRequest() {
    * bemorga hech qachon ko'rmaydigan bosqichlarni ham sanardi.
    */
   const steps = useMemo(
-    () => allSteps.filter((s) => (s.flows ?? REQUEST_KINDS).includes(draft.kind)),
-    [allSteps, draft.kind],
+    () =>
+      allSteps.filter((s) => {
+        if (!(s.flows ?? REQUEST_KINDS).includes(draft.kind)) return false;
+        // Tayyor bosqichda qamrov yo'q — u oqim bo'yicha ajratilgan
+        if (s.kind === 'builtin') return true;
+        /*
+         * Admin savoli daraxtning bir shoxiga bog'langan bo'lishi
+         * mumkin. Ilgari bu yerda tekshirilmasdi: "MRT dan oldin
+         * metall implant bormi" degan savol qon tahlilida ham,
+         * operatsiya so'rovida ham chiqardi, keyin esa server uni
+         * javobsiz deb tashlab yuborardi.
+         */
+        return stepMatchesScope(s, {
+          kind: draft.kind,
+          labTestId: draft.labTest?.id ?? null,
+          labTestParentId: draft.labTest?.parentId ?? null,
+        });
+      }),
+    [allSteps, draft.kind, draft.labTest],
   );
 
   const current = steps[Math.min(index, steps.length - 1)];
@@ -578,7 +596,6 @@ function TestStep({ draft, onPick }: { draft: Draft; onPick: (test: LabTest) => 
         <strong>{name(x)}</strong>
         {sub && <span className="tiny">{sub}</span>}
       </span>
-      {x.priceUzs != null && <span className="tiny num">{t('wz.test.from', { n: money(x.priceUzs, lang) })}</span>}
     </Card>
   );
 
@@ -924,70 +941,6 @@ function daysBetween(from: string, to: string): number {
   const a = new Date(from + 'T12:00:00Z').getTime();
   const b = new Date(to + 'T12:00:00Z').getTime();
   return Math.round((b - a) / 86_400_000) + 1;
-}
-
-/**
- * Sana maydoni — o'qiladigan ko'rinish, tizim tanlagichi.
- *
- * Muammo: `<input type="date">` sanani BRAUZER tilida ko'rsatadi.
- * Telegram ichida bu ko'pincha amerikacha `09/17/2026` bo'lib
- * chiqadi va bemor uni 9-sentabr deb o'qiydi — ya'ni noto'g'ri
- * kunni tanlab, buni sezmaydi ham.
- *
- * Shuning uchun maydon o'zimizning matnimizni ko'rsatadi
- * ("17 sen 2026"), haqiqiy `input` esa ustida shaffof turadi:
- * bosilganda tizimning o'z tanlagichi ochiladi — telefonda u
- * eng qulay va tanish narsa. Ya'ni ko'rinish bizniki, tanlash
- * tizimniki.
- */
-function DateField({
-  label,
-  value,
-  min,
-  onChange,
-}: {
-  label: string;
-  value: string | null;
-  min: string;
-  onChange: (v: string | null) => void;
-}) {
-  const { t, lang } = useApp();
-  const ref = useRef<HTMLInputElement>(null);
-
-  return (
-    <label className="datefield">
-      <span className="datefield__label">{label}</span>
-
-      <span className={`datefield__box ${value ? 'is-set' : ''}`}>
-        <IconClock size={15} />
-        <span className="datefield__value">
-          {value ? formatDate(value, lang) : t('wz.date.pick')}
-        </span>
-
-        <input
-          ref={ref}
-          className="datefield__input"
-          type="date"
-          min={min}
-          value={value ?? ''}
-          aria-label={label}
-          onClick={() => {
-            /*
-             * `showPicker()` — kompyuterda bosish tanlagichni ochsin.
-             * Telefonda maydonga fokus tushishining o'zi yetarli;
-             * eski brauzerlarda usul yo'q va xato beradi.
-             */
-            try {
-              ref.current?.showPicker?.();
-            } catch {
-              /* tanlagich baribir fokus orqali ochiladi */
-            }
-          }}
-          onChange={(e) => onChange(e.target.value || null)}
-        />
-      </span>
-    </label>
-  );
 }
 
 function DateStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {

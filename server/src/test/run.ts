@@ -1872,8 +1872,9 @@ async function main() {
   const msktKids = tests.filter((x: any) => x.parentId === msktGroup.id);
   check('MRT ichida 24 ta tekshiruv', mrtKids.length === 24, mrtKids.length);
   check('MSKT ichida 32 ta tekshiruv', msktKids.length === 32, msktKids.length);
-  check('tekshiruvda narx bor', mrtKids.every((x: any) => x.priceUzs > 0));
   check('tekshiruvda davomiylik bor', mrtKids.every((x: any) => x.durationMin > 0));
+  // Narx katalogda ko'rsatilmaydi: uni klinika taklifida beradi
+  check('katalogda narx yo‘q', mrtKids.every((x: any) => x.priceUzs === undefined));
 
   const mrt = mrtKids.find((x: any) => x.nameUz.includes('Tizza'));
   const blood = tests.find((x: any) => x.slug === 'blood');
@@ -1967,12 +1968,11 @@ async function main() {
     nameRu: 'Тест',
     icon: '🧪',
     parentId: mrtGroup.id,
-    priceUzs: 250_000,
     durationMin: 20,
   });
   check('admin tekshiruv qo‘shdi', made.id > 0 && made.nameUz === 'Sinov tekshiruvi');
   check('tekshiruv guruhga kirdi', made.parentId === mrtGroup.id);
-  check('narx saqlandi', made.priceUzs === 250_000);
+  check('davomiylik saqlandi', made.durationMin === 20);
 
   throws(
     'ichida tekshiruvi bor guruh o‘chirilmaydi',
@@ -2009,6 +2009,7 @@ async function main() {
     subUz: x.subUz,
     subRu: x.subRu,
     options: x.options,
+    requestKind: x.requestKind ?? null,
     labTestId: x.labTestId ?? null,
   }));
 
@@ -2031,18 +2032,15 @@ async function main() {
     null,
   );
 
-  check(
-    'savol MRT so‘rovida chiqadi',
-    steps2.customSteps(mrt.id).some((x: any) => x.key === 'metal_implant'),
-  );
+  const has = (key: string, scope: any) =>
+    steps2.customSteps(scope).some((x: any) => x.key === key);
+
+  check('savol MRT so‘rovida chiqadi', has('metal_implant', { kind: 'lab', labTestId: mrt.id }));
   check(
     'savol boshqa tekshiruvda chiqmaydi',
-    !steps2.customSteps(blood.id).some((x: any) => x.key === 'metal_implant'),
+    !has('metal_implant', { kind: 'lab', labTestId: blood.id }),
   );
-  check(
-    'savol operatsiya so‘rovida chiqmaydi',
-    !steps2.customSteps(null).some((x: any) => x.key === 'metal_implant'),
-  );
+  check('savol operatsiya so‘rovida chiqmaydi', !has('metal_implant', { kind: 'operation' }));
 
   throws(
     'MRT so‘rovida savol majburiy',
@@ -2055,6 +2053,81 @@ async function main() {
   );
   check('javob berilgach so‘rov o‘tdi', answered.kind === 'lab');
   check('javob saqlandi', (answered.extraAnswers as any)?.metal_implant === false);
+
+  /* ── Savol daraxtning istalgan bo'g'iniga bog'lanadi ── */
+
+  const q = (key: string, scope: any, kind = 'boolean') => ({
+    key,
+    kind,
+    enabled: true,
+    required: false,
+    titleUz: `Savol ${key}`,
+    titleRu: null,
+    subUz: null,
+    subRu: null,
+    options: null,
+    ...scope,
+  });
+
+  steps2.saveSteps(
+    [
+      ...baseSteps,
+      q('mrt_all', { labTestId: mrtGroup.id }),
+      q('lab_all', { requestKind: 'lab' }),
+      q('op_all', { requestKind: 'operation' }),
+      q('when_ready', {}, 'date'),
+    ],
+    null,
+  );
+
+  // Guruhga bog'langan savol ICHIDAGI hamma tekshiruvda chiqadi
+  check('guruh savoli MRT turida chiqadi', has('mrt_all', { kind: 'lab', labTestId: mrt.id }));
+  check(
+    'guruh savoli boshqa guruhda chiqmaydi',
+    !has('mrt_all', { kind: 'lab', labTestId: blood.id }),
+  );
+  check('guruh savoli guruhning o‘zida ham chiqadi', has('mrt_all', { kind: 'lab', labTestId: mrtGroup.id }));
+
+  // Turga bog'langani — o'sha turdagi HAMMA so'rovda
+  check('tahlil savoli qon tahlilida ham chiqadi', has('lab_all', { kind: 'lab', labTestId: blood.id }));
+  check('tahlil savoli operatsiyada chiqmaydi', !has('lab_all', { kind: 'operation' }));
+  check('operatsiya savoli operatsiyada chiqadi', has('op_all', { kind: 'operation' }));
+  check(
+    'operatsiya savoli tahlilda chiqmaydi',
+    !has('op_all', { kind: 'lab', labTestId: mrt.id }),
+  );
+
+  // Qamrovsiz savol ikkalasida ham
+  check('umumiy savol ikkala turda ham', has('when_ready', { kind: 'operation' }) && has('when_ready', { kind: 'lab' }));
+
+  // Tekshiruv ko'rsatilsa tur avtomatik `lab` bo'ladi
+  check(
+    'tekshiruvli savol avtomatik tahlilga o‘tdi',
+    steps2.listSteps().find((x: any) => x.key === 'mrt_all')?.requestKind === 'lab',
+  );
+  throws(
+    'yo‘q tekshiruvga bog‘lab bo‘lmaydi',
+    () => steps2.saveSteps([...baseSteps, q('bad_scope', { labTestId: 999_999 })], null),
+    'unknown_lab_test',
+  );
+
+  /* ── Sana savoli ── */
+
+  check(
+    'sana javobi qabul qilindi',
+    steps2.validateAnswers({ when_ready: '2026-12-31' }, { kind: 'operation' }) ===
+      '{"when_ready":"2026-12-31"}',
+  );
+  throws('buzuq sana rad etiladi', () =>
+    steps2.validateAnswers({ when_ready: '31.12.2026' }, { kind: 'operation' }),
+  );
+  throws('mavjud bo‘lmagan kun rad etiladi', () =>
+    steps2.validateAnswers({ when_ready: '2026-02-30' }, { kind: 'operation' }),
+  );
+  check(
+    'sana klinikaga mahalliy tartibda ko‘rinadi',
+    steps2.readAnswers('{"when_ready":"2026-12-31"}', 'uz')[0]?.value === '31.12.2026',
+  );
 
   // Sinovdan keyin tozalaymiz
   steps2.saveSteps(baseSteps, null);
@@ -2509,12 +2582,12 @@ async function main() {
   );
 
   // ── Javoblarni tekshirish ──
-  check('to‘g‘ri javob qabul qilindi', steps.validateAnswers({ smoking: 'yes' }) === '{"smoking":"yes"}');
-  throws('noma‘lum variant rad etiladi', () => steps.validateAnswers({ smoking: 'maybe' }));
-  throws('majburiy savolsiz o‘tmaydi', () => steps.validateAnswers({}));
+  check('to‘g‘ri javob qabul qilindi', steps.validateAnswers({ smoking: 'yes' }, { kind: 'operation' }) === '{"smoking":"yes"}');
+  throws('noma‘lum variant rad etiladi', () => steps.validateAnswers({ smoking: 'maybe' }, { kind: 'operation' }));
+  throws('majburiy savolsiz o‘tmaydi', () => steps.validateAnswers({}, { kind: 'operation' }));
   check(
     'noma‘lum kalit e‘tiborsiz qoldiriladi',
-    steps.validateAnswers({ smoking: 'no', qadimgi: 'x' }) === '{"smoking":"no"}',
+    steps.validateAnswers({ smoking: 'no', qadimgi: 'x' }, { kind: 'operation' }) === '{"smoking":"no"}',
   );
 
   // Ko'rsatish uchun ochish
@@ -2531,7 +2604,7 @@ async function main() {
   );
   check(
     'sinovdan keyin tiklandi',
-    steps.listSteps().length === BUILTIN_STEPS.length && steps.validateAnswers({}) === null,
+    steps.listSteps().length === BUILTIN_STEPS.length && steps.validateAnswers({}, { kind: 'operation' }) === null,
   );
 
   /* ══════════════  To'lov bosqichi  ══════════════ */

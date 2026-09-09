@@ -276,7 +276,9 @@ export interface Highlights {
 
 /** Admin panel bosqichni saqlashda yuboradigan shakl */
 export interface StepDraft {
-  /** Savol faqat shu tekshiruvda chiqadi; null — umumiy */
+  /** Savol faqat shu turdagi so'rovda; null — ikkalasida ham */
+  requestKind?: RequestKind | null;
+  /** Savol daraxtning shu shoxida; null — butun turda */
   labTestId?: number | null;
   key: string;
   kind: StepKind;
@@ -350,7 +352,6 @@ export const api = {
     position?: number;
     active?: boolean;
     parentId?: number | null;
-    priceUzs?: number | null;
     durationMin?: number | null;
   }) => post<LabTest>('/admin/lab-tests', body),
   updateLabTest: (
@@ -362,7 +363,6 @@ export const api = {
       position: number;
       active: boolean;
       parentId: number | null;
-      priceUzs: number | null;
       durationMin: number | null;
     }>,
   ) => patch<LabTest>(`/admin/lab-tests/${id}`, body),

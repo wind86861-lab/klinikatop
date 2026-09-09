@@ -419,7 +419,6 @@ export const ru: Record<TranslationKey, string> = {
   'wz.test.search': 'Поиск',
   'wz.test.searchHint': 'Например: колено, головной мозг, живот…',
   'wz.test.none': 'Ничего не найдено. Попробуйте иначе.',
-  'wz.test.from': 'от {n}',
   'wz.review.test': 'Обследование',
   'wz.organ.title': 'Для какого органа?',
   'wz.organ.sub': 'Выберите обследуемую область',

@@ -28,7 +28,14 @@ import { haptic } from '@/lib/telegram';
 import { spring } from '@/lib/motion';
 import { Button, Card, Chip, Field, Input, Notice, Section, Sheet, Skeleton, Textarea } from '@/ui';
 import { Async, useResource } from '@/screens/clinic/shell';
-import { BUILTIN_STEPS, type LabTest, type RequestStep, type StepKind, type StepOption } from '@shared/types';
+import {
+  BUILTIN_STEPS,
+  type LabTest,
+  type RequestKind,
+  type RequestStep,
+  type StepKind,
+  type StepOption,
+} from '@shared/types';
 
 /** Tayyor bosqichlarning admin panelidagi nomi va nima qilishi. */
 const BUILTIN_INFO: Record<string, { name: string; what: string }> = {
@@ -51,10 +58,11 @@ const KIND_LABEL: Record<StepKind, string> = {
   boolean: 'Ha / Yo‘q',
   choice: 'Bitta tanlov',
   multichoice: 'Bir nechta tanlov',
+  date: 'Sana',
 };
 
 /** Admin yarata oladigan savol turlari — `builtin` bu yerda yo'q, u kod. */
-const CREATABLE: StepKind[] = ['text', 'longtext', 'number', 'boolean', 'choice', 'multichoice'];
+const CREATABLE: StepKind[] = ['choice', 'multichoice', 'text', 'longtext', 'number', 'boolean', 'date'];
 
 const isBuiltin = (key: string) => (BUILTIN_STEPS as readonly string[]).includes(key);
 
@@ -129,6 +137,7 @@ export function RequestStepsScreen() {
         subUz: s.subUz,
         subRu: s.subRu,
         options: s.options,
+        requestKind: s.requestKind ?? null,
         labTestId: s.labTestId ?? null,
       }));
       const next = await api.saveRequestSteps(body);
@@ -171,6 +180,7 @@ export function RequestStepsScreen() {
                   <StepRow
                     key={step.key}
                     step={step}
+                    labTests={labTests}
                     position={i}
                     total={list.length}
                     onUp={() => move(server, i, -1)}
@@ -223,6 +233,7 @@ export function RequestStepsScreen() {
                    */
                   key={editing.key}
                   step={editing}
+                  labTests={labTests}
                   onDone={(row) => {
                     upsert(server, row);
                     setEditing(null);
@@ -248,10 +259,215 @@ export function RequestStepsScreen() {
   );
 }
 
+/* ─────────────────────────  Savol qamrovi  ───────────────────────── */
+
+/**
+ * Savol qayerda chiqishini tanlash — daraxt bo'ylab.
+ *
+ * Ilgari bu yerda bitta tekis chiplar qatori turardi: "Hammasida" va
+ * keyin katalogdagi 56 ta tekshiruvning har biri. Ekranga sig'masdi,
+ * ichida qidirib bo'lmasdi va eng keragi — MRT ning O'ZIGA savol
+ * qo'shib bo'lmasdi. "Metall implant bormi" degan savolni 24 ta MRT
+ * turiga birma-bir qo'shish kerak edi, ertaga yigirma beshinchisi
+ * qo'shilsa esa unda savol chiqmay qolardi.
+ *
+ * Endi tanlov daraxtning istalgan tugunida bo'ladi va har bir tugun
+ * o'zidan pastdagilarning HAMMASINI qamraydi:
+ *
+ *   Hamma so'rovlar
+ *   ├── Operatsiya so'rovlari
+ *   └── Tahlil so'rovlari
+ *       ├── MRT  ← shu yerda tanlangan savol 24 tasida ham chiqadi
+ *       │   └── Bosh miya MRT  ← faqat bittasida
+ *       └── MSKT
+ */
+export interface Scope {
+  requestKind: RequestKind | null;
+  labTestId: number | null;
+}
+
+const sameScope = (a: Scope, b: Scope) =>
+  a.requestKind === b.requestKind && a.labTestId === b.labTestId;
+
+/**
+ * Qamrovning qisqa nomi — bosqichlar ro'yxatidagi yorliq uchun.
+ *
+ * Katalogdagi rasmiy nom uzun ("MRT (Magnit Rezonansli Tomografiya)")
+ * va yorliqqa sig'maydi, shuning uchun qavs ichidagi tushuntirish
+ * olib tashlanadi: ro'yxatda savolning qayerdaligi bir qarashda
+ * ko'rinishi kerak, to'liq nom esa tahrirlash varag'ida turadi.
+ */
+function scopeLabel(scope: Scope, labTests: LabTest[]): string {
+  if (scope.labTestId != null) {
+    const test = labTests.find((x) => x.id === scope.labTestId);
+    if (!test) return 'Tekshiruv';
+    const short = test.nameUz.replace(/\s*\(.*\)\s*$/, '');
+    return test.hasChildren ? `${test.icon} ${short} — hammasi` : short;
+  }
+  if (scope.requestKind === 'operation') return 'Operatsiya so‘rovlari';
+  if (scope.requestKind === 'lab') return 'Tahlil so‘rovlari';
+  return 'Hamma so‘rovlarda';
+}
+
+function ScopeRow({
+  label,
+  badge,
+  depth,
+  active,
+  open,
+  hasKids,
+  onSelect,
+  onToggle,
+}: {
+  label: string;
+  /** Guruh qatorida — "ichidagi hammasini qamraydi" degan belgi */
+  badge?: string;
+  depth: number;
+  active: boolean;
+  open?: boolean;
+  hasKids?: boolean;
+  onSelect: () => void;
+  onToggle?: () => void;
+}) {
+  return (
+    <div className={`scope__row ${active ? 'is-active' : ''}`} style={{ '--depth': depth } as any}>
+      <button type="button" className="scope__pick" onClick={onSelect}>
+        <span className="scope__dot" aria-hidden />
+        <span className="scope__label">{label}</span>
+        {badge && <span className="scope__badge">{badge}</span>}
+      </button>
+
+      {/*
+        Yoyish tanlashdan AJRATILGAN. Bir tugma ikkovini ham qilsa,
+        "MRT ga qo'shaman" degan odam ichini ochish uchun bosganda
+        qamrovni bilmasdan o'zgartirib yuborardi.
+      */}
+      {hasKids && (
+        <button
+          type="button"
+          className={`scope__toggle ${open ? 'is-open' : ''}`}
+          onClick={onToggle}
+          aria-label={open ? 'Yopish' : 'Ochish'}
+          aria-expanded={open}
+        >
+          ⌄
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ScopeBranch({ open, children }: { open: boolean; children: React.ReactNode }) {
+  return (
+    <AnimatePresence initial={false}>
+      {open && (
+        <m.div
+          className="scope__kids"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {children}
+        </m.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function ScopePicker({
+  value,
+  labTests,
+  onChange,
+}: {
+  value: Scope;
+  labTests: LabTest[];
+  onChange: (scope: Scope) => void;
+}) {
+  const groups = useMemo(() => labTests.filter((x) => x.parentId === null), [labTests]);
+  const kidsOf = (id: number) => labTests.filter((x) => x.parentId === id);
+
+  /** Tanlangan yozuvning otasi — shox ochiq holda ochilsin */
+  const selectedParent = value.labTestId
+    ? (labTests.find((x) => x.id === value.labTestId)?.parentId ?? null)
+    : null;
+
+  const [labOpen, setLabOpen] = useState(value.requestKind === 'lab');
+  const [openGroup, setOpenGroup] = useState<number | null>(selectedParent);
+
+  const pick = (scope: Scope) => {
+    onChange(scope);
+    haptic.select();
+  };
+
+  return (
+    <div className="scope">
+      <ScopeRow
+        label="Hamma so‘rovlarda"
+        depth={0}
+        active={sameScope(value, { requestKind: null, labTestId: null })}
+        onSelect={() => pick({ requestKind: null, labTestId: null })}
+      />
+
+      <ScopeRow
+        label="Operatsiya so‘rovlari"
+        depth={0}
+        active={sameScope(value, { requestKind: 'operation', labTestId: null })}
+        onSelect={() => pick({ requestKind: 'operation', labTestId: null })}
+      />
+
+      <ScopeRow
+        label="Tahlil so‘rovlari"
+        depth={0}
+        active={sameScope(value, { requestKind: 'lab', labTestId: null })}
+        hasKids={groups.length > 0}
+        open={labOpen}
+        onToggle={() => setLabOpen((v) => !v)}
+        onSelect={() => pick({ requestKind: 'lab', labTestId: null })}
+      />
+
+      <ScopeBranch open={labOpen}>
+        {groups.map((g) => {
+          const kids = kidsOf(g.id);
+          const open = openGroup === g.id;
+
+          return (
+            <div key={g.id}>
+              <ScopeRow
+                label={`${g.icon} ${g.nameUz}`}
+                badge={kids.length ? 'hammasi' : undefined}
+                depth={1}
+                active={value.labTestId === g.id}
+                hasKids={kids.length > 0}
+                open={open}
+                onToggle={() => setOpenGroup(open ? null : g.id)}
+                onSelect={() => pick({ requestKind: 'lab', labTestId: g.id })}
+              />
+
+              <ScopeBranch open={open}>
+                {kids.map((x) => (
+                  <ScopeRow
+                    key={x.id}
+                    label={x.nameUz}
+                    depth={2}
+                    active={value.labTestId === x.id}
+                    onSelect={() => pick({ requestKind: 'lab', labTestId: x.id })}
+                  />
+                ))}
+              </ScopeBranch>
+            </div>
+          );
+        })}
+      </ScopeBranch>
+    </div>
+  );
+}
+
 /* ─────────────────────────  Bitta qator  ───────────────────────── */
 
 function StepRow({
   step,
+  labTests,
   position,
   total,
   onUp,
@@ -261,6 +477,7 @@ function StepRow({
   onRemove,
 }: {
   step: RequestStep;
+  labTests: LabTest[];
   position: number;
   total: number;
   onUp: () => void;
@@ -290,6 +507,15 @@ function StepRow({
           <b>{title}</b>
           <Chip size="sm">{KIND_LABEL[step.kind]}</Chip>
           {step.locked && <Chip size="sm">Qulflangan</Chip>}
+          {/*
+            Savol qayerda chiqishi — ro'yxatning O'ZIDA. Ilgari buni
+            bilish uchun har birini ochib ko'rish kerak edi.
+          */}
+          {!builtin && (
+            <Chip size="sm">
+              {scopeLabel({ requestKind: step.requestKind ?? null, labTestId: step.labTestId ?? null }, labTests)}
+            </Chip>
+          )}
         </div>
         <p className="muted stepRow__what">
           {builtin ? info?.what ?? step.key : step.subUz || `Kalit: ${step.key}`}
@@ -326,7 +552,15 @@ function StepRow({
 
 /* ─────────────────────────  Matn tahriri  ───────────────────────── */
 
-function StepEditor({ step, onDone }: { step: RequestStep; onDone: (row: RequestStep) => void }) {
+function StepEditor({
+  step,
+  labTests,
+  onDone,
+}: {
+  step: RequestStep;
+  labTests: LabTest[];
+  onDone: (row: RequestStep) => void;
+}) {
   const [row, setRow] = useState<RequestStep>(step);
   const set = (part: Partial<RequestStep>) => setRow((r) => ({ ...r, ...part }));
   const builtin = isBuiltin(row.key);
@@ -361,6 +595,16 @@ function StepEditor({ step, onDone }: { step: RequestStep; onDone: (row: Request
 
       {(row.kind === 'choice' || row.kind === 'multichoice') && (
         <OptionsEditor options={row.options ?? []} onChange={(options) => set({ options })} />
+      )}
+
+      {!builtin && (
+        <Field label="Qayerda chiqadi" hint="Tanlangan bo‘g‘in va uning ichidagi hammasi">
+          <ScopePicker
+            value={{ requestKind: row.requestKind ?? null, labTestId: row.labTestId ?? null }}
+            labTests={labTests}
+            onChange={(scope) => set(scope)}
+          />
+        </Field>
       )}
 
       <Button block onClick={() => onDone(row)}>
@@ -432,11 +676,11 @@ function NewQuestion({
 }) {
   const [kind, setKind] = useState<StepKind>('choice');
   /*
-   * Savol qaysi tekshiruvga tegishli. `null` — umumiy: hamma
-   * so'rovda chiqadi. "Qon suyultiruvchi dori ichasizmi" degan
-   * savol MRT da o'rinli, qon tahlilida esa keraksiz.
+   * Savol qayerda chiqadi. Boshida — hamma so'rovda; adminning
+   * ko'pchilik savoli shunday va uni tanlash uchun hech narsa
+   * qilish kerak emas.
    */
-  const [labTestId, setLabTestId] = useState<number | null>(null);
+  const [scope, setScope] = useState<Scope>({ requestKind: null, labTestId: null });
   const [titleUz, setTitleUz] = useState('');
   const [titleRu, setTitleRu] = useState('');
   const [options, setOptions] = useState<StepOption[]>([
@@ -485,17 +729,8 @@ function NewQuestion({
         <Input value={titleRu} onChange={(e) => setTitleRu(e.target.value)} maxLength={120} />
       </Field>
 
-      <Field label="Qaysi so‘rovda chiqadi" hint="Tekshiruv tanlansa — savol faqat o‘sha tahlilda so‘raladi">
-        <div className="chips">
-          <Chip active={labTestId === null} onClick={() => setLabTestId(null)}>
-            Hammasida
-          </Chip>
-          {labTests.map((x) => (
-            <Chip key={x.id} active={labTestId === x.id} onClick={() => setLabTestId(x.id)}>
-              {x.icon} {x.nameUz}
-            </Chip>
-          ))}
-        </div>
+      <Field label="Qayerda chiqadi" hint="Tanlangan bo‘g‘in va uning ichidagi hammasi">
+        <ScopePicker value={scope} labTests={labTests} onChange={setScope} />
       </Field>
 
       {needsOptions && <OptionsEditor options={options} onChange={setOptions} />}
@@ -521,7 +756,7 @@ function NewQuestion({
             options: needsOptions
               ? options.map((o, i) => ({ value: o.value || `v${i + 1}`, uz: o.uz.trim(), ru: o.ru.trim() || o.uz.trim() }))
               : null,
-            labTestId,
+            ...scope,
           })
         }
       >

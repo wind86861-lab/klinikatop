@@ -9,6 +9,7 @@
 import { Chip, Input, Textarea } from '@/ui';
 import { useApp } from '@/store/app';
 import { haptic } from '@/lib/telegram';
+import { DateField } from './DateField';
 import type { WizardStep } from '@shared/types';
 
 export function CustomStep({
@@ -57,6 +58,16 @@ export function CustomStep({
           value={value === undefined || value === null ? '' : String(value)}
           onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
           aria-label={step.title ?? step.key}
+        />
+      )}
+
+      {step.kind === 'date' && (
+        <DateField
+          value={typeof value === 'string' && value ? value : null}
+          onChange={(v) => {
+            onChange(v ?? undefined);
+            haptic.select();
+          }}
         />
       )}
 

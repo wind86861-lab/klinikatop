@@ -174,7 +174,12 @@ export interface LabTestInput {
   active?: boolean;
   /** Qaysi guruhga kiradi (MRT, MSKT). `null` — o'zi guruh */
   parentId?: number | null;
-  priceUzs?: number | null;
+  /*
+   * Narx katalogda YO'Q: uni klinika o'z taklifida beradi va u har
+   * joyda boshqacha. Katalogdagi raqam bemorga va'da bo'lib
+   * ko'rinardi. Bazadagi ustun eski qiymatlari bilan qolgan, lekin
+   * hech qayerda o'qilmaydi.
+   */
   durationMin?: number | null;
 }
 
@@ -192,8 +197,8 @@ export function createLabTest(input: LabTestInput): LabTest {
     const info = db
       .prepare(
         `INSERT INTO lab_tests (slug, name_uz, name_ru, icon, position, active,
-                                parent_id, price_uzs, duration_min)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                parent_id, duration_min)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         slug,
@@ -203,7 +208,6 @@ export function createLabTest(input: LabTestInput): LabTest {
         input.position ?? 999,
         input.active === false ? 0 : 1,
         input.parentId ?? null,
-        input.priceUzs ?? null,
         input.durationMin ?? null,
       );
 
@@ -217,7 +221,7 @@ export function updateLabTest(id: number, input: Partial<LabTestInput>): LabTest
   return tx(() => {
     db.prepare(
       `UPDATE lab_tests SET name_uz = ?, name_ru = ?, icon = ?, position = ?, active = ?,
-                            parent_id = ?, price_uzs = ?, duration_min = ?
+                            parent_id = ?, duration_min = ?
         WHERE id = ?`,
     ).run(
       (input.nameUz ?? current.nameUz).trim().slice(0, 120),
@@ -230,7 +234,6 @@ export function updateLabTest(id: number, input: Partial<LabTestInput>): LabTest
        * hech qachon ko'rinmasdi.
        */
       input.parentId === id ? null : (input.parentId ?? current.parentId),
-      input.priceUzs !== undefined ? input.priceUzs : current.priceUzs,
       input.durationMin !== undefined ? input.durationMin : current.durationMin,
       id,
     );

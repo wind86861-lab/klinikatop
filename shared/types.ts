@@ -230,8 +230,13 @@ export interface LabTest {
   parentId: number | null;
   /** Bolasi bor yozuv TANLANMAYDI: u papka, tekshiruv emas */
   hasChildren: boolean;
-  /** Ma'lumot uchun: bemor byudjetni shunga qarab qo'yadi */
-  priceUzs: number | null;
+  /**
+   * Taxminiy davomiylik — faqat admin katalogida ko'rinadi.
+   *
+   * Narx bu yerda YO'Q va ataylab yo'q: katalogdagi raqam bemor
+   * uchun va'da bo'lib ko'rinardi, holbuki narxni klinika o'z
+   * taklifida beradi va u har joyda boshqacha.
+   */
   durationMin: number | null;
 }
 
@@ -1119,7 +1124,16 @@ export interface RequestSubject {
  * Qolgan turlar — admin o'zi yaratadigan oddiy savollar; javoblari
  * so'rovning `extraAnswers` maydonida saqlanadi.
  */
-export const STEP_KINDS = ['builtin', 'text', 'longtext', 'choice', 'multichoice', 'number', 'boolean'] as const;
+export const STEP_KINDS = [
+  'builtin',
+  'text',
+  'longtext',
+  'choice',
+  'multichoice',
+  'number',
+  'boolean',
+  'date',
+] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Kodda ekrani bor bosqichlar — admin bularni yarata olmaydi, faqat sozlaydi. */
@@ -1192,7 +1206,16 @@ export interface StepOption {
 export interface RequestStep {
   id: number;
   key: string;
-  /** Savol faqat shu tekshiruvda chiqadi; `null` — umumiy */
+  /**
+   * Savol faqat shu turdagi so'rovda chiqadi; `null` — ikkalasida ham.
+   */
+  requestKind?: RequestKind | null;
+  /**
+   * Savol daraxtning shu shoxida chiqadi; `null` — butun turda.
+   *
+   * Guruh (MRT) ko'rsatilsa — ichidagi hamma tekshiruvda; aniq
+   * tekshiruv ko'rsatilsa — faqat o'sha bittasida.
+   */
   labTestId?: number | null;
   kind: StepKind;
   position: number;
@@ -1225,12 +1248,34 @@ export interface WizardStep {
    * qo'shib qo'ya olmaydi.
    */
   flows: readonly RequestKind[];
+  /** Savol faqat shu turdagi so'rovda; `null` — ikkalasida ham */
+  requestKind?: RequestKind | null;
   /**
-   * Savol faqat SHU tekshiruvda chiqadi.
+   * Savol daraxtning shu shoxida chiqadi.
    *
-   * `null` — umumiy savol, hamma so'rovda ko'rinadi. "Qon
-   * suyultiruvchi dori ichasizmi" degan savol MRT da o'rinli, qon
-   * tahlilida esa keraksiz.
+   * `null` — shox bilan cheklanmagan. Guruh ko'rsatilsa ichidagi
+   * hamma tekshiruvda, aniq tekshiruv ko'rsatilsa faqat unda.
+   * "Qon suyultiruvchi dori ichasizmi" degan savol MRT da o'rinli,
+   * qon tahlilida esa keraksiz.
    */
   labTestId?: number | null;
+}
+
+/**
+ * Admin savoli SHU so'rovda chiqadimi.
+ *
+ * Bir xil qoida ikki joyda kerak: ilova savolni ko'rsatishdan oldin,
+ * server esa javobni qabul qilishdan oldin tekshiradi. Ikkitasi
+ * ayrim yozilsa, biri qat'iyroq bo'lib qolishi va bemor javob bergan
+ * savol server tomonidan "noma'lum" deb tashlab yuborilishi mumkin.
+ */
+export function stepMatchesScope(
+  step: { requestKind?: RequestKind | null; labTestId?: number | null },
+  ctx: { kind: RequestKind; labTestId?: number | null; labTestParentId?: number | null },
+): boolean {
+  if (step.requestKind && step.requestKind !== ctx.kind) return false;
+  if (step.labTestId == null) return true;
+  // Shoxga bog'langan savol operatsiya so'rovida hech qachon chiqmaydi
+  if (ctx.kind !== 'lab') return false;
+  return step.labTestId === ctx.labTestId || step.labTestId === ctx.labTestParentId;
 }

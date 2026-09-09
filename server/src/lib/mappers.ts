@@ -275,7 +275,6 @@ export function mapLabTest(r: any, hasChildren = false) {
     icon: r.icon ?? '',
     parentId: r.parent_id ?? null,
     hasChildren,
-    priceUzs: r.price_uzs ?? null,
     durationMin: r.duration_min ?? null,
   };
 }

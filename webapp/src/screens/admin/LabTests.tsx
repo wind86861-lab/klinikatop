@@ -28,7 +28,6 @@ interface Draft {
   icon: string;
   /** Qaysi guruhga kiradi (MRT, MSKT); null — o'zi guruh */
   parentId: number | null;
-  priceUzs: string;
   durationMin: string;
 }
 
@@ -38,7 +37,6 @@ const EMPTY: Draft = {
   nameRu: '',
   icon: '',
   parentId: null,
-  priceUzs: '',
   durationMin: '',
 };
 
@@ -60,7 +58,6 @@ export function LabTests() {
             nameRu: t.nameRu,
             icon: t.icon,
             parentId: t.parentId,
-            priceUzs: t.priceUzs == null ? '' : String(t.priceUzs),
             durationMin: t.durationMin == null ? '' : String(t.durationMin),
           }
         : { ...EMPTY, parentId },
@@ -80,7 +77,6 @@ export function LabTests() {
         nameRu: draft.nameRu.trim() || draft.nameUz.trim(),
         icon: draft.icon.trim(),
         parentId: draft.parentId,
-        priceUzs: num(draft.priceUzs),
         durationMin: num(draft.durationMin),
       };
       if (draft.id) await api.updateLabTest(draft.id, body);
@@ -174,9 +170,6 @@ export function LabTests() {
                           {kids.map((x) => (
                             <div key={x.id} className="labrow labrow--card">
                               <span style={{ flex: 1 }}>{x.nameUz}</span>
-                              {x.priceUzs != null && (
-                                <span className="tiny num">{x.priceUzs.toLocaleString('uz-UZ')}</span>
-                              )}
                               {x.durationMin != null && <span className="tiny">{x.durationMin} daq</span>}
                               <Button size="sm" variant="ghost" onClick={() => open(x)}>
                                 Tahrirlash
@@ -235,15 +228,6 @@ export function LabTests() {
                     </Chip>
                   ))}
               </div>
-            </Field>
-
-            <Field label="Narx (so‘m)" hint="Ma‘lumot uchun — bemor byudjetni shunga qarab qo‘yadi">
-              <Input
-                inputMode="numeric"
-                value={draft.priceUzs}
-                placeholder="300000"
-                onChange={(e) => setDraft({ ...draft, priceUzs: e.target.value })}
-              />
             </Field>
 
             <Field label="Davomiyligi (daqiqa)">

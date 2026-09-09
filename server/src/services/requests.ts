@@ -280,7 +280,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
    * savol boshqa tekshiruvda ham, operatsiya so'rovida ham
    * so'ralmaydi.
    */
-  const extraAnswers = validateAnswers(input.extraAnswers ?? null, labTestId);
+  const extraAnswers = validateAnswers(input.extraAnswers ?? null, { kind, labTestId });
 
   /*
    * Soha zaxirasi FAQAT operatsiya noma'lum bo'lganda ma'noga ega.

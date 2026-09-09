@@ -5422,3 +5422,107 @@
 }
 .lp__foot a { color: var(--body); text-decoration: none; }
 .lp__foot a:hover { color: var(--primary); }
+
+/* ─────────────────────────  Savol qamrovi  ─────────────────────────
+ *
+ * Admin savolni daraxtning qaysi bo'g'iniga qo'shayotganini tanlaydi.
+ * Chuqurlik `--depth` orqali beriladi: qatorning o'zi qaysi darajada
+ * turganini bilmaydi, shuning uchun yangi daraja qo'shilsa uslub
+ * o'zgarmaydi.
+ */
+.scope {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  overflow: hidden auto;
+  /* 56 ta tekshiruv varaqni cheksiz cho'zib yubormasin */
+  max-height: 52vh;
+}
+
+.scope__row {
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--line);
+}
+
+.scope > .scope__row:first-child {
+  border-top: 0;
+}
+
+.scope__row.is-active {
+  background: var(--primary-soft);
+}
+
+.scope__pick {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 44px;
+  padding: var(--s-2) var(--s-2) var(--s-2) calc(var(--s-3) + var(--depth, 0) * var(--s-4));
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: var(--t-sm);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.scope__label {
+  flex: 1;
+}
+
+/* Guruh qatoridagi belgi: "bu tugun ichidagi hammasini qamraydi" */
+.scope__badge {
+  flex: none;
+  padding: 2px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--accent-pale);
+  color: var(--accent-ink);
+  font-size: var(--t-xs);
+  font-weight: 600;
+}
+
+.scope__dot {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--field-line);
+  border-radius: 50%;
+  transition: border-color var(--d-micro) var(--ease), background var(--d-micro) var(--ease);
+}
+
+.scope__row.is-active .scope__dot {
+  border-color: var(--primary);
+  background: var(--primary);
+  /* Ichkaridagi halqa — belgilangani uzoqdan ham ko'rinsin */
+  box-shadow: inset 0 0 0 3px var(--card);
+}
+
+.scope__row.is-active .scope__label {
+  font-weight: 600;
+  color: var(--primary-deep);
+}
+
+.scope__toggle {
+  flex: none;
+  width: 44px;
+  background: none;
+  border: 0;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform var(--d-base) var(--ease);
+}
+
+.scope__toggle.is-open {
+  transform: rotate(180deg);
+}
+
+.scope__kids {
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
