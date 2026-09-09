@@ -7,18 +7,22 @@
  * birma-bir izlash — ko'pchilik uchun umuman bajarib bo'lmaydigan ish.
  * Rasm esa bir tegishda tayyor.
  *
- * ── Nega `getUserMedia` emas ──
+ * ── Kamera nima uchun sahifaning o'zida ──
  *
- * Telegram WebView ichida kamera oqimini o'zimiz ochish ishonchsiz:
- * ruxsat so'rovi ba'zi qurilmalarda umuman ko'rinmaydi va xatolik
- * jimgina bo'ladi. `<input capture>` esa tizimning O'Z kamerasini
- * ochadi — ruxsatni ham, ko'rinishni ham operatsion tizim boshqaradi,
- * ya'ni bemor tanish ekranni ko'radi va rasm sifati ham yaxshiroq.
+ * Avval `<input type="file" capture="environment">` ishlatilgandi —
+ * standart yo'l va telefon brauzerida kamerani darhol ochadi. Lekin
+ * TELEGRAM WEBVIEW `capture` ni e'tiborsiz qoldiradi va oddiy fayl
+ * tanlagichni ko'rsatadi: bemor "Rasmga olish" ni bosib, galereyaga
+ * tushib qolardi. Shuning uchun kamera `CameraSheet` ichida
+ * `getUserMedia` bilan ochiladi.
  *
- * Ikkita alohida input: biri kameraga, ikkinchisi galereyaga.
- * Bitta tugmada ikkalasini birlashtirib bo'lmaydi — `capture` bor
- * bo'lsa brauzer galereyani taklif qilmaydi, yo'q bo'lsa esa
- * to'g'ridan-to'g'ri kamera ochilmaydi.
+ * `<input capture>` baribir qoladi — zaxira sifatida. Kamera oqimi
+ * yo'q brauzerda yoki ruxsat berilmaganda tugma o'shanga o'tadi,
+ * ya'ni bemor hech qachon boshi berk ko'chaga tushmaydi.
+ *
+ * Galereya esa alohida input: `capture` bor bo'lsa brauzer galereyani
+ * taklif qilmaydi, shuning uchun ikkovini bitta tugmaga
+ * birlashtirib bo'lmaydi.
  */
 import { useRef, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
@@ -28,6 +32,7 @@ import { haptic } from '@/lib/telegram';
 import { spring } from '@/lib/motion';
 import { Button, Notice, Skeleton } from '@/ui';
 import { FileThumb } from './FileThumb';
+import { CameraSheet, cameraSupported } from './CameraSheet';
 import type { StoredFile } from '@shared/types';
 
 const MAX_FILES = 5;
@@ -44,6 +49,7 @@ export function ReferralStep({
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [camera, setCamera] = useState(false);
 
   const full = draft.files.length >= MAX_FILES;
 
@@ -104,6 +110,34 @@ export function ReferralStep({
     if (input) input.value = '';
   };
 
+  /** Kamera bergan kadr — fayl tanlash oqimidan o'tmaydi, to'g'ridan-to'g'ri yuklanadi */
+  const uploadShot = async (shot: { dataBase64: string; mimeType: string; name: string }) => {
+    setUploading(true);
+    try {
+      const stored = await api.uploadFile({
+        ...shot,
+        kind: 'xulosa',
+        label: t('wz.ref.fileLabel'),
+      });
+      haptic.success();
+      patch({ files: [...draft.files, stored] });
+    } catch (err: any) {
+      toast(err?.message ?? t('common.error'), 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  /*
+   * Kamera oqimi bor bo'lsa o'zimiznikini ochamiz, aks holda
+   * tizim tanlagichiga o'tamiz. Ikkinchisi Telegramda galereyani
+   * ochib qo'yishi mumkin, lekin hech narsadan ko'ra yaxshiroq.
+   */
+  const openCamera = () => {
+    if (cameraSupported()) setCamera(true);
+    else cameraRef.current?.click();
+  };
+
   const remove = (id: string) => {
     haptic.tap();
     patch({ files: draft.files.filter((f) => f.id !== id) });
@@ -139,7 +173,7 @@ export function ReferralStep({
       />
 
       <div className="stack" style={{ gap: 'var(--s-2)' }}>
-        <Button block loading={uploading} disabled={full} onClick={() => cameraRef.current?.click()}>
+        <Button block loading={uploading} disabled={full} onClick={openCamera}>
           {t('wz.ref.camera')}
         </Button>
         <Button
@@ -189,6 +223,12 @@ export function ReferralStep({
       </AnimatePresence>
 
       <Notice tone="info">{t('wz.ref.hint')}</Notice>
+
+      <CameraSheet
+        open={camera}
+        onClose={() => setCamera(false)}
+        onShot={(shot) => void uploadShot(shot)}
+      />
     </>
   );
 }

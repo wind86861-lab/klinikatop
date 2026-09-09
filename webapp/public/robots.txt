@@ -1,0 +1,11 @@
+# Bemor ilovasi va bosh sahifa indekslansin, KIRISH sahifalari esa yo'q.
+#
+# Kabinet va admin paneli parol bilan himoyalangan, lekin qidiruvda
+# chiqib turishi ularni keraksiz e'tibor markaziga qo'yadi: parol
+# terib ko'rishga urinishlar aynan indekslangan kirish sahifalaridan
+# boshlanadi. Bu ruxsatni almashtirmaydi — shunchaki e'lon qilmaydi.
+
+User-agent: *
+Disallow: /kabinet
+Disallow: /admin
+

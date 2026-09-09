@@ -82,7 +82,6 @@ export function Landing() {
       ? 'Получайте заявки пациентов из своего города и отвечайте своей ценой. Проверка — вручную, каждая клиника подтверждается.'
       : 'O‘z shahringizdagi bemor so‘rovlarini oling va o‘z narxingiz bilan javob bering. Tekshiruv qo‘lda — har klinika tasdiqlanadi.',
     clinicCta: ru ? 'Оставить заявку' : 'Ariza qoldirish',
-    clinicLogin: ru ? 'Вход в кабинет' : 'Kabinetga kirish',
   };
 
   const cards: { value: string; label: string }[] = stats
@@ -97,11 +96,16 @@ export function Landing() {
   return (
     <div className="lp">
       {/* ── Ustki qator ── */}
+      {/*
+        Kabinetga kirish havolasi bu yerda ATAYLAB YO'Q.
+        Kirish sahifasi parol bilan himoyalangan, lekin uni bosh
+        sahifada ko'rsatish — tanimagan odamni ham o'sha yerga
+        chaqirish demak: parol terib ko'rishga urinishlar aynan
+        shunday boshlanadi. Klinika o'z havolasini bilib turadi,
+        yangisi esa "Ariza qoldirish" orqali keladi.
+      */}
       <header className="lp__top">
         <span className="lp__mark">KlinikaTop</span>
-        <a className="lp__topLink" href="/kabinet">
-          {t.clinicLogin}
-        </a>
       </header>
 
       {/* ── Sarlavha ── */}
@@ -203,7 +207,6 @@ export function Landing() {
 
       <footer className="lp__foot">
         <span>KlinikaTop</span>
-        <a href="/kabinet">{t.clinicLogin}</a>
       </footer>
     </div>
   );
