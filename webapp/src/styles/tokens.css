@@ -40,6 +40,13 @@
   --s-2: 8px;
   --s-3: 12px;
   --s-4: 16px;
+  /*
+   * 20px — uslublarda ishlatilgan, lekin e'lon qilinmagan edi.
+   * `var(--s-5)` bo'sh qiymat bergani uchun uni ishlatgan qoida
+   * BUTUNLAY bekor bo'lardi: `padding: var(--s-5) var(--s-4)`
+   * yozilgan ikki blok umuman padding'siz chiqardi.
+   */
+  --s-5: 20px;
   --s-6: 24px;
   --s-8: 32px;
   --s-12: 48px;

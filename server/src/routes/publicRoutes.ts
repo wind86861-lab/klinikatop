@@ -15,8 +15,24 @@ import { z } from 'zod';
 import { rateLimit } from '../middleware/rateLimit';
 import { submitApplication } from '../services/clinicApplications';
 import { catalogTree, listCities, listOperations } from '../services/catalog';
+import { getPublicStats } from '../services/publicStats';
+import { asyncHandler } from '../lib/asyncHandler';
 
 export const publicRouter = Router();
+
+/**
+ * Bosh sahifa uchun raqamlar — ochiq, jamlangan.
+ *
+ * Bu yerda maxfiy hech narsa yo'q: bemor ismi ham, klinika daromadi
+ * ham, so'rov mazmuni ham chiqmaydi — faqat sonlar.
+ */
+publicRouter.get(
+  '/stats',
+  rateLimit({ name: 'public-stats', windowSec: 60, max: 120 }),
+  asyncHandler(async (_req, res) => {
+    res.json(await getPublicStats());
+  }),
+);
 
 /** Ariza formasi uchun ma'lumotnomalar — ochiq, maxfiy emas. */
 publicRouter.get('/reference', (_req, res) => {

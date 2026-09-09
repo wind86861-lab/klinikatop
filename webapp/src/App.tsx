@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@/store/app';
+import { tg } from '@/lib/telegram';
 import { ErrorState, Screen, Toaster } from '@/ui';
 import { Onboarding } from '@/screens/Onboarding';
 import { Register } from '@/screens/Register';
@@ -39,6 +40,12 @@ const MedicalProfileScreen = lazy(() =>
 );
 const Settings = lazy(() => import('@/screens/Settings').then((mod) => ({ default: mod.Settings })));
 
+/*
+ * Bosh sahifa — faqat brauzerdan kirilganda. Mini App'da hech qachon
+ * ko'rinmaydi, shuning uchun uning kodi ham u yerga tushmaydi.
+ */
+const Landing = lazy(() => import('@/screens/Landing').then((mod) => ({ default: mod.Landing })));
+
 /**
  * Bemor ilovasi — Telegram Mini App.
  *
@@ -49,6 +56,9 @@ export function App() {
   const { ready, error, needsAuth, user, toasts, dismissToast, bootstrap, t } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
+
+  /* Telegram ichidamizmi — bosh sahifa shunga qarab hal qilinadi */
+  const insideTelegram = Boolean(tg?.initData);
 
   useEffect(() => {
     void bootstrap();
@@ -107,6 +117,30 @@ export function App() {
       navigate('/register', { replace: true, state: { next: path === '/' ? '/' : path } });
     }
   }, [ready, user, location.pathname, navigate]);
+
+  /*
+   * Brauzerdan kirgan odam BOSH SAHIFANI ko'radi.
+   *
+   * Bu ilova Telegram Mini App: haqiqiy ish o'sha yerda. Lekin
+   * `klinikatop.uz` ni brauzerda ochadigan odam ham bor — havolani
+   * ko'rgan bemor, qidiruvdan kelgan klinika egasi. Ilgari ular
+   * "Telegramda oching" degan bo'sh quti ko'rardi va nima uchun
+   * ochishlari kerakligini bilmasdi.
+   *
+   * Tekshiruv `initData` bo'yicha, sessiya bo'yicha emas: Telegram
+   * ichida sessiya hali yo'q bo'lishi mumkin va u yerda bosh sahifa
+   * emas, kirish ekrani kerak.
+   *
+   * Sahifa alohida bo'lakda: uni faqat brauzerdan kirgan odam
+   * ko'radi va Mini App'ga og'irlik qilmasligi kerak.
+   */
+  if (!insideTelegram) {
+    return (
+      <Suspense fallback={<Splash />}>
+        <Landing />
+      </Suspense>
+    );
+  }
 
   if (!ready) return <Splash />;
 

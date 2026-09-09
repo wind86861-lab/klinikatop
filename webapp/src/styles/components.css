@@ -5181,3 +5181,244 @@
   border-radius: var(--r-md);
   padding: var(--s-2) var(--s-3);
 }
+
+/* ══════════════════  Bosh sahifa (brauzer)  ══════════════════ */
+
+/*
+ * Bemor ilovasi telefon uchun bitta ustunga qurilgan. Bosh sahifa
+ * esa brauzerda ochiladi — ko'pincha kompyuterda — shuning uchun
+ * uning o'z kengligi va o'z nafas oladigan joyi bor.
+ */
+.lp {
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--body);
+  line-height: 1.55;
+}
+
+.lp__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--s-6) var(--s-6) 0;
+}
+.lp__mark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--t-md);
+  letter-spacing: -0.02em;
+  color: var(--primary);
+}
+.lp__topLink {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--body);
+  text-decoration: none;
+}
+.lp__topLink:hover { color: var(--primary); }
+
+.lp__hero {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: clamp(var(--s-8), 9vw, 96px) var(--s-6) var(--s-8);
+}
+
+.lp__eyebrow {
+  display: inline-block;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin-bottom: var(--s-3);
+}
+
+/*
+ * Sarlavha ikki qatorga ataylab bo'lingan (`\n` + `pre-line`):
+ * "Bitta so'rov." va "Klinikalardan takliflar." — ikki gap, ikki
+ * fikr. Brauzerning o'zi bo'lsa, ular tasodifiy joyda uzilardi.
+ */
+.lp__title {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5.5vw, 3.4rem);
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 var(--s-4);
+  white-space: pre-line;
+  text-wrap: balance;
+}
+
+.lp__lead {
+  font-size: var(--t-md);
+  color: var(--body);
+  max-width: 56ch;
+  margin: 0;
+}
+
+.lp__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  margin-top: var(--s-6);
+}
+
+.lp__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 var(--s-6);
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+  font-size: var(--t-md);
+  text-decoration: none;
+  box-shadow: var(--shadow-lg);
+  transition: transform 0.15s, filter 0.15s;
+}
+.lp__cta:hover { filter: brightness(1.06); }
+.lp__cta:active { transform: scale(0.985); }
+/* Bot manzili hali ma'lum emas — tugma ko'rinadi, lekin ishlamaydi */
+.lp__cta.is-off { opacity: 0.5; box-shadow: none; cursor: default; }
+
+.lp__cta--ghost {
+  background: transparent;
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.lp__ctaHint { font-size: var(--t-sm); color: var(--muted); }
+
+/* ── Raqamlar ── */
+.lp__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s-3);
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 var(--s-6);
+}
+.lp__stat {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--s-6);
+}
+.lp__statValue {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.lp__statLabel {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--t-sm);
+  color: var(--muted);
+}
+
+/* Bitim, baho, javob tezligi — bitta yengil qator */
+.lp__proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-6);
+  max-width: 1040px;
+  margin: var(--s-6) auto 0;
+  padding: 0 var(--s-6);
+  font-size: var(--t-sm);
+  color: var(--muted);
+}
+.lp__proof strong { color: var(--ink); }
+
+/* ── Qanday ishlaydi ── */
+.lp__h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  margin: 0 0 var(--s-2);
+}
+
+.lp__how {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: clamp(var(--s-8), 7vw, 80px) var(--s-6) 0;
+}
+.lp__steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--s-4);
+  margin-top: var(--s-6);
+}
+.lp__step {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--s-6);
+}
+.lp__step strong {
+  display: block;
+  margin: var(--s-3) 0 4px;
+  color: var(--ink);
+  font-size: var(--t-md);
+}
+.lp__step p { margin: 0; font-size: var(--t-sm); }
+
+/*
+ * Qadam raqami — tartib HAQIQATAN ketma-ket bo'lgani uchun bor:
+ * so'rovsiz taklif kelmaydi, taklifsiz tanlov bo'lmaydi.
+ */
+.lp__stepNum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: var(--t-sm);
+  font-weight: 700;
+}
+
+/* ── Klinikalar uchun ── */
+.lp__clinic {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-6);
+  flex-wrap: wrap;
+  max-width: 1040px;
+  margin: clamp(var(--s-8), 7vw, 80px) auto 0;
+  padding: var(--s-6) var(--s-6);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+.lp__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  max-width: 1040px;
+  margin: clamp(var(--s-8), 7vw, 80px) auto 0;
+  padding: var(--s-6);
+  border-top: 1px solid var(--line);
+  font-size: var(--t-sm);
+  color: var(--muted);
+}
+.lp__foot a { color: var(--body); text-decoration: none; }
+.lp__foot a:hover { color: var(--primary); }
