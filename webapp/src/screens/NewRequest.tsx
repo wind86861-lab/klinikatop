@@ -19,6 +19,7 @@ import { cityName } from '@/i18n';
 import { TermsCheckbox, TermsSheet } from '@/components/Terms';
 import { OperationStep } from '@/components/wizard/OperationStep';
 import { DocumentsStep } from '@/components/wizard/DocumentsStep';
+import { ReferralStep } from '@/components/wizard/ReferralStep';
 import { CustomStep } from '@/components/wizard/CustomStep';
 import { DateField } from '@/components/wizard/DateField';
 import { PriceChart } from '@/components/Visuals';
@@ -94,7 +95,7 @@ export interface Draft {
  * javob bermasa bemor ilovasiz qolmasligi kerak — shunda shu ishlatiladi.
  */
 const FALLBACK_STEPS: WizardStep[] = [
-  'who', 'type', 'operation', 'condition', 'documents', 'test', 'weight',
+  'who', 'type', 'referral', 'operation', 'condition', 'documents', 'test', 'weight',
   'region', 'budget', 'date', 'note', 'review',
 ].map((key) => ({
   key,
@@ -235,6 +236,9 @@ export function NewRequest() {
       case 'type':
         // Doim tanlangan qiymat bor, shuning uchun to'siq yo'q
         return true;
+      case 'referral':
+        // Bu oqimning butun mazmuni rasmda — usiz davom etib bo'lmaydi
+        return draft.files.length > 0;
       case 'operation':
         return draft.operation !== null;
       case 'weight':
@@ -277,14 +281,18 @@ export function NewRequest() {
      * tahlilda esa organ va vazn bo'lishi kerak.
      */
     const ready =
-      draft.kind === 'lab' ? Boolean(draft.labTest && draft.weightKg) : Boolean(draft.operation);
+      draft.kind === 'referral'
+        ? draft.files.length > 0
+        : draft.kind === 'lab'
+          ? Boolean(draft.labTest && draft.weightKg)
+          : Boolean(draft.operation);
     if (!ready || !draft.cityId || !termsAccepted) return;
 
     setSubmitting(true);
     try {
       const request = await api.createRequest({
         kind: draft.kind,
-        operationId: draft.kind === 'lab' ? null : (draft.operation?.id ?? null),
+        operationId: draft.kind === 'operation' ? (draft.operation?.id ?? null) : null,
         labTestId: draft.kind === 'lab' ? (draft.labTest?.id ?? null) : null,
         weightKg: draft.kind === 'lab' ? draft.weightKg : null,
         cityId: draft.cityId,
@@ -368,11 +376,28 @@ export function NewRequest() {
                  * o'tsa, so'rov ikkalasini ham olib ketardi va server
                  * qaysi biri to'g'ri ekanini bilmasdi.
                  */
-                patch(
-                  kind === 'lab'
-                    ? { kind, operation: null, conditionText: '', files: [], aiConversation: null, fallbackCategoryId: null }
-                    : { kind, labTest: null, weightKg: null },
-                );
+                patch({
+                  kind,
+                  /*
+                   * Har bir tur o'z maydonlarini olib qoladi, qolgani
+                   * tozalanadi. Aks holda odam operatsiyani tanlab,
+                   * keyin yo'llanmaga o'tsa, so'rov ikkalasini ham
+                   * olib ketardi va server qaysi biri to'g'ri ekanini
+                   * bilmasdi.
+                   */
+                  operation: kind === 'operation' ? draft.operation : null,
+                  conditionText: kind === 'operation' ? draft.conditionText : '',
+                  aiConversation: kind === 'operation' ? draft.aiConversation : null,
+                  fallbackCategoryId: kind === 'operation' ? draft.fallbackCategoryId : null,
+                  labTest: kind === 'lab' ? draft.labTest : null,
+                  weightKg: kind === 'lab' ? draft.weightKg : null,
+                  /*
+                   * Fayllar ikki oqimda ham bor, lekin MA'NOSI boshqa:
+                   * operatsiyada — qo'shimcha hujjat, yo'llanmada —
+                   * so'rovning o'zi. Aralashib ketmasin.
+                   */
+                  files: [],
+                });
                 setDirection(1);
                 setIndex(nextAfter('type'));
                 haptic.press();
@@ -380,6 +405,8 @@ export function NewRequest() {
               }}
             />
           )}
+
+          {step === 'referral' && <ReferralStep draft={draft} patch={patch} />}
 
           {step === 'weight' && <WeightStep draft={draft} patch={patch} />}
           {step === 'test' && (
@@ -459,7 +486,16 @@ export function NewRequest() {
 function TypeStep({ draft, onPick }: { draft: Draft; onPick: (kind: RequestKind) => void }) {
   const { t } = useApp();
 
+  /*
+   * Tartib ATAYLAB shunday: yo'llanma birinchi.
+   *
+   * U eng qisqa yo'l — qog'ozi bor odam katalogda hech narsa
+   * qidirmaydi, uch tegishda so'rov yuboradi. Ro'yxatning pastida
+   * tursa, ko'pchilik uni umuman ko'rmasdan katalogga kirib
+   * ketardi va o'sha yerda qiynalardi.
+   */
   const cards: { kind: RequestKind; icon: string; title: string; sub: string }[] = [
+    { kind: 'referral', icon: '📄', title: t('wz.type.referral'), sub: t('wz.type.referralSub') },
     { kind: 'operation', icon: '🩺', title: t('wz.type.operation'), sub: t('wz.type.operationSub') },
     { kind: 'lab', icon: '🔬', title: t('wz.type.lab'), sub: t('wz.type.labSub') },
   ];
@@ -815,7 +851,11 @@ function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
    * chapida ham juda katta raqamni ko'rsatardi va bemor byudjetni
    * to'g'ri qo'ya olmasdi.
    */
-  const isLab = draft.kind === 'lab';
+  /*
+   * Yo'llanma ham tahlil bilan bir xil o'lchovda: qog'ozda odatda
+   * aynan tahlillar ro'yxati yozilgan bo'ladi.
+   */
+  const isLab = draft.kind !== 'operation';
   const floor = isLab ? 200_000 : 500_000;
 
   const range = useMemo(() => {
@@ -1143,7 +1183,17 @@ function ReviewStep({
           turgan bo'lardi va "tahrirlash" tugmasi mavjud bo'lmagan
           bosqichga olib borardi.
         */}
-        {draft.kind === 'lab' ? (
+        {draft.kind === 'referral' ? (
+          <ReviewRow
+            label={t('wz.review.referral')}
+            value={
+              draft.files.length
+                ? t('wz.review.referralCount', { n: String(draft.files.length) })
+                : empty
+            }
+            onEdit={() => onEdit('referral')}
+          />
+        ) : draft.kind === 'lab' ? (
           <>
             <ReviewRow
               label={t('wz.review.test')}

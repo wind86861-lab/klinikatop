@@ -1949,6 +1949,86 @@ export const MIGRATIONS: Migration[] = [
       ).run();
     },
   },
+  {
+    /**
+     * UCHINCHI SO'ROV TURI: shifokor yo'llanmasi (`referral`).
+     *
+     * `requests.kind` ustunida `CHECK (kind IN ('operation','lab'))`
+     * turibdi, SQLite esa CHECK ni o'zgartirishga ruxsat bermaydi —
+     * jadvalni qayta qurishdan boshqa yo'l yo'q.
+     *
+     * Ustunlar RO'YXATI QO'LDA YOZILMAYDI.
+     *
+     * 029 shu joyda 30 ta ustunni qo'lda ko'chirgan edi va o'shandan
+     * beri yana ustun qo'shilgan (`lab_test_id`). Qo'lda yozilgan
+     * ro'yxat har safar eskiradi va eskirgani ma'lumot yo'qotadi.
+     * Shuning uchun jadval ta'rifi `sqlite_master` dan olinadi va
+     * unda FAQAT bitta so'z almashtiriladi: CHECK ichidagi ro'yxat.
+     * Qolgan hamma narsa — ustunlar, standart qiymatlar, tashqi
+     * kalitlar — bir belgigacha o'zgarishsiz ko'chadi.
+     *
+     * Indekslar ham shu yerdan olinadi va qaytadan yaratiladi:
+     * jadval o'chirilganda ular ham o'chadi.
+     *
+     * `DROP TABLE` bolalarni (offers, deals, ...) olib ketmaydi,
+     * chunki `runMigrations` migratsiya davomida tashqi kalitlarni
+     * o'chirib turadi va oxirida `foreign_key_check` bilan
+     * tekshiradi. 029 aynan shuning yo'qligidan ma'lumot yo'qotgan.
+     */
+    id: '034_referral_requests',
+    up: (db) => {
+      const row = db
+        .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'requests'`)
+        .get() as { sql: string } | undefined;
+      if (!row) throw new Error('requests jadvali topilmadi');
+
+      const OLD = `CHECK (kind IN ('operation','lab'))`;
+      const NEW = `CHECK (kind IN ('operation','lab','referral'))`;
+
+      if (row.sql.includes(NEW)) {
+        // Allaqachon qayta qurilgan — qaytadan qilish shart emas
+      } else if (!row.sql.includes(OLD)) {
+        /*
+         * Kutilgan matn topilmadi. Jimgina o'tib ketish eng yomoni
+         * bo'lardi: cheklov eski holida qolib, yo'llanma so'rovi
+         * prodda "CHECK constraint failed" bilan yiqilardi.
+         */
+        throw new Error('requests.kind cheklovi kutilgan ko‘rinishda emas — qo‘lda tekshiring');
+      } else {
+        const indexes = db
+          .prepare(
+            `SELECT sql FROM sqlite_master
+              WHERE type = 'index' AND tbl_name = 'requests' AND sql IS NOT NULL`,
+          )
+          .all() as { sql: string }[];
+
+        const cols = (db.prepare(`PRAGMA table_info(requests)`).all() as { name: string }[])
+          .map((c) => c.name)
+          .join(', ');
+
+        const create = row.sql
+          .replace(OLD, NEW)
+          .replace(/CREATE TABLE\s+"?requests"?/i, 'CREATE TABLE requests_new');
+
+        db.exec(create);
+        db.exec(`INSERT INTO requests_new (${cols}) SELECT ${cols} FROM requests`);
+        db.exec(`DROP TABLE requests`);
+        db.exec(`ALTER TABLE requests_new RENAME TO requests`);
+        for (const idx of indexes) db.exec(idx.sql);
+      }
+
+      /*
+       * Yangi bosqich: `type` (5) dan keyin, `operation` (10) dan
+       * oldin. Qulflangan — serverdagi `createRequest` rasmsiz
+       * yo'llanma so'rovini qabul qilmaydi, ya'ni bosqichni
+       * o'chirish oqimni butunlay buzardi.
+       */
+      db.prepare(
+        `INSERT OR IGNORE INTO request_steps (key, kind, position, enabled, required, locked)
+         VALUES ('referral', 'builtin', 8, 1, 1, 1)`,
+      ).run();
+    },
+  },
 ];
 
 /**

@@ -157,6 +157,13 @@ export function clinicMatchesRequest(clinicId: number, requestId: number): boole
     | undefined;
   if (!request) return false;
 
+  // Yo'llanma shahardagi hamma tasdiqlangan klinikaga ochiq
+  if (request.kind === 'referral') {
+    return findAllClinicsInCity(request.cityId, {
+      otherRegionsOk: Boolean(request.otherRegionsOk),
+    }).some((c) => c.id === clinicId);
+  }
+
   // Turga qarab: tahlil so'rovida shart organ bo'yicha tekshiriladi
   if (request.kind === 'lab') {
     if (!request.labTestId) return false;
@@ -172,6 +179,37 @@ export function clinicMatchesRequest(clinicId: number, requestId: number): boole
   }).some((c) => c.id === clinicId);
 }
 
+
+/**
+ * Yo'llanma so'rovi uchun klinikalar — shahardagi HAMMASI.
+ *
+ * Bu yerda saralanadigan narsa yo'q: yo'llanmada nima yozilgani
+ * rasmda qoladi va uni faqat odam o'qiy oladi. Shuning uchun shart
+ * bittagina — klinika tasdiqlangan bo'lsin.
+ *
+ * Tartib boshqalari bilan bir xil: avval o'z shahri, keyin obunasi
+ * faol bo'lganlar, keyin reytingi yuqorilar.
+ */
+export function findAllClinicsInCity(
+  cityId: number,
+  options: { otherRegionsOk?: boolean } = {},
+): ClinicPublic[] {
+  const anyCity = Boolean(options.otherRegionsOk);
+
+  const rows = db
+    .prepare(
+      `SELECT c.*
+         FROM clinics c
+        WHERE c.verification = 'approved'
+          AND (@anyCity = 1 OR c.city_id = @cityId)
+        ORDER BY (c.city_id = @cityId) DESC,
+                 (c.subscription_status = 'active') DESC,
+                 c.rating_avg DESC`,
+    )
+    .all({ cityId, anyCity: anyCity ? 1 : 0 }) as any[];
+
+  return rows.map(mapClinicPublic);
+}
 
 /**
  * Tahlil so'rovi uchun klinikalar — ORGAN bo'yicha.

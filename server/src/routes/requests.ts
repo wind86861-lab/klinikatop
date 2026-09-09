@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { forbidden } from '../lib/errors';
+import { REQUEST_KINDS } from '../../../shared/types';
 import {
   cancelRequest,
   deleteRequest,
@@ -20,7 +21,7 @@ const createSchema = z.object({
    * So'rov turi. Berilmasa — operatsiya: eski mijozlar buni
    * yubormaydi va ular uchun hech narsa o'zgarmasligi kerak.
    */
-  kind: z.enum(['operation', 'lab']).default('operation'),
+  kind: z.enum(REQUEST_KINDS).default('operation'),
   /* Operatsiya so'rovida majburiy, tahlilda bo'lmaydi */
   operationId: z.number().int().positive().nullable().optional(),
   /* Tahlil so'rovida majburiy */

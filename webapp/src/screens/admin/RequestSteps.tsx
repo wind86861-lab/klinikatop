@@ -304,6 +304,7 @@ function scopeLabel(scope: Scope, labTests: LabTest[]): string {
     const short = test.nameUz.replace(/\s*\(.*\)\s*$/, '');
     return test.hasChildren ? `${test.icon} ${short} — hammasi` : short;
   }
+  if (scope.requestKind === 'referral') return 'Laboratoriya so‘rovlari';
   if (scope.requestKind === 'operation') return 'Operatsiya so‘rovlari';
   if (scope.requestKind === 'lab') return 'Tahlil so‘rovlari';
   return 'Hamma so‘rovlarda';
@@ -407,6 +408,13 @@ function ScopePicker({
         depth={0}
         active={sameScope(value, { requestKind: null, labTestId: null })}
         onSelect={() => pick({ requestKind: null, labTestId: null })}
+      />
+
+      <ScopeRow
+        label="Laboratoriya so‘rovlari (yo‘llanma)"
+        depth={0}
+        active={sameScope(value, { requestKind: 'referral', labTestId: null })}
+        onSelect={() => pick({ requestKind: 'referral', labTestId: null })}
       />
 
       <ScopeRow

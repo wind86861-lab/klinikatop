@@ -1884,6 +1884,74 @@ async function main() {
    * Tahlil so'rovi operatsiyaga bog'lanmaydi va holat tavsifi
    * so'ralmaydi — o'rniga tekshiruv va vazn majburiy.
    */
+  /* ══════════  Yo'llanma so'rovi (rasm orqali)  ══════════ */
+
+  {
+    const files = require('../services/files');
+
+    /* 1x1 PNG — mazmuni muhim emas, haqiqiy fayl bo'lsa bo'lgani */
+    const png =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    const photo = files.saveFile({
+      ownerId: patient.id,
+      name: 'yollanma.png',
+      mimeType: 'image/png',
+      kind: 'xulosa',
+      dataBase64: png,
+    });
+
+    const refBody = (extra: Record<string, unknown> = {}) => ({
+      patientId: patient.id,
+      kind: 'referral',
+      cityId: tashkent.id,
+      budgetUzs: 300_000,
+      note: null,
+      urgency: 'normal',
+      attachments: [photo.id],
+      aiSuggested: false,
+      acceptTerms: true,
+      ...extra,
+    });
+
+    throws(
+      'rasmsiz yo‘llanma so‘rovi rad etiladi',
+      () => requests.createRequest(refBody({ attachments: [] }) as any),
+      'referral_photo_required',
+    );
+
+    const ref = requests.createRequest(refBody() as any);
+    check('yo‘llanma so‘rovi yaratildi', ref.kind === 'referral');
+    check('katalogdan hech narsa tanlanmagan', ref.operationId === null && ref.labTestId === null);
+    check('rasm so‘rovga ilashdi', ref.attachments.length === 1);
+    check('sarlavha bo‘sh qolmadi', requestTitle(ref) === 'Shifokor yo‘llanmasi');
+
+    /*
+     * Tarqatish: yo'llanma shahardagi HAMMA tasdiqlangan klinikaga
+     * boradi — tahlil ro'yxatini belgilamagani ham.
+     */
+    const approved = db
+      .prepare(`SELECT COUNT(*) n FROM clinics WHERE verification = 'approved' AND city_id = ?`)
+      .get(tashkent.id) as { n: number };
+    check(
+      'yo‘llanma shahardagi hamma klinikaga ketdi',
+      ref.broadcastCount === approved.n,
+      `${ref.broadcastCount} / ${approved.n}`,
+    );
+
+    check(
+      'yo‘llanmada byudjet 200 mingdan boshlanadi',
+      (() => {
+        try {
+          requests.createRequest(refBody({ budgetUzs: 150_000 }) as any);
+          return false;
+        } catch (e: any) {
+          return e.code === 'invalid_budget';
+        }
+      })(),
+    );
+  }
+
   const labBody = (extra: Record<string, unknown>) => ({
     patientId: patient.id,
     kind: 'lab',

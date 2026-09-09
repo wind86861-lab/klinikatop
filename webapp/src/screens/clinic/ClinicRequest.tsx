@@ -259,10 +259,19 @@ export function ClinicRequest() {
       {/* Holat taklif berishdan OLDIN: narx shunga bog'liq */}
       {patientCase && <PatientCaseCard data={patientCase} />}
 
-      {/* Tekshiruv natijalari */}
+      {/*
+        Yuklangan hujjatlar.
+
+        Yo'llanma so'rovida bu QO'SHIMCHA emas, so'rovning O'ZI:
+        katalogdan hech narsa tanlanmagan va nima kerakligi faqat
+        shu rasmda yozilgan. Shuning uchun sarlavha ham boshqacha —
+        klinika buni "yana bir hujjat" deb o'tkazib yubormasin.
+      */}
       {request.files && request.files.length > 0 && (
         <Card className="stack">
-          <h2 className="section-title">{t('wz.review.docs')}</h2>
+          <h2 className="section-title">
+            {request.kind === 'referral' ? t('wz.ref.fileLabel') : t('wz.review.docs')}
+          </h2>
           <AttachmentList files={request.files} />
         </Card>
       )}

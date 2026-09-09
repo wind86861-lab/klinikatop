@@ -11,6 +11,7 @@ import { deleteFiles } from './files';
 import { formatUzs } from '../lib/format';
 import { mapCity, mapLabTest, mapOperation, mapRequest, mapUser } from '../lib/mappers';
 import {
+  REQUEST_KINDS,
   REQUEST_TRANSITIONS,
   UNKNOWN_OPERATION_SLUG,
   isProfileComplete,
@@ -21,7 +22,7 @@ import {
   type RequestKind,
 } from '../../../shared/types';
 import { bus, ch } from './events';
-import { findClinicsForLab, findMatchingClinics } from './matching';
+import { findAllClinicsInCity, findClinicsForLab, findMatchingClinics } from './matching';
 import { selectableLabTestIds } from './labOrgans';
 import { notify, notifyClinic } from './notifications';
 import { validateAnswers } from './requestSteps';
@@ -205,21 +206,35 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
    * foydalanuvchini cheklamasdan.
    */
 
-  const kind: RequestKind = input.kind === 'lab' ? 'lab' : 'operation';
+  const kind: RequestKind = REQUEST_KINDS.includes(input.kind as RequestKind)
+    ? (input.kind as RequestKind)
+    : 'operation';
 
   /*
-   * Ikki tur — ikki xil majburiy maydon.
+   * Uch tur — uch xil majburiy maydon.
    *
-   * Operatsiyada operatsiya va holat tavsifi kerak; tahlilda esa
-   * organ va vazn. Ularni bitta tekshiruvga qo'shib bo'lmaydi:
-   * tahlil so'rovida operatsiya umuman yo'q va aksincha.
+   * Operatsiyada operatsiya va holat tavsifi kerak; tahlilda
+   * tekshiruv va vazn; yo'llanmada esa faqat rasm — qolgan hamma
+   * narsa o'sha qog'ozda yozilgan. Ularni bitta tekshiruvga
+   * qo'shib bo'lmaydi: har birida boshqasining maydoni umuman yo'q.
    */
   let op: { slug: string } | null = null;
   let labTestId: number | null = null;
   let weightKg: number | null = null;
   let condition = '';
 
-  if (kind === 'lab') {
+  if (kind === 'referral') {
+    /*
+     * RASM MAJBURIY va bu yagona shart.
+     *
+     * Yo'llanma so'rovining butun mazmuni — o'sha qog'oz. Rasmsiz
+     * u klinikaga "nimadir kerak" degan bo'sh xabar bo'lib borardi
+     * va hech kim taklif bera olmasdi.
+     */
+    if (!input.attachments?.length) {
+      throw badRequest('referral_photo_required', 'Yo‘llanma rasmini yuklang');
+    }
+  } else if (kind === 'lab') {
     const test = db
       .prepare(`SELECT id FROM lab_tests WHERE id = ? AND active = 1`)
       .get(input.labTestId ?? 0) as { id: number } | undefined;
@@ -269,7 +284,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
    * Byudjet chegarasi turga bog'liq: tahlil yuz minglar bilan
    * o'lchanadi, operatsiya esa millionlar bilan.
    */
-  const minBudget = kind === 'lab' ? 200_000 : 500_000;
+  const minBudget = kind === 'operation' ? 500_000 : 200_000;
   if (input.budgetUzs != null && (input.budgetUzs < minBudget || input.budgetUzs > 2_000_000_000)) {
     throw badRequest('invalid_budget', 'Byudjet noto‘g‘ri');
   }
@@ -316,7 +331,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
       .run({
         patientId: input.patientId,
         kind,
-        operationId: kind === 'lab' ? null : (input.operationId ?? null),
+        operationId: kind === 'operation' ? (input.operationId ?? null) : null,
         labTestId,
         weightKg,
         cityId: input.cityId,
@@ -370,21 +385,27 @@ export function broadcast(requestId: number): number {
   const req = getRequest(requestId);
 
   /*
-   * Ikki tur, ikki yo'l: operatsiya so'rovi operatsiyani qiladigan
-   * klinikalarga, tahlil so'rovi esa o'sha ORGAN bo'yicha tekshiruv
-   * qiladigan klinikalarga boradi.
+   * Uch tur, uch yo'l: operatsiya so'rovi o'sha operatsiyani
+   * qiladigan klinikalarga, tahlil so'rovi o'sha TEKSHIRUVNI
+   * qiladiganlarga, yo'llanma esa shahardagi HAMMASIGA.
+   *
+   * Yo'llanmada torroq qilib bo'lmaydi: qog'ozda nima yozilganini
+   * hali hech kim o'qimagan — server ham, bemor ham. Kimga
+   * mos kelishini faqat klinikaning o'zi rasmni ko'rib hal qiladi.
    */
   const clinics =
-    req.kind === 'lab'
-      ? req.labTestId
-        ? findClinicsForLab(req.labTestId, req.cityId, { otherRegionsOk: req.otherRegionsOk })
-        : []
-      : req.operationId
-        ? findMatchingClinics(req.operationId, req.cityId, {
-            otherRegionsOk: req.otherRegionsOk,
-            fallbackCategoryId: req.fallbackCategoryId,
-          })
-        : [];
+    req.kind === 'referral'
+      ? findAllClinicsInCity(req.cityId, { otherRegionsOk: req.otherRegionsOk })
+      : req.kind === 'lab'
+        ? req.labTestId
+          ? findClinicsForLab(req.labTestId, req.cityId, { otherRegionsOk: req.otherRegionsOk })
+          : []
+        : req.operationId
+          ? findMatchingClinics(req.operationId, req.cityId, {
+              otherRegionsOk: req.otherRegionsOk,
+              fallbackCategoryId: req.fallbackCategoryId,
+            })
+          : [];
 
   tx(() => {
     const ins = db.prepare(

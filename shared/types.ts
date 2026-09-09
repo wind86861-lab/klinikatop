@@ -192,8 +192,18 @@ export interface OperationCategory {
  * operatsiya nomi emas, QAYSI ORGAN uchun kerakligi va bemorning
  * vazni. Shuning uchun bu ikkisi bitta oqimga tiqilmaydi — so'rovning
  * o'zi turga ega bo'ldi va vizard shunga qarab ajraladi.
+ *
+ * Uchinchisi — `referral`, ya'ni shifokor yozib bergan yo'llanma.
+ * Bemor katalogdan hech narsa tanlamaydi: qo'lidagi qog'ozni
+ * rasmga oladi. Sabab oddiy — u qog'ozda nima yozilganini ko'pincha
+ * o'zi ham o'qiy olmaydi, "gemogramma" ni ro'yxatdan izlashni esa
+ * umuman uddalamaydi. Katalog o'rniga rasm: bemor uchun eng oson,
+ * klinika uchun esa eng aniq manba.
+ *
+ * Ro'yxat TARTIBI ilovada ko'rinadigan tartib — yo'llanma birinchi
+ * turadi, chunki u eng qisqa yo'l.
  */
-export const REQUEST_KINDS = ['operation', 'lab'] as const;
+export const REQUEST_KINDS = ['referral', 'operation', 'lab'] as const;
 export type RequestKind = (typeof REQUEST_KINDS)[number];
 
 /**
@@ -447,6 +457,7 @@ export interface TermsDocument {
  */
 export function requestTitle(
   req: {
+    kind?: RequestKind;
     operation?: { nameUz: string; nameRu: string } | null;
     labTest?: { nameUz: string; nameRu: string } | null;
   },
@@ -455,7 +466,16 @@ export function requestTitle(
   const name = (x: { nameUz: string; nameRu: string } | null | undefined) =>
     x ? (lang === 'ru' ? x.nameRu : x.nameUz) : '';
 
-  return name(req.operation ?? req.labTest);
+  const picked = name(req.operation ?? req.labTest);
+  if (picked) return picked;
+
+  /*
+   * Yo'llanma so'rovida katalogdan hech narsa tanlanmaydi va nom
+   * oladigan joy yo'q. Bo'sh qaytarilsa ro'yxatda nomsiz qator,
+   * klinikaga esa "… uchun taklif" degan yarim jumla ketardi.
+   */
+  if (req.kind === 'referral') return lang === 'ru' ? 'Направление врача' : 'Shifokor yo‘llanmasi';
+  return picked;
 }
 
 export interface RequestWithMeta extends MedicalRequest {
@@ -1139,8 +1159,10 @@ export type StepKind = (typeof STEP_KINDS)[number];
 /** Kodda ekrani bor bosqichlar — admin bularni yarata olmaydi, faqat sozlaydi. */
 export const BUILTIN_STEPS = [
   'who',
-  /** Operatsiyami yoki tahlil — oqim shu yerda ajraladi */
+  /** Qaysi tur — oqim shu yerda uchga ajraladi */
   'type',
+  /** Faqat yo'llanma oqimida: qog'ozni rasmga olish */
+  'referral',
   'operation',
   'condition',
   'documents',
@@ -1161,6 +1183,7 @@ export type BuiltinStep = (typeof BUILTIN_STEPS)[number];
  */
 export const LOCKED_STEPS: readonly BuiltinStep[] = [
   'type',
+  'referral',
   'operation',
   'condition',
   'test',
@@ -1177,18 +1200,25 @@ export const LOCKED_STEPS: readonly BuiltinStep[] = [
  * mumkin emas va server so'rovni baribir rad etardi.
  */
 export const STEP_FLOWS: Record<BuiltinStep, readonly RequestKind[]> = {
-  who: ['operation', 'lab'],
-  type: ['operation', 'lab'],
+  who: ['referral', 'operation', 'lab'],
+  type: ['referral', 'operation', 'lab'],
+  /*
+   * Yo'llanma oqimi ATAYLAB qisqa: rasm → shahar → narx → tamom.
+   * Bemor bu yerga qo'lida qog'oz bilan keladi va uni yuborishdan
+   * boshqa hech narsa qilishni xohlamaydi. Katalog, holat tavsifi,
+   * vazn — hammasi o'sha qog'ozda allaqachon yozilgan.
+   */
+  referral: ['referral'],
   operation: ['operation'],
   condition: ['operation'],
   documents: ['operation'],
   test: ['lab'],
   weight: ['lab'],
-  region: ['operation', 'lab'],
-  budget: ['operation', 'lab'],
+  region: ['referral', 'operation', 'lab'],
+  budget: ['referral', 'operation', 'lab'],
   date: ['operation'],
-  note: ['operation'],
-  review: ['operation', 'lab'],
+  note: ['referral', 'operation'],
+  review: ['referral', 'operation', 'lab'],
 };
 
 /** Bosqich shu oqimda ko'rinadimi. Admin qo'shgan savollar ikkalasida ham. */
