@@ -3,7 +3,7 @@
  * Foydalanuvchi har doim qayerdaligini va yana qayerga bora olishini ko'radi.
  */
 import { m } from 'framer-motion';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { haptic } from '@/lib/telegram';
 import { spring } from '@/lib/motion';

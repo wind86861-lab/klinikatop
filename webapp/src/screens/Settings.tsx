@@ -1,6 +1,6 @@
 /** Sozlamalar — til, ko'rinish, maxfiylik. */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { haptic } from '@/lib/telegram';
 import { Card, Chip, Notice, Screen, Segment } from '@/ui';

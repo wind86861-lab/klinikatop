@@ -1,7 +1,7 @@
 /** Profil bo'limi — shaxsiy ma'lumot, statistika va rol almashtirish. */
 import { useEffect, useState } from 'react';
 import { m } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { money } from '@/lib/format';

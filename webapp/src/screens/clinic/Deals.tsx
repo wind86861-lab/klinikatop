@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';

@@ -13,7 +13,7 @@
  */
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { m } from 'framer-motion';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Route, Routes, useLocation, useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { tg } from '@/lib/telegram';
 import { ErrorState, Screen, Toaster } from '@/ui';

@@ -10,7 +10,7 @@
  */
 import { useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';

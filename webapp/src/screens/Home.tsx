@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { m } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { api, type Highlights } from '@/lib/api';
 import { money, timeLeft } from '@/lib/format';

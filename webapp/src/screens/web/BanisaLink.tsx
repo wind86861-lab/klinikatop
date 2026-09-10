@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import { m } from 'framer-motion';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from '@/lib/router';
 import { EASE } from '@/lib/motion';
 import { Button, Field, Notice, Select } from '@/ui';
 import type { City } from '@shared/types';

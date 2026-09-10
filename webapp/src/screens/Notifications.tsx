@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { relativeTime } from '@/lib/format';
 import { AnimatedItem, AnimatedList, Button, EmptyState, IconBell, Screen } from '@/ui';

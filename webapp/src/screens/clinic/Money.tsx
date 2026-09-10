@@ -11,7 +11,7 @@
  */
 import { useMemo, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
 import { haptic } from '@/lib/telegram';

@@ -23,16 +23,16 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // Telegram Web App tez ochilishi uchun — og'ir kutubxonalar alohida chunk
-        manualChunks: {
-          /*
-           * `framer-motion` ataylab bu yerda YO'Q.
-           *
-           * U `LazyMotion` orqali birinchi bo'yoqdan keyin yuklanadi
-           * va alohida bo'lakka o'zi ajraladi. Bu yerga qo'yilsa
-           * majburan asosiy yo'lga qaytardi.
-           */
-          router: ['react-router-dom'],
-        },
+        /*
+         * `manualChunks` KERAK EMAS.
+         *
+         * Ilgari bu yerda `react-router-dom` alohida bo'lakka
+         * ajratilardi. Endi marshrutlagich o'zimizniki (`lib/router`)
+         * va bir necha kilobayt — ajratish faqat yana bitta so'rov
+         * qo'shardi.
+         *
+         * `framer-motion` esa `LazyMotion` orqali o'zi ajraladi.
+         */
       },
     },
   },

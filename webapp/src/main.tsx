@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { LazyMotion } from 'framer-motion';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter } from '@/lib/router';
 import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { isCabinetPath } from './lib/session';

@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { m } from 'framer-motion';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { spring } from '@/lib/motion';
 import { haptic } from '@/lib/telegram';

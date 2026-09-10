@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 import { m } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { spring } from '@/lib/motion';
 import { Button, EmptyState, IconAlert, IconInfo, IconShield, Screen } from '@/ui';
