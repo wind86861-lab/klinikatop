@@ -26,6 +26,8 @@ const createSchema = z.object({
   operationId: z.number().int().positive().nullable().optional(),
   /* Tahlil so'rovida majburiy */
   labTestId: z.number().int().positive().nullable().optional(),
+  /* Yo'llanmada qo'lda yozilgan analizlar; tozalash xizmatda */
+  referralItems: z.array(z.string().max(200)).max(60).optional(),
   weightKg: z.number().int().min(2).max(400).nullable().optional(),
   cityId: z.number().int().positive(),
   /*
@@ -90,6 +92,7 @@ requestsRouter.post('/', (req, res) => {
     kind: body.kind,
     operationId: body.operationId ?? null,
     labTestId: body.labTestId ?? null,
+    referralItems: body.referralItems ?? null,
     weightKg: body.weightKg ?? null,
     cityId: body.cityId,
     conditionText: body.conditionText,

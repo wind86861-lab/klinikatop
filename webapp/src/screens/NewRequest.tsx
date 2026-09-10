@@ -62,6 +62,8 @@ export interface Draft {
   aiSuggested: boolean;
   conditionText: string;
   files: StoredFile[];
+  /** Yo'llanma oqimida qo'lda yozilgan analiz nomlari */
+  referralItems: string[];
   cityId: number | null;
   otherRegionsOk: boolean;
   budgetUzs: number | null;
@@ -128,6 +130,7 @@ export function NewRequest() {
     aiSuggested: false,
     conditionText: '',
     files: [],
+    referralItems: [],
     cityId: null,
     otherRegionsOk: false,
     budgetUzs: null,
@@ -237,8 +240,11 @@ export function NewRequest() {
         // Doim tanlangan qiymat bor, shuning uchun to'siq yo'q
         return true;
       case 'referral':
-        // Bu oqimning butun mazmuni rasmda — usiz davom etib bo'lmaydi
-        return draft.files.length > 0;
+        /*
+         * Rasm YOKI qo'lda yozilgan ro'yxat — bittasi yetarli.
+         * Ikkovi ham bo'lmasa klinikaga nima kerakligi ma'lum emas.
+         */
+        return draft.files.length > 0 || draft.referralItems.length > 0;
       case 'operation':
         return draft.operation !== null;
       case 'weight':
@@ -282,7 +288,7 @@ export function NewRequest() {
      */
     const ready =
       draft.kind === 'referral'
-        ? draft.files.length > 0
+        ? draft.files.length > 0 || draft.referralItems.length > 0
         : draft.kind === 'lab'
           ? Boolean(draft.labTest && draft.weightKg)
           : Boolean(draft.operation);
@@ -294,6 +300,7 @@ export function NewRequest() {
         kind: draft.kind,
         operationId: draft.kind === 'operation' ? (draft.operation?.id ?? null) : null,
         labTestId: draft.kind === 'lab' ? (draft.labTest?.id ?? null) : null,
+        referralItems: draft.kind === 'referral' ? draft.referralItems : undefined,
         weightKg: draft.kind === 'lab' ? draft.weightKg : null,
         cityId: draft.cityId,
         conditionText: draft.conditionText.trim(),
@@ -1187,9 +1194,20 @@ function ReviewStep({
           <ReviewRow
             label={t('wz.review.referral')}
             value={
-              draft.files.length
-                ? t('wz.review.referralCount', { n: String(draft.files.length) })
-                : empty
+              /*
+               * Ikkalasi ham bo'lishi mumkin — rasm ham, ro'yxat ham.
+               * Shuning uchun qism-qism yig'iladi.
+               */
+              [
+                draft.files.length
+                  ? t('wz.review.referralCount', { n: String(draft.files.length) })
+                  : null,
+                draft.referralItems.length
+                  ? t('wz.review.referralItems', { n: String(draft.referralItems.length) })
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || empty
             }
             onEdit={() => onEdit('referral')}
           />

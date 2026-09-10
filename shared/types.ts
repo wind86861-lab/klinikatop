@@ -375,6 +375,14 @@ export interface MedicalRequest {
   /** Tahlil so'rovida — qanday tekshiruv (MRT, UZI, ...) */
   labTestId: number | null;
   /**
+   * Yo'llanma so'rovida bemor QO'LDA yozgan analiz nomlari.
+   *
+   * Rasm bilan birga ham, uning o'rniga ham bo'lishi mumkin:
+   * qog'oz yo'q yoki suratda yozuv o'qilmasa, shu ro'yxat
+   * klinikaga aniq nima kerakligini aytadi.
+   */
+  referralItems: string[];
+  /**
    * Eski so'rovlarda qolgan a'zo. Yangi so'rovlarda ishlatilmaydi —
    * a'zo endi tekshiruv nomining o'ziga kiradi.
    */

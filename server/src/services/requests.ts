@@ -85,6 +85,8 @@ export interface CreateRequestInput {
   operationId?: number | null;
   /** Tahlil so'rovida majburiy: qanday tekshiruv */
   labTestId?: number | null;
+  /** Yo'llanma so'rovida qo'lda yozilgan analiz nomlari */
+  referralItems?: string[] | null;
   /** Tahlil so'rovida so'raladi (kg) */
   weightKg?: number | null;
   cityId: number;
@@ -176,6 +178,39 @@ export function normalizeDateWindow(
   return { dateFrom: start, dateTo: end, dateFlexible: start === null };
 }
 
+/**
+ * Qo'lda yozilgan analiz nomlarini tozalaydi.
+ *
+ * Bemor yozgani — erkin matn, ya'ni unda ortiqcha probel, takror va
+ * bo'sh qatorlar bo'ladi. Klinikaga toza ro'yxat borishi kerak:
+ * takrorlangan band unga "ikki marta kerakmi?" degan savol berardi.
+ *
+ * Chegara 30 ta: bundan ko'pi yo'llanma emas, boshqa narsa.
+ */
+const MAX_REFERRAL_ITEMS = 30;
+
+function cleanReferralItems(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const value of raw) {
+    const item = String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (item.length < 2) continue;
+
+    // Takror faqat KATTA-KICHIK harf bilan farq qilsa ham takror
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    out.push(item);
+    if (out.length >= MAX_REFERRAL_ITEMS) break;
+  }
+
+  return out;
+}
+
 export function createRequest(input: CreateRequestInput): RequestWithMeta {
   // Profil to'liq bo'lmasa so'rov yuborilmaydi: klinika kimga taklif
   // berayotganini bilishi kerak (ism, familiya, viloyat)
@@ -220,19 +255,31 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
    */
   let op: { slug: string } | null = null;
   let labTestId: number | null = null;
+  let referralItems: string[] = [];
   let weightKg: number | null = null;
   let condition = '';
 
   if (kind === 'referral') {
     /*
-     * RASM MAJBURIY va bu yagona shart.
+     * RASM YOKI RO'YXAT — bittasi bo'lsa yetarli.
      *
-     * Yo'llanma so'rovining butun mazmuni — o'sha qog'oz. Rasmsiz
-     * u klinikaga "nimadir kerak" degan bo'sh xabar bo'lib borardi
-     * va hech kim taklif bera olmasdi.
+     * Yo'llanma so'rovining butun mazmuni klinikaga nima kerakligini
+     * aytishda. Buni ikki yo'l bilan aytish mumkin: qog'ozni suratga
+     * olish yoki analiz nomlarini yozish. Ikkovi ham bo'lmasa, so'rov
+     * klinikaga "nimadir kerak" degan bo'sh xabar bo'lib borardi va
+     * hech kim taklif bera olmasdi.
+     *
+     * Ilgari faqat rasm qabul qilinardi. Lekin qog'oz har doim ham
+     * bo'lavermaydi: shifokor og'zaki aytgan, yoki suratda yozuv
+     * o'qilmayapti.
      */
-    if (!input.attachments?.length) {
-      throw badRequest('referral_photo_required', 'Yo‘llanma rasmini yuklang');
+    referralItems = cleanReferralItems(input.referralItems);
+
+    if (!input.attachments?.length && referralItems.length === 0) {
+      throw badRequest(
+        'referral_empty',
+        'Yo‘llanmani rasmga oling yoki kerakli analizlarni yozing',
+      );
     }
   } else if (kind === 'lab') {
     const test = db
@@ -320,19 +367,21 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
                                urgency, attachments, other_regions_ok, date_from, date_to, date_flexible,
                                ai_conversation, status, ai_suggested, expires_at, terms_version, terms_accepted_at,
                                for_self, subject_name, subject_birth_year, subject_gender, extra_answers,
-                               fallback_category_id)
+                               fallback_category_id, referral_items)
          VALUES (@patientId, @kind, @operationId, @labTestId, NULL, @weightKg,
                  @cityId, @budgetUzs, @conditionText, @note,
                  @urgency, @attachments, @otherRegionsOk, @dateFrom, @dateTo, @dateFlexible,
                  @aiConversation, 'NEW', @aiSuggested, @expiresAt, @termsVersion, datetime('now'),
                  @forSelf, @subjectName, @subjectBirthYear, @subjectGender, @extraAnswers,
-                 @fallbackCategoryId)`,
+                 @fallbackCategoryId, @referralItems)`,
       )
       .run({
         patientId: input.patientId,
         kind,
         operationId: kind === 'operation' ? (input.operationId ?? null) : null,
         labTestId,
+        // Bo'sh ro'yxat `null` bo'lib yozilsin: "yo'q" va "bo'sh" bir xil
+        referralItems: referralItems.length ? JSON.stringify(referralItems) : null,
         weightKg,
         cityId: input.cityId,
         budgetUzs: input.budgetUzs,

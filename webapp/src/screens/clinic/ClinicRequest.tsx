@@ -29,30 +29,85 @@ import {
   Textarea,
 } from '@/ui';
 import { requestTitle } from '@shared/types';
-import type { PatientCase, PriceStats, RequestWithMeta } from '@shared/types';
+import type { PatientCase, PriceStats, RequestKind, RequestWithMeta } from '@shared/types';
 import { PatientCaseCard } from '@/components/PatientCaseCard';
 import { ChipPicker } from '@/components/ChipPicker';
 import { DatePicker } from '@/components/DatePicker';
 
-/** Tez javob uchun tayyor variantlar — klinika bir tegishda qo'shadi. */
-const INCLUDE_PRESETS = [
-  'Operatsiya',
-  'Narkoz (anesteziya)',
-  'Palata (2 kun)',
-  'Dori-darmon',
-  'Operatsiyadan oldingi tekshiruv',
-  'Jarroh nazorati (1 oy)',
-  'Sarflanuvchi materiallar',
-];
+/*
+ * Tez javob uchun tayyor variantlar — klinika bir tegishda qo'shadi.
+ *
+ * Ro'yxat SO'ROV TURIGA bog'liq va bu shart emas, MAJBURIY: ilgari
+ * bitta operatsiya ro'yxati hamma turga chiqardi va "Operatsiya" bilan
+ * "Narkoz (anesteziya)" oldindan BELGILANGAN holda turardi. Ya'ni
+ * klinika qon tahliliga narx berayotganda, taklifiga o'zi bilmagan
+ * holda "narxga operatsiya va narkoz kiradi" deb yozib yuborardi.
+ */
+const INCLUDE_PRESETS: Record<RequestKind, string[]> = {
+  operation: [
+    'Operatsiya',
+    'Narkoz (anesteziya)',
+    'Palata (2 kun)',
+    'Dori-darmon',
+    'Operatsiyadan oldingi tekshiruv',
+    'Jarroh nazorati (1 oy)',
+    'Sarflanuvchi materiallar',
+  ],
+  lab: [
+    'Tekshiruvning o‘zi',
+    'Shifokor xulosasi',
+    'Kontrast modda',
+    'Diskda yoki elektron nusxa',
+    'Navbatsiz qabul',
+  ],
+  referral: [
+    'Ro‘yxatdagi hamma analiz',
+    'Qon olish (protsedura)',
+    'Natijani elektron yuborish',
+    'Shifokor izohi',
+    'Uyga chiqib olish',
+  ],
+};
 
-const ADVANTAGE_PRESETS = [
-  'Oliy toifali jarroh',
-  'Yangi avlod jihozlari',
-  'Xalqaro sertifikat',
-  '24/7 nazorat',
-  'Bepul konsultatsiya',
-  'Bo‘lib to‘lash imkoni',
-];
+/**
+ * Boshida belgilangan bandlar.
+ *
+ * Faqat SHUBHASIZ narsa: taklifning o'zagi. Qolganini klinika
+ * o'zi qo'shadi — noto'g'ri narsa belgilangan holda turgandan
+ * ko'ra, bo'sh turgani yaxshiroq.
+ */
+const DEFAULT_INCLUDES: Record<RequestKind, string[]> = {
+  operation: ['Operatsiya', 'Narkoz (anesteziya)'],
+  lab: ['Tekshiruvning o‘zi'],
+  referral: ['Ro‘yxatdagi hamma analiz'],
+};
+
+const ADVANTAGE_PRESETS: Record<RequestKind, string[]> = {
+  operation: [
+    'Oliy toifali jarroh',
+    'Yangi avlod jihozlari',
+    'Xalqaro sertifikat',
+    '24/7 nazorat',
+    'Bepul konsultatsiya',
+    'Bo‘lib to‘lash imkoni',
+  ],
+  lab: [
+    'Zamonaviy apparat',
+    'Xalqaro sertifikat',
+    'Natija bir kunda',
+    'Navbatsiz',
+    'Bepul konsultatsiya',
+    'Bo‘lib to‘lash imkoni',
+  ],
+  referral: [
+    'Sertifikatlangan laboratoriya',
+    'Natija bir kunda',
+    'Navbatsiz',
+    'Uyga chiqib olish',
+    'Elektron natija',
+    'Bepul konsultatsiya',
+  ],
+};
 
 export function ClinicRequest() {
   const { id } = useParams();
@@ -66,7 +121,11 @@ export function ClinicRequest() {
   const [error, setError] = useState<string | null>(null);
 
   const [price, setPrice] = useState(0);
-  const [includes, setIncludes] = useState<string[]>(['Operatsiya', 'Narkoz (anesteziya)']);
+  /*
+   * Bo'sh boshlanadi va so'rov kelgach turga qarab to'ldiriladi:
+   * bu paytda `request` hali yo'q, ya'ni turni bilmaymiz.
+   */
+  const [includes, setIncludes] = useState<string[]>([]);
   const [advantages, setAdvantages] = useState<string[]>([]);
   /** Klinika taklif qilgan aniq sanalar */
   const [dates, setDates] = useState<string[]>([]);
@@ -88,6 +147,8 @@ export function ClinicRequest() {
         setRequest(data.request);
         setPatientCase(data.patientCase ?? null);
         setStats(data.stats);
+        // Turga mos boshlang'ich bandlar — endi turni bilamiz
+        setIncludes(DEFAULT_INCLUDES[data.request.kind]);
         // Boshlang'ich narx: bemor byudjeti yoki bozor medianasi
         setPrice(data.request.budgetUzs ?? data.stats.median ?? 0);
       })
@@ -276,6 +337,33 @@ export function ClinicRequest() {
         </Card>
       )}
 
+      {/*
+        Bemor qo'lda yozgan analizlar.
+
+        Rasmdan alohida ko'rsatiladi va bandma-band: klinika har
+        birini o'qib, o'zida borini belgilashi kerak. Bitta matnga
+        qo'shib qo'yilsa, uzun ro'yxatda bir-ikkitasi ko'zdan
+        qochardi.
+      */}
+      {request.referralItems && request.referralItems.length > 0 && (
+        <Card className="stack">
+          <div className="between">
+            <h2 className="section-title">{t('wz.ref.itemsTitle')}</h2>
+            <span className="tiny num">{request.referralItems.length}</span>
+          </div>
+          <div className="stack" style={{ gap: 'var(--s-2)' }}>
+            {request.referralItems.map((item, i) => (
+              <div key={item} className="doc-row">
+                <span className="ref-item__num num">{i + 1}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="doc-row__name">{item}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Bozor narxi — klinika o'zini joylashtirsin */}
       {stats?.median != null && (
         <Card className="stack">
@@ -354,7 +442,7 @@ export function ClinicRequest() {
 
       <Field label={t('clinic.includes')} hint={t('clinic.includesHint')} error={includes.length === 0 ? t('common.required') : undefined}>
         <ChipPicker
-          presets={INCLUDE_PRESETS}
+          presets={INCLUDE_PRESETS[request.kind]}
           selected={includes}
           onToggle={(v) => toggle(includes, setIncludes, v)}
           draft={customInclude}
@@ -369,7 +457,7 @@ export function ClinicRequest() {
 
       <Field label={`${t('clinic.advantages')} · ${t('common.optional')}`}>
         <ChipPicker
-          presets={ADVANTAGE_PRESETS}
+          presets={ADVANTAGE_PRESETS[request.kind]}
           selected={advantages}
           onToggle={(v) => toggle(advantages, setAdvantages, v)}
           draft={customAdvantage}
@@ -389,7 +477,9 @@ export function ClinicRequest() {
         ko'rsatgan oraliq bo'lsa, u birinchi ko'rinadi.
       */}
       <Field
-        label="Operatsiya uchun qulay kunlar · ixtiyoriy"
+        label={`${
+          request.kind === 'operation' ? 'Operatsiya' : 'Qabul'
+        } uchun qulay kunlar · ixtiyoriy`}
         hint={
           request.dateFrom
             ? `Bemor ${formatDate(request.dateFrom, lang)}${

@@ -143,6 +143,7 @@ export function mapRequest(r: any): MedicalRequest {
     kind: (r.kind ?? 'operation') as any,
     operationId: r.operation_id,
     labTestId: r.lab_test_id ?? null,
+    referralItems: parseList(r.referral_items),
     labOrganId: r.lab_organ_id ?? null,
     weightKg: r.weight_kg ?? null,
     cityId: r.city_id,
@@ -263,6 +264,22 @@ export function mapNotification(r: any): Notification {
     readAt: iso(r.read_at),
     createdAt: isoReq(r.created_at),
   };
+}
+
+/**
+ * JSON ro'yxatni xavfsiz ochadi.
+ *
+ * Buzuq qiymat butun so'rovni yiqitmasin: bemor allaqachon yuborgan,
+ * aybdor emas, va bo'sh ro'yxat ko'rsatish xato sahifasidan yaxshiroq.
+ */
+function parseList(raw: unknown): string[] {
+  if (typeof raw !== 'string' || !raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Tekshiruv turi — katalog qatoridan. */

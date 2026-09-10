@@ -24,13 +24,13 @@
  * taklif qilmaydi, shuning uchun ikkovini bitta tugmaga
  * birlashtirib bo'lmaydi.
  */
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
 import { spring } from '@/lib/motion';
-import { Button, Notice, Skeleton } from '@/ui';
+import { Button, Field, Input, Notice, Skeleton } from '@/ui';
 import { FileThumb } from './FileThumb';
 import { CameraSheet, cameraSupported } from './CameraSheet';
 import type { StoredFile } from '@shared/types';
@@ -38,18 +38,21 @@ import type { StoredFile } from '@shared/types';
 const MAX_FILES = 5;
 const MAX_BYTES = 8 * 1024 * 1024;
 
+const MAX_ITEMS = 30;
+
 export function ReferralStep({
   draft,
   patch,
 }: {
-  draft: { files: StoredFile[] };
-  patch: (p: { files: StoredFile[] }) => void;
+  draft: { files: StoredFile[]; referralItems: string[] };
+  patch: (p: Partial<{ files: StoredFile[]; referralItems: string[] }>) => void;
 }) {
   const { t, toast } = useApp();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [camera, setCamera] = useState(false);
+  const [item, setItem] = useState('');
 
   const full = draft.files.length >= MAX_FILES;
 
@@ -138,9 +141,54 @@ export function ReferralStep({
     else cameraRef.current?.click();
   };
 
+  /*
+   * Kamera oqimi ochilmadi — tizim tanlagichiga o'tamiz.
+   *
+   * Telegram WebView `capture` ni e'tiborsiz qoldirib galereyani
+   * ochib qo'yishi mumkin, lekin bu ham hech narsadan yaxshiroq:
+   * ilgari bu holatda bemor "Bekor qilish" dan boshqa yo'l
+   * topolmasdi.
+   */
+  const fallbackToSystem = useCallback(
+    (reason: string) => {
+      setCamera(false);
+      toast(t('wz.ref.cameraFallback'), 'info');
+      // Sabab konsolda qoladi: qurilmada nima bo'lganini bilish uchun
+      console.warn('[kamera] oqim ishlamadi:', reason);
+      cameraRef.current?.click();
+    },
+    [t, toast],
+  );
+
   const remove = (id: string) => {
     haptic.tap();
     patch({ files: draft.files.filter((f) => f.id !== id) });
+  };
+
+  /* ── Qo'lda yozilgan analizlar ── */
+
+  const addItem = () => {
+    const value = item.replace(/\s+/g, ' ').trim();
+    if (value.length < 2) return;
+
+    if (draft.referralItems.length >= MAX_ITEMS) {
+      toast(t('wz.ref.itemsLimit'), 'error');
+      return;
+    }
+    // Takror qo'shilmasin — klinikaga "ikki marta kerakmi?" degan savol bermasin
+    if (draft.referralItems.some((x) => x.toLowerCase() === value.toLowerCase())) {
+      setItem('');
+      return;
+    }
+
+    haptic.select();
+    patch({ referralItems: [...draft.referralItems, value] });
+    setItem('');
+  };
+
+  const removeItem = (value: string) => {
+    haptic.tap();
+    patch({ referralItems: draft.referralItems.filter((x) => x !== value) });
   };
 
   return (
@@ -222,12 +270,93 @@ export function ReferralStep({
         ))}
       </AnimatePresence>
 
+      {/*
+        ── Qo'lda yozish ──
+
+        Rasm har doim ham imkoni bo'lmaydi: qog'oz yo'q, shifokor
+        og'zaki aytgan, yoki suratda yozuv o'qilmayapti. Shunday
+        paytda bemor analiz nomlarini o'zi yig'ib yuborsa, klinika
+        baribir aniq narsaga narx bera oladi.
+
+        Ro'yxat — bandma-band, erkin matn emas: klinika har birini
+        alohida ko'rishi va o'ziga borini belgilashi kerak.
+      */}
+      <div className="ref-or">
+        <span>{t('wz.ref.or')}</span>
+      </div>
+
+      <Field label={t('wz.ref.manual')} hint={t('wz.ref.manualHint')}>
+        <div className="row row--gap">
+          <Input
+            value={item}
+            placeholder={t('wz.ref.itemPh')}
+            maxLength={120}
+            onChange={(e) => setItem(e.target.value)}
+            /*
+             * Enter ham qo'shsin: ro'yxat yig'ayotgan odam
+             * klaviaturadan qo'lini uzmasligi kerak.
+             */
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addItem();
+              }
+            }}
+          />
+          <Button
+            variant="secondary"
+            disabled={item.trim().length < 2}
+            onClick={addItem}
+          >
+            {t('wz.ref.itemAdd')}
+          </Button>
+        </div>
+      </Field>
+
+      {draft.referralItems.length > 0 && (
+        <>
+          <div className="between">
+            <h2 className="section-title">{t('wz.ref.itemsTitle')}</h2>
+            <span className="tiny num">
+              {draft.referralItems.length}/{MAX_ITEMS}
+            </span>
+          </div>
+
+          <AnimatePresence initial={false}>
+            {draft.referralItems.map((value, i) => (
+              <m.div
+                key={value}
+                layout
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97 }}
+                transition={spring}
+                className="doc-row"
+              >
+                <span className="ref-item__num num">{i + 1}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="doc-row__name">{value}</span>
+                </span>
+                <button
+                  className="doc-row__remove"
+                  onClick={() => removeItem(value)}
+                  aria-label={t('common.cancel')}
+                >
+                  ×
+                </button>
+              </m.div>
+            ))}
+          </AnimatePresence>
+        </>
+      )}
+
       <Notice tone="info">{t('wz.ref.hint')}</Notice>
 
       <CameraSheet
         open={camera}
         onClose={() => setCamera(false)}
         onShot={(shot) => void uploadShot(shot)}
+        onFallback={fallbackToSystem}
       />
     </>
   );

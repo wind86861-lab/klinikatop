@@ -383,6 +383,8 @@ export const api = {
     operationId?: number | null;
     /** Tahlil so'rovida majburiy */
     labTestId?: number | null;
+    /** Yo'llanmada qo'lda yozilgan analiz nomlari */
+    referralItems?: string[];
     labOrganId?: number | null;
     weightKg?: number | null;
     cityId: number;

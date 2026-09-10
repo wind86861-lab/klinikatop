@@ -2029,6 +2029,24 @@ export const MIGRATIONS: Migration[] = [
       ).run();
     },
   },
+  {
+    /**
+     * Yo'llanma so'roviga QO'LDA YOZILGAN ro'yxat qo'shildi.
+     *
+     * Rasm har doim ham imkoni bo'lmaydi: qog'oz yo'q, shifokor
+     * og'zaki aytgan, yoki suratda yozuv o'qilmayapti. Shunday
+     * paytda bemor analiz nomlarini o'zi yozib yuborsa, klinika
+     * baribir aniq narsaga narx bera oladi.
+     *
+     * Alohida ustun, `note` emas: bu ro'yxat — har biri alohida
+     * band, va klinika uni shunday ko'rishi kerak. Izohga tiqilsa
+     * u erkin matnga aylanib, keyin ajratib bo'lmasdi.
+     */
+    id: '035_referral_items',
+    up: (db) => {
+      addColumn(db, 'requests', 'referral_items', 'TEXT');
+    },
+  },
 ];
 
 /**

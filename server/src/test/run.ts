@@ -1915,10 +1915,48 @@ async function main() {
     });
 
     throws(
-      'rasmsiz yo‘llanma so‘rovi rad etiladi',
+      'rasmsiz va ro‘yxatsiz yo‘llanma rad etiladi',
       () => requests.createRequest(refBody({ attachments: [] }) as any),
-      'referral_photo_required',
+      'referral_empty',
     );
+
+    /* ── Qo'lda yozilgan analizlar ── */
+
+    const byHand = requests.createRequest(
+      refBody({
+        attachments: [],
+        referralItems: [
+          'Umumiy qon tahlili',
+          '  siydik   tahlili ',
+          // Katta-kichik harf bilan farq qilsa ham takror
+          'UMUMIY QON TAHLILI',
+          // Ikki belgidan qisqasi — tasodifiy tegish
+          'x',
+        ],
+      }) as any,
+    );
+
+    check('rasmsiz, faqat ro‘yxat bilan o‘tdi', byHand.kind === 'referral');
+    check(
+      'ro‘yxat tozalandi: probel, takror, qisqasi tushdi',
+      JSON.stringify(byHand.referralItems) ===
+        JSON.stringify(['Umumiy qon tahlili', 'siydik tahlili']),
+      JSON.stringify(byHand.referralItems),
+    );
+
+    const both = requests.createRequest(refBody({ referralItems: ['Gemogramma'] }) as any);
+    check(
+      'rasm va ro‘yxat birga bo‘lishi mumkin',
+      both.attachments.length === 1 && both.referralItems.length === 1,
+    );
+
+    const capped = requests.createRequest(
+      refBody({
+        attachments: [],
+        referralItems: Array.from({ length: 40 }, (_, i) => `Analiz ${i + 1}`),
+      }) as any,
+    );
+    check('ro‘yxat 30 tada to‘xtaydi', capped.referralItems.length === 30, capped.referralItems.length);
 
     const ref = requests.createRequest(refBody() as any);
     check('yo‘llanma so‘rovi yaratildi', ref.kind === 'referral');
