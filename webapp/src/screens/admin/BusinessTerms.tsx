@@ -423,7 +423,22 @@ function ClinicTermsSheet({
   return (
     <Sheet open={clinic !== null} onClose={onClose} title={title}>
       <div className="stack">
-        {clinic && <strong>{clinic.name}</strong>}
+        {/*
+          Qaysi klinika ustida ish ketayotgani. Sarlavha amalni
+          aytadi ("Tahrirlash"), bu qator esa kimga tegishli ekanini —
+          o'nlab qatorli jadvaldan kelganda bu chalkashmaslik uchun
+          kerak.
+        */}
+        {clinic && (
+          <div className="sheet-subject">
+            <strong>{clinic.name}</strong>
+            <span className="tiny">
+              {cities.find((c) => c.id === clinic.cityId)
+                ? cityName(cities.find((c) => c.id === clinic.cityId)!, lang)
+                : '—'}
+            </span>
+          </div>
+        )}
 
         {mode === 'commission' && (
           <Field label={t('ps.commission')} hint={t('ac.percentHint')}>
@@ -453,21 +468,29 @@ function ClinicTermsSheet({
             <Field label={t('ac.fieldName')}>
               <Input value={form.name} maxLength={200} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </Field>
-            <Field label={t('ac.fieldCity')} hint={t('ac.cityHint')}>
-              <Select
-                value={String(form.cityId)}
-                onChange={(e) => setForm({ ...form, cityId: Number(e.target.value) })}
-              >
-                {cities.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {cityName(c, lang)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={t('ac.fieldPhone')}>
-              <Input value={form.phone} maxLength={40} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            </Field>
+            <div className="form-pair">
+              <Field label={t('ac.fieldCity')} hint={t('ac.cityHint')}>
+                <Select
+                  value={String(form.cityId)}
+                  onChange={(e) => setForm({ ...form, cityId: Number(e.target.value) })}
+                >
+                  {cities.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {cityName(c, lang)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t('ac.fieldPhone')}>
+                <Input
+                  value={form.phone}
+                  inputMode="tel"
+                  placeholder="998 90 123 45 67"
+                  maxLength={40}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                />
+              </Field>
+            </div>
             <Field label={t('ac.fieldAddress')}>
               <Input
                 value={form.address}
@@ -478,6 +501,7 @@ function ClinicTermsSheet({
             <Field label={t('ac.fieldWebsite')}>
               <Input
                 value={form.website}
+                placeholder="klinika.uz"
                 maxLength={200}
                 onChange={(e) => setForm({ ...form, website: e.target.value })}
               />
@@ -567,9 +591,19 @@ function ClinicTermsSheet({
         )}
 
         {(mode === 'commission' || mode === 'trial' || mode === 'edit') && (
-          <Button block loading={saving} onClick={save}>
-            {t('common.save')}
-          </Button>
+          /*
+           * "Bekor qilish" ham bor: ish stolida varaqni yopish uchun
+           * tashqariga bosish yoki Escape kerak edi — ikkalasi ham
+           * ko'rinmaydigan bilim.
+           */
+          <div className="sheet-actions">
+            <Button variant="secondary" onClick={onClose} disabled={saving}>
+              {t('common.cancel')}
+            </Button>
+            <Button loading={saving} onClick={save}>
+              {t('common.save')}
+            </Button>
+          </div>
         )}
       </div>
     </Sheet>

@@ -314,9 +314,16 @@
   color: var(--danger);
 }
 
+/*
+ * Maydon bezagi. `.select` bu YERDA YO'Q va ataylab yo'q.
+ *
+ * `Select` komponenti `<div class="select">` ichida `<select>` ni
+ * chiqaradi va ichkisiga `.input` klassini beradi. Agar o'rovchi ham
+ * shu bezakni olsa, ramka ichida ramka bo'lardi — tor ekranda bu
+ * sezilmasdi, keng ekrandagi oynada esa darhol ko'zga tashlandi.
+ */
 .input,
-.textarea,
-.select {
+.textarea {
   width: 100%;
   padding: 13px var(--s-4);
   border-radius: var(--r-sm);
@@ -1943,6 +1950,7 @@
 .select {
   position: relative;
   display: block;
+  width: 100%;
 }
 .select__el {
   appearance: none;
@@ -5657,4 +5665,86 @@
   color: var(--primary-deep);
   font-size: var(--t-xs);
   font-weight: 600;
+}
+
+/* ─────────────────────────  Varaq: keng ekran  ─────────────────────────
+ *
+ * Telefonda varaq pastdan chiqadi va butun enni egallaydi — barmoq
+ * pastda, harakat tabiiy. Ish stolida esa aynan shu narsa buzilib
+ * ko'rinardi: 1800px enli oq tasma, chap chekkasida ingichka ustun
+ * maydonlar va butun ekran bo'ylab cho'zilgan "Saqlash" tugmasi.
+ *
+ * Markazlash `transform` SIZ qilinadi (`inset: 0; margin: auto`):
+ * `transform` ni framer-motion ishlatadi, ikkisi to'qnashsa oyna
+ * ekrandan chiqib ketardi.
+ */
+@media (min-width: 720px) {
+  .sheet {
+    inset: 0;
+    margin: auto;
+    width: min(560px, calc(100vw - var(--s-8)));
+    height: fit-content;
+    max-height: min(86vh, 760px);
+    border-radius: var(--r-lg);
+  }
+
+  .sheet__head {
+    padding: var(--s-6) var(--s-6) 0;
+  }
+
+  .sheet__body {
+    padding: var(--s-4) var(--s-6) var(--s-6);
+  }
+}
+
+/* ── Forma: yonma-yon maydonlar ──
+ *
+ * Qisqa maydonlar (shahar, telefon) butun enni egallashi shart emas.
+ * Tor ekranda ustma-ust, keng ekranda yonma-yon.
+ */
+.form-pair {
+  display: grid;
+  gap: var(--s-4);
+}
+
+@media (min-width: 560px) {
+  .form-pair {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Varaq ichidagi yakuniy amallar */
+.sheet-actions {
+  display: flex;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+}
+
+.sheet-actions > * {
+  flex: 1;
+}
+
+/* Varaq kimga tegishli ekani — sarlavha ostidagi qator */
+.sheet-subject {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid var(--line);
+}
+
+/*
+ * Varaq ichida 420px chegarasi O'RINSIZ.
+ *
+ * `.admin .input` dagi chegara keng panel uchun: 1400px sahifada
+ * butun enli maydon o'qib bo'lmas darajada uzun bo'lardi. Oyna esa
+ * o'zi 560px ga cheklangan — ya'ni kenglik masalasi bir pog'ona
+ * yuqorida allaqachon hal qilingan. Chegara bu yerda qolsa maydonlar
+ * oynani to'ldirmay, o'ng tomonda 92px bo'sh joy qolardi.
+ */
+.sheet .field,
+.sheet .input,
+.sheet .select,
+.sheet textarea {
+  max-width: none;
 }

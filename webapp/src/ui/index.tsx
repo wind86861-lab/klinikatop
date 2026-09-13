@@ -17,7 +17,7 @@ import {
   type TextareaHTMLAttributes,
 } from 'react';
 import { AnimatePresence, m, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { EASE, DUR, ease, itemVariants, listVariants, popVariants, scrimVariants, sheetVariants, spring } from '@/lib/motion';
+import { EASE, DUR, dialogVariants, ease, itemVariants, listVariants, popVariants, scrimVariants, sheetVariants, spring } from '@/lib/motion';
 import { haptic } from '@/lib/telegram';
 
 /* ─────────────────────────  Tugma  ───────────────────────── */
@@ -317,6 +317,29 @@ export function SkeletonList({ count = 3, lines = 3 }: { count?: number; lines?:
 
 /* ─────────────────────────  Varaq (bottom sheet)  ───────────────────────── */
 
+/**
+ * Ekran keng ekanini kuzatadi.
+ *
+ * CSS bilan yolg'iz hal qilib bo'lmaydi: varaqning HARAKATI ham
+ * (pastdan chiqish yoki joyida paydo bo'lish) va tortib yopish
+ * imkoniyati ham o'zgarishi kerak, ular esa JS tomonda.
+ */
+function useWideScreen(): boolean {
+  const [wide, setWide] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 720px)').matches,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia?.('(min-width: 720px)');
+    if (!mq) return;
+    const onChange = (e: MediaQueryListEvent) => setWide(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  return Boolean(wide);
+}
+
 export function Sheet({
   open,
   onClose,
@@ -328,6 +351,7 @@ export function Sheet({
   title?: string;
   children: ReactNode;
 }) {
+  const wide = useWideScreen();
   // Varaq ochiqda orqa fon skroll qilmasin
   useEffect(() => {
     if (!open) return;
@@ -355,24 +379,33 @@ export function Sheet({
           />
           <m.div
             className="sheet"
-            variants={sheetVariants}
+            variants={wide ? dialogVariants : sheetVariants}
             initial="initial"
             animate="animate"
             exit="exit"
-            drag="y"
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0, bottom: 0.4 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.y > 110 || info.velocity.y > 550) {
-                haptic.tap();
-                onClose();
-              }
-            }}
+            /*
+             * Tortib yopish faqat telefonda: markazdagi oynani
+             * pastga tortish hech qanday ma'no bermaydi va
+             * tasodifan yopilib ketishga olib kelardi.
+             */
+            {...(wide
+              ? {}
+              : {
+                  drag: 'y' as const,
+                  dragConstraints: { top: 0, bottom: 0 },
+                  dragElastic: { top: 0, bottom: 0.4 },
+                  onDragEnd: (_: unknown, info: { offset: { y: number }; velocity: { y: number } }) => {
+                    if (info.offset.y > 110 || info.velocity.y > 550) {
+                      haptic.tap();
+                      onClose();
+                    }
+                  },
+                })}
             role="dialog"
             aria-modal="true"
             aria-label={title}
           >
-            <div className="sheet__grip" />
+            {!wide && <div className="sheet__grip" />}
             {title && (
               <div className="sheet__head">
                 <h2 style={{ fontSize: 'var(--t-lg)' }}>{title}</h2>

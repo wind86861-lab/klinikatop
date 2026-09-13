@@ -52,6 +52,22 @@ export const sheetVariants: Variants = {
   exit: { y: '100%', transition: { duration: DUR.base, ease: EASE } },
 };
 
+/**
+ * Keng ekranda varaq — MARKAZDAGI OYNA.
+ *
+ * Pastdan chiqadigan varaq telefon uchun to'g'ri: barmoq pastda va
+ * harakat tabiiy. Ish stolida esa u butun enni egallagan tasma bo'lib
+ * qolardi — maydonlar chapda ingichka ustunda, "Saqlash" tugmasi esa
+ * ikki metr. Shuning uchun u yerda oyna markazda turadi va
+ * harakati ham boshqacha: pastdan uchib kelish emas, joyida paydo
+ * bo'lish.
+ */
+export const dialogVariants: Variants = {
+  initial: { opacity: 0, y: 12, scale: 0.98 },
+  animate: { opacity: 1, y: 0, scale: 1, transition: { duration: DUR.base, ease: EASE } },
+  exit: { opacity: 0, y: 8, scale: 0.98, transition: { duration: DUR.micro, ease: EASE } },
+};
+
 export const scrimVariants: Variants = {
   initial: { opacity: 0 },
   animate: { opacity: 1, transition: { duration: DUR.base } },
