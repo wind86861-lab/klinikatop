@@ -675,6 +675,7 @@ export const uz = {
   'mo.lostBy': 'G‘olib {v} arzon edi',
   'board.title': 'Bitimlar',
   'board.sub': 'Har bir bitim qaysi bosqichda',
+  'board.colEmpty': 'Bu bosqichda bitim yo‘q',
   'board.empty': 'Hali bitim yo‘q',
   'board.emptyText': 'Taklifingiz tanlanganda bitim shu yerda paydo bo‘ladi.',
   'board.col.AGREED': 'Sana kelishildi',

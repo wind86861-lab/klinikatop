@@ -8,6 +8,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -19,6 +20,7 @@ import {
 import { AnimatePresence, m, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { EASE, DUR, dialogVariants, ease, itemVariants, listVariants, popVariants, scrimVariants, sheetVariants, spring } from '@/lib/motion';
 import { haptic } from '@/lib/telegram';
+import { swipeHandlers } from '@/lib/swipe';
 
 /* ─────────────────────────  Tugma  ───────────────────────── */
 
@@ -640,6 +642,8 @@ export function Screen({
   children,
   footer,
   tabBar,
+  onSwipeLeft,
+  onSwipeRight,
 }: {
   title?: string;
   subtitle?: string;
@@ -649,8 +653,15 @@ export function Screen({
   footer?: ReactNode;
   /** Pastki navigatsiya — bo'lim ekranlarida beriladi */
   tabBar?: ReactNode;
+  /**
+   * Ekranni surish — yuqoridagi bo'limlarni almashtirish uchun.
+   * Chapga surish "keyingi", o'ngga "oldingi" (`lib/swipe`).
+   */
+  onSwipeLeft?: () => void;
+  onSwipeRight?: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const swipe = useMemo(() => swipeHandlers(onSwipeLeft, onSwipeRight), [onSwipeLeft, onSwipeRight]);
 
   return (
     <ScreenCtx.Provider value={{ scrollRef }}>
@@ -678,7 +689,7 @@ export function Screen({
             </div>
           </header>
         )}
-        <div className="content" ref={scrollRef}>
+        <div className="content" ref={scrollRef} {...swipe}>
           {children}
         </div>
         {footer && <div className="action-bar">{footer}</div>}

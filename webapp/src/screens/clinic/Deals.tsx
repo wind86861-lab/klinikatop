@@ -26,18 +26,66 @@ import {
   IconSend,
   Notice,
   Screen,
+  Segment,
   Skeleton,
   Stepper,
 } from '@/ui';
 import { Async, ClinicTabBar, useResource } from './shell';
-import { DEAL_BOARD_COLUMNS, type ChatMessage, type DealDetail , requestTitle } from '@shared/types';
+import { DEAL_BOARD_COLUMNS, type ChatMessage, type DealBoardColumn, type DealDetail, requestTitle } from '@shared/types';
 
 /* ═════════════════  11-ekran: bitimlar kanban  ═════════════════ */
 
+/**
+ * Taxta telefonda BITTA ustun, ish stolida — hammasi yonma-yon.
+ *
+ * Ilgari ustun 260px edi va telefonda ikkinchisining bir bo'lagi
+ * ko'rinib turardi: sarlavhalar "Shifokor yo‘..." deb kesilar,
+ * qaysi bosqichda ekani esa faqat aylantirib bilinardi. 260px
+ * kartaga tor, telefon eniga esa yarim.
+ *
+ * Endi telefonda har ustun ekran eni bilan teng va surish bilan
+ * almashadi (`scroll-snap`); yuqorida bosqichlar segmenti turadi —
+ * u ham ustunga olib boradi, ham hozir qaysi ustun ochiqligini
+ * ko'rsatadi. Ish stolida segment kerak emas: uchala ustun ko'rinib
+ * turadi.
+ */
 export function DealsBoard() {
   const { t, lang } = useApp();
   const navigate = useNavigate();
   const res = useResource(() => api.clinicDeals());
+
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [stage, setStage] = useState<DealBoardColumn>(DEAL_BOARD_COLUMNS[0]);
+
+  /* Segment bosilganda — o'sha ustunga surish */
+  const goTo = (column: DealBoardColumn) => {
+    setStage(column);
+    const board = boardRef.current;
+    const col = board?.querySelector<HTMLElement>(`[data-column="${column}"]`);
+    if (board && col) board.scrollTo({ left: col.offsetLeft, behavior: 'smooth' });
+  };
+
+  /*
+   * Barmoq bilan surilganda — segment ergashsin.
+   *
+   * Aylanish tugagach eng yaqin ustun hisoblanadi. Har piksel uchun
+   * emas: `scroll-snap` baribir ustun chegarasida to'xtaydi, oraliq
+   * holatlar qiziq emas.
+   */
+  const onScroll = () => {
+    const board = boardRef.current;
+    if (!board) return;
+    const cols = Array.from(board.querySelectorAll<HTMLElement>('[data-column]'));
+    const nearest = cols.reduce(
+      (best, el) => {
+        const d = Math.abs(el.offsetLeft - board.scrollLeft);
+        return d < best.d ? { d, el } : best;
+      },
+      { d: Infinity, el: null as HTMLElement | null },
+    ).el;
+    const column = nearest?.dataset.column as DealBoardColumn | undefined;
+    if (column && column !== stage) setStage(column);
+  };
 
   return (
     <Screen title={t('board.title')} subtitle={t('board.sub')} tabBar={<ClinicTabBar />}>
@@ -47,11 +95,24 @@ export function DealsBoard() {
         empty={{ title: t('board.empty'), text: t('board.emptyText') }}
       >
         {(deals) => (
-          <div className="kanban">
+          <>
+            {/* Telefon uchun: qaysi bosqich ochiq va nechta bitim bor */}
+            <div className="kanban__stages">
+              <Segment
+                value={stage}
+                onChange={goTo}
+                options={DEAL_BOARD_COLUMNS.map((column) => ({
+                  value: column,
+                  label: `${t(`board.col.${column}` as any)} · ${deals.filter((d) => d.status === column).length}`,
+                }))}
+              />
+            </div>
+
+          <div className="kanban" ref={boardRef} onScroll={onScroll}>
             {DEAL_BOARD_COLUMNS.map((column) => {
               const items = deals.filter((d) => d.status === column);
               return (
-                <section key={column} className="kanban__col">
+                <section key={column} className="kanban__col" data-column={column}>
                   <header className="kanban__head">
                     <span>{t(`board.col.${column}` as any)}</span>
                     <span className="kanban__count num">{items.length}</span>
@@ -84,12 +145,13 @@ export function DealsBoard() {
                       ))}
                     </AnimatePresence>
 
-                    {items.length === 0 && <div className="kanban__empty">—</div>}
+                    {items.length === 0 && <div className="kanban__empty">{t('board.colEmpty')}</div>}
                   </div>
                 </section>
               );
             })}
           </div>
+          </>
         )}
       </Async>
     </Screen>

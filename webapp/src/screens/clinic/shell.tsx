@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { m } from 'framer-motion';
-import { NavLink, useNavigate } from '@/lib/router';
+import { NavLink, useLocation, useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { spring } from '@/lib/motion';
 import { haptic } from '@/lib/telegram';
@@ -126,21 +126,42 @@ export const CLINIC_TABS = [
 
 export function ClinicTabBar() {
   const { t } = useApp();
+  const { pathname } = useLocation();
+
+  /*
+   * Faol bo'lim sinfi BEMOR ilovasidagi bilan bir xil:
+   * `tabbar__item--active` va ustidagi yashil chiziq.
+   *
+   * Ilgari bu yerda `is-active` berilardi, CSS esa faqat
+   * `tabbar__item--active` ni biladi — ya'ni klinika kabinetida
+   * faol bo'lim HECH QACHON yonmagan. Odam qaysi bo'limda
+   * turganini faqat sarlavhadan bilardi.
+   *
+   * Faollik shu yerda hisoblanadi (NavLink ichida emas), chunki
+   * belgi ham, `aria-current` ham shunga bog'liq.
+   */
+  const here = pathname.replace(/\/+$/, '') || '/';
+  const isActive = (to: string, end: boolean) =>
+    end ? here === to : here === to || here.startsWith(`${to}/`);
 
   return (
     <nav className="tabbar" aria-label={t('clinic.title')}>
-      {CLINIC_TABS.map(({ to, key, icon: Icon, end }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={end}
-          className={({ isActive }) => `tabbar__item ${isActive ? 'is-active' : ''}`}
-          onClick={() => haptic.select()}
-        >
-          <Icon size={21} />
-          <span>{t(key as any)}</span>
-        </NavLink>
-      ))}
+      {CLINIC_TABS.map(({ to, key, icon: Icon, end }) => {
+        const active = isActive(to, end);
+        return (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            className={`tabbar__item ${active ? 'tabbar__item--active' : ''}`}
+            onClick={() => haptic.select()}
+          >
+            {active && <m.span layoutId="tab-clinic" className="tabbar__marker" transition={spring} />}
+            <Icon size={21} />
+            <span className="tabbar__label">{t(key as any)}</span>
+          </NavLink>
+        );
+      })}
     </nav>
   );
 }

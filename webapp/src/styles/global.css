@@ -14,6 +14,21 @@ body,
   height: 100%;
 }
 
+/*
+ * Brauzer imo-ishorasi O'CHIRILADI — aynan `html` da.
+ *
+ * Chrome "o'ngga surish = orqaga" ni ILDIZ aylantirgichga qarab hal
+ * qiladi, u esa `body` emas, `html`. Faqat `body` ga qo'yilganda
+ * o'lchab ko'rildi: qoida qo'llangan, lekin surish baribir tarixda
+ * orqaga qaytarardi — hatto `about:blank` gacha.
+ *
+ * Bu ilova uchun o'ngga surish bo'limni almashtirish (`lib/swipe`),
+ * sahifadan chiqib ketish emas.
+ */
+html {
+  overscroll-behavior: none;
+}
+
 body {
   background: var(--bg);
   color: var(--ink);
@@ -22,7 +37,21 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overscroll-behavior-y: none;
+  /*
+   * Ikkala o'q ham: vertikal — "tortib yangilash" bo'lmasin,
+   * gorizontal — BRAUZERNING O'ZI o'ngga surishni "orqaga" deb
+   * tushunmasin. Ikkinchisi o'lchab topildi: sahifa gorizontal
+   * aylanmagani uchun Chrome o'ngga surishni tarixda orqaga qaytish
+   * deb qabul qilar va bo'limni almashtirish o'rniga oldingi
+   * sahifaga tashlab yuborardi.
+   */
+  overscroll-behavior: none;
+}
+
+/* Aylanadigan konteynerlar ham brauzer imo-ishorasini ushlab qolsin */
+.content,
+.screen {
+  overscroll-behavior-x: contain;
 }
 
 h1,

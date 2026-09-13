@@ -15,6 +15,7 @@ import { useNavigate, useParams } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
+import { stepWithin } from '@/lib/swipe';
 import { spring } from '@/lib/motion';
 import { formatDate, groupDigits, money, timeLeft } from '@/lib/format';
 import { cityName, opName } from '@/i18n';
@@ -56,6 +57,11 @@ import { isUnknownOperation, type OfferTemplate, type Operation, type RequestWit
  * bor — alohida saralash kerak emas.
  */
 type View = 'todo' | 'urgent' | 'all';
+/* Surish tartibi — ekrandagi segment tartibi bilan bir xil */
+const VIEWS: readonly View[] = ['todo', 'urgent', 'all'];
+
+type OfferFilter = 'all' | 'SENT' | 'CHOSEN' | 'REJECTED';
+const OFFER_FILTERS: readonly OfferFilter[] = ['all', 'SENT', 'CHOSEN', 'REJECTED'];
 
 export function RequestsFeed() {
   const { t, lang } = useApp();
@@ -83,7 +89,13 @@ export function RequestsFeed() {
   }, [all, todo, view]);
 
   return (
-    <Screen title={t('feed.title')} subtitle={t('feed.sub')} tabBar={<ClinicTabBar />}>
+    <Screen
+      title={t('feed.title')}
+      subtitle={t('feed.sub')}
+      tabBar={<ClinicTabBar />}
+      onSwipeLeft={() => setView((v) => stepWithin(VIEWS, v, 1))}
+      onSwipeRight={() => setView((v) => stepWithin(VIEWS, v, -1))}
+    >
       {!canOffer && <Notice tone="warning">{t('feed.noSub')}</Notice>}
 
       {/*
@@ -695,7 +707,7 @@ export function MyOffers() {
   const { t, lang, toast } = useApp();
   const navigate = useNavigate();
   const res = useResource(() => api.clinicOffers());
-  const [filter, setFilter] = useState<'all' | 'SENT' | 'CHOSEN' | 'REJECTED'>('all');
+  const [filter, setFilter] = useState<OfferFilter>('all');
 
   const withdraw = async (id: number) => {
     try {
@@ -710,7 +722,13 @@ export function MyOffers() {
   const visible = (res.data ?? []).filter((o) => filter === 'all' || o.status === filter);
 
   return (
-    <Screen onBack={() => navigate('/clinic/more')} title={t('mo.title')} subtitle={t('mo.sub')}>
+    <Screen
+      onBack={() => navigate('/clinic/more')}
+      title={t('mo.title')}
+      subtitle={t('mo.sub')}
+      onSwipeLeft={() => setFilter((f) => stepWithin(OFFER_FILTERS, f, 1))}
+      onSwipeRight={() => setFilter((f) => stepWithin(OFFER_FILTERS, f, -1))}
+    >
       <Segment
         value={filter}
         onChange={(v) => setFilter(v as any)}

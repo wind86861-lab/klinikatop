@@ -2191,21 +2191,54 @@
 }
 
 /* ── Bitimlar kanban ── */
+/*
+ * Taxta: telefonda BITTA ustun ekran eni bilan teng, ish stolida
+ * hammasi yonma-yon.
+ *
+ * Ilgari ustun `76%` va `max-width: 260px` edi. Telefonda bu ikki
+ * yomon narsani birga berardi: 260px kartaga tor (sarlavha "Shifokor
+ * yo‘..." bo'lib kesilardi), ekran uchun esa yarim — yonida keyingi
+ * ustunning bo'lagi ko'rinib, qaysi bosqichda turganingiz noaniq.
+ *
+ * Endi ustun ekranning to'liq eni: karta o'qiladi, bosqich bitta va
+ * aniq, keyingisiga surish bilan o'tiladi. Yuqoridagi segment
+ * (`.kanban__stages`) shu surishga ergashadi.
+ *
+ * Gorizontal aylanish taxtaniki — `Screen` dagi surish uni
+ * `.kanban` selektori orqali taniydi va aralashmaydi (`lib/swipe`).
+ */
 .kanban {
   display: flex;
-  gap: var(--s-2);
+  gap: var(--s-3);
   overflow-x: auto;
   padding-bottom: var(--s-2);
   scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.kanban::-webkit-scrollbar {
+  display: none;
 }
 .kanban__col {
-  flex: 0 0 auto;
-  width: 76%;
-  max-width: 260px;
+  /* Ekranning to'liq eni: bitta vaqtda bitta bosqich */
+  flex: 0 0 100%;
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Ish stoli: uchala ustun ko'rinib turadi, segment ortiqcha */
+@media (min-width: 720px) {
+  .kanban {
+    overflow-x: visible;
+  }
+  .kanban__col {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .kanban__stages {
+    display: none;
+  }
 }
 .kanban__head {
   display: flex;

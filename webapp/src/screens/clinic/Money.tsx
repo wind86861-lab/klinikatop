@@ -15,6 +15,7 @@ import { useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { api, clinicApi } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
+import { stepWithin } from '@/lib/swipe';
 import { popVariants, spring } from '@/lib/motion';
 import { formatDate, money } from '@/lib/format';
 import {
@@ -186,6 +187,9 @@ export function Calendar() {
 
 /* ═════════════════  15-ekran: analitika  ═════════════════ */
 
+/* Surish tartibi — segment bilan bir xil */
+const WINDOWS = [7, 30, 90] as const;
+
 export function Analytics() {
   const { t, lang } = useApp();
   const navigate = useNavigate();
@@ -193,7 +197,13 @@ export function Analytics() {
   const res = useResource(() => clinicApi.analytics(days), [days]);
 
   return (
-    <Screen onBack={() => navigate('/clinic/more')} title={t('an.title')} subtitle={t('an.sub')}>
+    <Screen
+      onBack={() => navigate('/clinic/more')}
+      title={t('an.title')}
+      subtitle={t('an.sub')}
+      onSwipeLeft={() => setDays((d) => stepWithin(WINDOWS, d, 1))}
+      onSwipeRight={() => setDays((d) => stepWithin(WINDOWS, d, -1))}
+    >
       <Segment
         value={String(days)}
         onChange={(v) => setDays(Number(v))}

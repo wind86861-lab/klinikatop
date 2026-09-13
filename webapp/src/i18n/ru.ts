@@ -652,6 +652,7 @@ export const ru: Record<TranslationKey, string> = {
   'mo.lostBy': 'Победитель был дешевле на {v}',
   'board.title': 'Сделки',
   'board.sub': 'На каком этапе каждая сделка',
+  'board.colEmpty': 'На этом этапе сделок нет',
   'board.empty': 'Сделок пока нет',
   'board.emptyText': 'Когда ваше предложение выберут, сделка появится здесь.',
   'board.col.AGREED': 'Дата согласована',
