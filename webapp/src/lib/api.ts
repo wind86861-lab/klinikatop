@@ -274,6 +274,17 @@ export interface Highlights {
   testimonials: Testimonial[];
 }
 
+/** Klinikani o'chirish nimani olib ketadi — ekran shu sonlarni ko'rsatadi */
+export interface ClinicDeletionImpact {
+  deals: number;
+  offers: number;
+  reviews: number;
+  messages: number;
+  payments: number;
+  accounts: number;
+  empty: boolean;
+}
+
 /** Admin panel bosqichni saqlashda yuboradigan shakl */
 export interface StepDraft {
   /** Savol faqat shu turdagi so'rovda; null — ikkalasida ham */
@@ -547,6 +558,24 @@ export const api = {
     post<{ clinicId: number; percent: number | null }>(`/admin/clinics/${clinicId}/commission`, { percent }),
   grantTrial: (clinicId: number, months: number | null) =>
     post<{ until: string }>(`/admin/clinics/${clinicId}/trial`, { months }),
+
+  /* ── Klinikani boshqarish ── */
+  updateClinicByAdmin: (
+    clinicId: number,
+    body: Partial<{ name: string; cityId: number; phone: string | null; address: string; website: string | null }>,
+  ) => patch<Clinic>(`/admin/clinics/${clinicId}`, body),
+  /** O'chirishdan oldin: nima yo'qoladi */
+  clinicDeletionImpact: (clinicId: number) =>
+    get<ClinicDeletionImpact>(`/admin/clinics/${clinicId}/deletion-impact`),
+  /** `force` — tarixi bor klinikani ham o'chirish (faqat bosh admin) */
+  deleteClinic: (clinicId: number, force = false) =>
+    del<ClinicDeletionImpact>(`/admin/clinics/${clinicId}${force ? '?force=1' : ''}`),
+  /** Javobdagi havola BIR MARTA ko'rinadi va hech qayerda saqlanmaydi */
+  resetClinicPassword: (clinicId: number) =>
+    post<{ phone: string; fullName: string; setupToken: string }>(
+      `/admin/clinics/${clinicId}/reset-password`,
+      {},
+    ),
 
   verifications: () => get<Clinic[]>('/admin/verifications'),
   decideVerification: (clinicId: number, status: 'approved' | 'rejected', note: string | null) =>

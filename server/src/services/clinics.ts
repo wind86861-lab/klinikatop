@@ -1,6 +1,7 @@
 /**
  * Klinika: ro'yxatdan o'tish, verifikatsiya (12-bo'lim), obuna (11-bo'lim), dashboard (10-ekran).
  */
+import crypto from 'node:crypto';
 import { db, toJson, tx } from '../db';
 import { config } from '../lib/config';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
@@ -354,3 +355,237 @@ export function getDashboard(clinicId: number): ClinicDashboard {
 }
 
 export const COMMISSION_PERCENT = config.rules.commissionPercent;
+
+/* ── Klinikani boshqarish: tahrir, parol, o'chirish ──────────── */
+
+/**
+ * Klinikani o'chirish NIMANI olib ketadi.
+ *
+ * Bazadagi HAR BIR bog'lanish `ON DELETE CASCADE` — ya'ni bitta
+ * `DELETE FROM clinics` bitimlarni, takliflarni, sharhlarni,
+ * to'lovlarni va bitimlar ostidagi yozishmalarni ham jimgina olib
+ * ketadi. Bu loyihada bir marta shunday yo'qotish bo'lgan (migratsiya
+ * 029), shuning uchun bu yerda son OLDINDAN hisoblanadi va odamga
+ * ko'rsatiladi: u nimani yo'qotayotganini bilib turib bossin.
+ */
+export interface ClinicDeletionImpact {
+  deals: number;
+  offers: number;
+  reviews: number;
+  messages: number;
+  payments: number;
+  accounts: number;
+  /** Tarixi yo'q klinikani o'chirish xavfsiz — yo'qotadigan narsa yo'q */
+  empty: boolean;
+}
+
+export function clinicDeletionImpact(clinicId: number): ClinicDeletionImpact {
+  getClinic(clinicId); // yo'q bo'lsa shu yerda to'xtaydi
+
+  const one = (sql: string) => (db.prepare(sql).get(clinicId) as { n: number }).n;
+
+  const deals = one(`SELECT COUNT(*) n FROM deals WHERE clinic_id = ?`);
+  const offers = one(`SELECT COUNT(*) n FROM offers WHERE clinic_id = ?`);
+  const reviews = one(`SELECT COUNT(*) n FROM reviews WHERE clinic_id = ?`);
+  const accounts = one(`SELECT COUNT(*) n FROM admin_users WHERE clinic_id = ?`);
+
+  // Yozishmalar bitim orqali ketadi — ya'ni bilvosita, lekin baribir
+  const messages = one(
+    `SELECT COUNT(*) n FROM messages WHERE deal_id IN (SELECT id FROM deals WHERE clinic_id = ?)`,
+  );
+
+  const payments =
+    one(`SELECT COUNT(*) n FROM subscription_payments WHERE clinic_id = ?`) +
+    one(`SELECT COUNT(*) n FROM commission_payments WHERE clinic_id = ?`);
+
+  return {
+    deals,
+    offers,
+    reviews,
+    messages,
+    payments,
+    accounts,
+    /*
+     * Hisoblar sanalmaydi: ular klinikaning O'ZI, tarixi emas.
+     * Hisobsiz klinika bo'lmaydi, ya'ni ularni shartga qo'shsak
+     * hech bir klinika hech qachon "bo'sh" bo'lmasdi.
+     */
+    empty: deals + offers + reviews + messages + payments === 0,
+  };
+}
+
+/**
+ * Klinikani butunlay o'chirish.
+ *
+ * Tarixi bor klinika ODDIY YO'L bilan o'chmaydi: buning uchun
+ * `force` kerak va uni faqat bosh administrator bera oladi. Sabab
+ * oddiy — bitimlar, to'lovlar va sharhlar moliyaviy hamda tibbiy
+ * yozuv; ularni tasodifan yo'qotib bo'lmasligi kerak. Ishlayotgan
+ * klinikani vaqtincha to'xtatish uchun `suspendSubscription` bor.
+ */
+export function deleteClinic(
+  clinicId: number,
+  moderatorId: number,
+  opts: { force?: boolean } = {},
+): ClinicDeletionImpact {
+  const clinic = getClinic(clinicId);
+  const impact = clinicDeletionImpact(clinicId);
+
+  if (!impact.empty && !opts.force) {
+    throw conflict(
+      'clinic_has_history',
+      `Bu klinikada ${impact.deals} bitim, ${impact.offers} taklif, ${impact.reviews} sharh bor. ` +
+        'O‘chirish ularni ham yo‘q qiladi — tasdiqlash kerak.',
+    );
+  }
+
+  return tx(() => {
+    /*
+     * Veb hisoblarning `users` dagi juftligi.
+     *
+     * `admin_users` klinika bilan birga CASCADE o'chadi, lekin
+     * `users` dagi qator `clinic_id` si NULL bo'lib QOLADI — va
+     * unda hali ham klinika roli turadi. O'zi orqali kirib
+     * bo'lmaydi (kirish `admin_users` orqali), lekin bu yarim
+     * yozuv: rolini ham olib tashlaymiz.
+     *
+     * Qatorning O'ZI o'chirilmaydi: unga moderatsiya jurnali,
+     * yozishmalar va boshqa yozuvlar ishora qiladi — o'chirilsa
+     * o'sha tarix ham buzilardi.
+     */
+    db.prepare(
+      `UPDATE users SET roles = '[]', clinic_id = NULL
+        WHERE clinic_id = ? AND telegram_id < 0`,
+    ).run(clinicId);
+
+    db.prepare(`DELETE FROM clinics WHERE id = ?`).run(clinicId);
+
+    /*
+     * Jurnalga NIMA yo'qolgani yoziladi. Klinikaning o'zi endi yo'q,
+     * ya'ni keyin "bu yerda nima bor edi" degan savolga javob faqat
+     * shu yozuvdan chiqadi.
+     */
+    db.prepare(
+      `INSERT INTO moderation_log (moderator_id, entity, entity_id, action, note)
+       VALUES (?, 'clinic', ?, 'delete', ?)`,
+    ).run(
+      moderatorId,
+      clinicId,
+      JSON.stringify({ name: clinic.name, forced: Boolean(opts.force), ...impact }),
+    );
+
+    return impact;
+  });
+}
+
+/**
+ * Administrator klinikani tahrirlaydi.
+ *
+ * Klinikaning o'zi `updateClinicProfile` orqali tavsif va rasm kabi
+ * narsalarni o'zgartiradi. Bu yerda esa KIMLIK maydonlari: nomi,
+ * shahri, aloqa raqami. Ularni admin tuzatishi kerak bo'ladi —
+ * ariza noto'g'ri to'ldirilgan yoki klinika ko'chib o'tgan.
+ *
+ * Shahar alohida: u qidiruvga ta'sir qiladi (so'rov faqat o'z
+ * shahridagi klinikalarga boradi), shuning uchun mavjudligi
+ * tekshiriladi — yo'q shahar yozilsa klinika hech qayerda
+ * ko'rinmay qolardi.
+ */
+export function updateClinicByAdmin(
+  clinicId: number,
+  input: Partial<{ name: string; cityId: number; phone: string | null; address: string; website: string | null }>,
+  moderatorId: number,
+): Clinic {
+  const current = getClinic(clinicId);
+
+  if (input.name !== undefined && input.name.trim().length < 2) {
+    throw badRequest('name_required', 'Klinika nomini yozing');
+  }
+
+  if (input.cityId !== undefined) {
+    const city = db.prepare(`SELECT id FROM cities WHERE id = ?`).get(input.cityId);
+    if (!city) throw badRequest('bad_city', 'Bunday shahar yo‘q');
+  }
+
+  db.prepare(
+    `UPDATE clinics SET name = ?, city_id = ?, phone = ?, address = ?, website = ? WHERE id = ?`,
+  ).run(
+    (input.name ?? current.name).trim().slice(0, 200),
+    input.cityId ?? current.cityId,
+    input.phone === undefined ? current.phone : input.phone?.trim().slice(0, 40) || null,
+    (input.address ?? current.address ?? '').slice(0, 300),
+    input.website === undefined ? current.website : input.website?.trim().slice(0, 200) || null,
+    clinicId,
+  );
+
+  db.prepare(
+    `INSERT INTO moderation_log (moderator_id, entity, entity_id, action, note)
+     VALUES (?, 'clinic', ?, 'edit', ?)`,
+  ).run(moderatorId, clinicId, JSON.stringify({ before: current.name, after: input.name ?? current.name }));
+
+  return getClinic(clinicId);
+}
+
+/**
+ * Klinika parolini tiklash.
+ *
+ * Administrator YANGI PAROL O'YLAB TOPMAYDI. Buning o'rniga bir
+ * martalik havola beriladi va parolni klinikaning o'zi qo'yadi —
+ * xuddi ariza tasdiqlangandagidek.
+ *
+ * Nima uchun shunday: admin o'ylab topgan parol telefonda aytiladi,
+ * yozishmada qoladi va ko'pincha o'zgartirilmaydi. Ya'ni klinika
+ * kabinetiga kirish yo'li boshqa odamda ham qolib ketardi. Havola
+ * esa bir marta ishlaydi va parolni faqat egasi biladi.
+ *
+ * Amaldagi sessiyalar ham yopiladi: parol o'zgardi degani — eski
+ * kirish tugadi degani. Aks holda parol tiklangandan keyin ham eski
+ * sessiya ochiq qolardi va butun amal ma'nosini yo'qotardi.
+ */
+export function resetClinicPassword(
+  clinicId: number,
+  moderatorId: number,
+): { phone: string; fullName: string; setupToken: string } {
+  getClinic(clinicId);
+
+  /*
+   * Klinikada bir nechta hisob bo'lishi mumkin (admin va operator).
+   * Parol EGASIGA — ya'ni `clinic_admin` ga tiklanadi; u bo'lmasa
+   * eng eskisiga, chunki u odatda ariza bergan odam.
+   */
+  const account = db
+    .prepare(
+      `SELECT id, phone, full_name FROM admin_users
+        WHERE clinic_id = ? AND disabled_at IS NULL
+        ORDER BY CASE level WHEN 'clinic_admin' THEN 0 ELSE 1 END, id ASC
+        LIMIT 1`,
+    )
+    .get(clinicId) as { id: number; phone: string; full_name: string } | undefined;
+
+  if (!account) throw notFound('Bu klinikada faol hisob yo‘q');
+
+  const setupToken = crypto.randomBytes(24).toString('base64url');
+  const expires = new Date(Date.now() + 7 * 24 * 3600_000).toISOString().slice(0, 19).replace('T', ' ');
+
+  return tx(() => {
+    db.prepare(
+      `UPDATE admin_users
+          SET password_salt = '', password_hash = '', setup_token = ?, setup_expires = ?,
+              failed_count = 0, locked_until = NULL
+        WHERE id = ?`,
+    ).run(setupToken, expires, account.id);
+
+    db.prepare(`DELETE FROM admin_sessions WHERE admin_id = ?`).run(account.id);
+
+    /*
+     * Jurnalga TOKEN YOZILMAYDI — u parolga teng sir. Jurnalni
+     * ko'ra oladigan har kim uni ishlatib kabinetni egallab olardi.
+     */
+    db.prepare(
+      `INSERT INTO moderation_log (moderator_id, entity, entity_id, action, note)
+       VALUES (?, 'clinic', ?, 'password:reset', ?)`,
+    ).run(moderatorId, clinicId, `account:${account.id}`);
+
+    return { phone: account.phone, fullName: account.full_name, setupToken };
+  });
+}

@@ -1057,6 +1057,16 @@ export interface AdminClinicRow {
   id: number;
   name: string;
   cityId: number;
+  /*
+   * Aloqa maydonlari ro'yxatning O'ZIDA keladi.
+   *
+   * Ular faqat tahrir oynasi uchun kerak, lekin alohida so'rov
+   * qilinsa oyna ochilganda kutish paydo bo'lardi — klinikalar soni
+   * o'nlab, ya'ni bu bir necha yuz bayt.
+   */
+  phone: string | null;
+  address: string;
+  website: string | null;
   verification: VerificationStatus;
   plan: SubscriptionPlan | null;
   subscriptionStatus: SubscriptionStatus;

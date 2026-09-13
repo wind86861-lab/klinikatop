@@ -10,9 +10,9 @@
  * platforma qaysi shartlar bilan ishlaydi va shu klinika uchun shartlar
  * qanday.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/store/app';
-import { api } from '@/lib/api';
+import { api, type ClinicDeletionImpact } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
 import { spring } from '@/lib/motion';
 import { formatDate } from '@/lib/format';
@@ -27,6 +27,7 @@ import {
   Notice,
   Section,
   Segment,
+  Select,
   Sheet,
   Skeleton,
 } from '@/ui';
@@ -37,6 +38,7 @@ import {
   ADMIN_CLINIC_FILTERS,
   type AdminClinicFilter,
   type AdminClinicRow,
+  type City,
   type PlatformSettings,
 } from '@shared/types';
 
@@ -48,9 +50,9 @@ export function AdminClinics() {
   const res = useResource(() => api.adminClinics(filter), [filter]);
 
   const [editing, setEditing] = useState<AdminClinicRow | null>(null);
-  const [mode, setMode] = useState<'commission' | 'trial'>('commission');
+  const [mode, setMode] = useState<ClinicSheetMode>('commission');
 
-  const open = (clinic: AdminClinicRow, which: 'commission' | 'trial') => {
+  const open = (clinic: AdminClinicRow, which: ClinicSheetMode) => {
     setEditing(clinic);
     setMode(which);
     haptic.press();
@@ -195,10 +197,20 @@ export function AdminClinics() {
               )}
               <RowMenu
                 items={[
+                  { label: t('ac.edit'), onClick: () => open(row, 'edit') },
                   { label: t('ac.setCommission'), onClick: () => open(row, 'commission') },
                   { label: t('ac.grantTrial'), onClick: () => open(row, 'trial') },
+                  /*
+                   * Parol tiklash va o'chirish — serverda ham
+                   * `requireRole('admin')`. Moderatorga ko'rsatib,
+                   * keyin 403 berish aldash bo'lardi.
+                   */
                   ...(isSuperAdmin
-                    ? [{ label: t('ac.suspend'), onClick: () => suspend(row), danger: true }]
+                    ? [
+                        { label: t('ac.resetPassword'), onClick: () => open(row, 'password') },
+                        { label: t('ac.suspend'), onClick: () => suspend(row), danger: true },
+                        { label: t('ac.delete'), onClick: () => open(row, 'delete'), danger: true },
+                      ]
                     : []),
                 ]}
               />
@@ -240,10 +252,11 @@ export function AdminClinics() {
       <ClinicTermsSheet
         clinic={editing}
         mode={mode}
+        cities={cities}
         onClose={() => setEditing(null)}
-        onSaved={() => {
+        onSaved={(message) => {
           setEditing(null);
-          toast(t('ac.saved'), 'success');
+          toast(message ?? t('ac.saved'), 'success');
           res.reload();
         }}
       />
@@ -251,41 +264,88 @@ export function AdminClinics() {
   );
 }
 
+/**
+ * Klinika ustidagi amallar — bitta varaq, beshta rejim.
+ *
+ * Nima uchun bitta: hammasi bir xil shaklda (klinika → maydon →
+ * tasdiqlash) va beshta alohida komponent bir xil ochish/yopish
+ * mantig'ini besh marta takrorlardi.
+ */
+type ClinicSheetMode = 'commission' | 'trial' | 'edit' | 'password' | 'delete';
+
 function ClinicTermsSheet({
   clinic,
   mode,
+  cities,
   onClose,
   onSaved,
 }: {
   clinic: AdminClinicRow | null;
-  mode: 'commission' | 'trial';
+  mode: ClinicSheetMode;
+  cities: City[];
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (message?: string) => void;
 }) {
-  const { t, toast } = useApp();
+  const { t, lang, toast } = useApp();
   const [percent, setPercent] = useState('');
   const [months, setMonths] = useState('6');
   const [saving, setSaving] = useState(false);
-  const [seeded, setSeeded] = useState<number | null>(null);
+  const [seeded, setSeeded] = useState<string | null>(null);
 
-  if (clinic && seeded !== clinic.id) {
-    setSeeded(clinic.id);
-    setPercent(clinic.commissionPercent != null ? String(clinic.commissionPercent) : '');
+  /* Tahrir maydonlari */
+  const [form, setForm] = useState({ name: '', cityId: 0, phone: '', address: '', website: '' });
+
+  /* Parol havolasi — faqat javob kelgach paydo bo'ladi */
+  const [link, setLink] = useState<{ phone: string; fullName: string; url: string } | null>(null);
+
+  /* O'chirish: nima yo'qolishi va tasdiq matni */
+  const [impact, setImpact] = useState<ClinicDeletionImpact | null>(null);
+  const [confirmName, setConfirmName] = useState('');
+
+  /*
+   * Varaq boshqa klinika yoki boshqa rejim uchun ochilganda
+   * maydonlar YANGILANADI. Kalit ikkovidan yasaladi: bir xil
+   * klinikada rejim almashsa ham qayta to'ldirilishi kerak.
+   */
+  const key = clinic ? `${clinic.id}:${mode}` : null;
+  if (key && seeded !== key) {
+    setSeeded(key);
+    setPercent(clinic!.commissionPercent != null ? String(clinic!.commissionPercent) : '');
     setMonths('6');
+    setForm({
+      name: clinic!.name,
+      cityId: clinic!.cityId,
+      phone: clinic!.phone ?? '',
+      address: clinic!.address ?? '',
+      website: clinic!.website ?? '',
+    });
+    setLink(null);
+    setImpact(null);
+    setConfirmName('');
   }
 
-  const save = async () => {
-    if (!clinic) return;
+  /*
+   * O'chirish oynasi ochilganda yo'qoladigan narsalar sanaladi.
+   * Ro'yxatdagi `dealsCount` ga ishonib bo'lmaydi: u faqat yakunlangan
+   * bitimlarni sanaydi va yozishmalarni umuman bilmaydi.
+   */
+  useEffect(() => {
+    if (!clinic || mode !== 'delete') return;
+    let alive = true;
+    void api
+      .clinicDeletionImpact(clinic.id)
+      .then((x) => alive && setImpact(x))
+      .catch(() => alive && setImpact(null));
+    return () => {
+      alive = false;
+    };
+  }, [clinic, mode]);
+
+  const run = async (fn: () => Promise<void>) => {
     setSaving(true);
     try {
-      if (mode === 'commission') {
-        // Bo'sh qiymat — umumiy foizga qaytarish
-        await api.setClinicCommission(clinic.id, percent.trim() === '' ? null : Number(percent));
-      } else {
-        await api.grantTrial(clinic.id, Number(months));
-      }
+      await fn();
       haptic.success();
-      onSaved();
     } catch (err: any) {
       haptic.error();
       toast(err?.message ?? t('common.error'), 'error');
@@ -294,16 +354,78 @@ function ClinicTermsSheet({
     }
   };
 
+  const save = () =>
+    run(async () => {
+      if (!clinic) return;
+
+      if (mode === 'commission') {
+        // Bo'sh qiymat — umumiy foizga qaytarish
+        await api.setClinicCommission(clinic.id, percent.trim() === '' ? null : Number(percent));
+        onSaved();
+        return;
+      }
+
+      if (mode === 'trial') {
+        await api.grantTrial(clinic.id, Number(months));
+        onSaved();
+        return;
+      }
+
+      if (mode === 'edit') {
+        await api.updateClinicByAdmin(clinic.id, {
+          name: form.name.trim(),
+          cityId: form.cityId,
+          phone: form.phone.trim() || null,
+          address: form.address.trim(),
+          website: form.website.trim() || null,
+        });
+        onSaved();
+      }
+    });
+
+  const resetPassword = () =>
+    run(async () => {
+      if (!clinic) return;
+      const result = await api.resetClinicPassword(clinic.id);
+      /*
+       * Havola SHU YERDA yasaladi va faqat ekranda turadi: token
+       * parolga teng sir, shuning uchun u jurnalga ham, boshqa
+       * hech qayerga ham yozilmaydi.
+       */
+      setLink({
+        phone: result.phone,
+        fullName: result.fullName,
+        url: `${window.location.origin}/kabinet/parol?token=${result.setupToken}`,
+      });
+    });
+
+  const remove = () =>
+    run(async () => {
+      if (!clinic) return;
+      await api.deleteClinic(clinic.id, !impact?.empty);
+      onSaved(t('ac.deleted'));
+    });
+
+  const title =
+    mode === 'commission'
+      ? t('ac.setCommission')
+      : mode === 'trial'
+        ? t('ac.grantTrial')
+        : mode === 'edit'
+          ? t('ac.edit')
+          : mode === 'password'
+            ? t('ac.resetPassword')
+            : t('ac.delete');
+
+  /* O'chirishni tasdiqlash: nomni aynan yozish kerak */
+  const confirmed = confirmName.trim().toLowerCase() === (clinic?.name ?? '').trim().toLowerCase();
+
   return (
-    <Sheet
-      open={clinic !== null}
-      onClose={onClose}
-      title={mode === 'commission' ? t('ac.setCommission') : t('ac.grantTrial')}
-    >
+    <Sheet open={clinic !== null} onClose={onClose} title={title}>
       <div className="stack">
         {clinic && <strong>{clinic.name}</strong>}
 
-        {mode === 'commission' ? (
+        {mode === 'commission' && (
           <Field label={t('ps.commission')} hint={t('ac.percentHint')}>
             <Input
               inputMode="decimal"
@@ -312,7 +434,9 @@ function ClinicTermsSheet({
               onChange={(e) => setPercent(e.target.value.replace(/[^\d.]/g, ''))}
             />
           </Field>
-        ) : (
+        )}
+
+        {mode === 'trial' && (
           <Field label={t('ac.months')}>
             <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
               {['1', '3', '6', '12'].map((m) => (
@@ -324,9 +448,129 @@ function ClinicTermsSheet({
           </Field>
         )}
 
-        <Button block loading={saving} onClick={save}>
-          {t('common.save')}
-        </Button>
+        {mode === 'edit' && (
+          <>
+            <Field label={t('ac.fieldName')}>
+              <Input value={form.name} maxLength={200} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </Field>
+            <Field label={t('ac.fieldCity')} hint={t('ac.cityHint')}>
+              <Select
+                value={String(form.cityId)}
+                onChange={(e) => setForm({ ...form, cityId: Number(e.target.value) })}
+              >
+                {cities.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {cityName(c, lang)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t('ac.fieldPhone')}>
+              <Input value={form.phone} maxLength={40} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </Field>
+            <Field label={t('ac.fieldAddress')}>
+              <Input
+                value={form.address}
+                maxLength={300}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
+            </Field>
+            <Field label={t('ac.fieldWebsite')}>
+              <Input
+                value={form.website}
+                maxLength={200}
+                onChange={(e) => setForm({ ...form, website: e.target.value })}
+              />
+            </Field>
+          </>
+        )}
+
+        {mode === 'password' &&
+          (link ? (
+            <>
+              <Notice tone="warning">{t('ac.linkOnce')}</Notice>
+              <Field label={t('ac.linkFor')}>
+                <Input readOnly value={`${link.fullName} · ${link.phone}`} />
+              </Field>
+              <Field label={t('ac.linkField')}>
+                <Input readOnly value={link.url} onFocus={(e) => e.currentTarget.select()} />
+              </Field>
+              <Button
+                variant="secondary"
+                block
+                onClick={() => {
+                  void navigator.clipboard?.writeText(link.url);
+                  toast(t('ac.linkCopied'), 'success');
+                }}
+              >
+                {t('ac.linkCopy')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Notice tone="info">{t('ac.resetExplain')}</Notice>
+              <Button block loading={saving} onClick={resetPassword}>
+                {t('ac.resetConfirm')}
+              </Button>
+            </>
+          ))}
+
+        {mode === 'delete' && (
+          <>
+            {impact === null ? (
+              <Skeleton h={120} />
+            ) : impact.empty ? (
+              <Notice tone="info">{t('ac.deleteEmpty')}</Notice>
+            ) : (
+              <>
+                {/*
+                  Sonlar ATAYLAB ro'yxat bo'lib chiqadi: "tarixi bor"
+                  degan umumiy gap odamni to'xtatmaydi, "6 bitim, 15
+                  taklif, 43 yozishma" esa to'xtatadi.
+                */}
+                <Notice tone="danger">{t('ac.deleteWarn')}</Notice>
+                <div className="stack stack--tight">
+                  {(
+                    [
+                      ['ac.impact.deals', impact.deals],
+                      ['ac.impact.offers', impact.offers],
+                      ['ac.impact.reviews', impact.reviews],
+                      ['ac.impact.messages', impact.messages],
+                      ['ac.impact.payments', impact.payments],
+                      ['ac.impact.accounts', impact.accounts],
+                    ] as [string, number][]
+                  )
+                    .filter(([, n]) => n > 0)
+                    .map(([label, n]) => (
+                      <div key={label} className="between">
+                        <span>{t(label as any)}</span>
+                        <strong className="num">{n}</strong>
+                      </div>
+                    ))}
+                </div>
+                <Field label={t('ac.deleteType')} hint={clinic?.name}>
+                  <Input value={confirmName} onChange={(e) => setConfirmName(e.target.value)} />
+                </Field>
+              </>
+            )}
+
+            <Button
+              block
+              variant="danger"
+              loading={saving}
+              disabled={impact === null || (!impact.empty && !confirmed)}
+              onClick={remove}
+            >
+              {t('ac.delete')}
+            </Button>
+          </>
+        )}
+
+        {(mode === 'commission' || mode === 'trial' || mode === 'edit') && (
+          <Button block loading={saving} onClick={save}>
+            {t('common.save')}
+          </Button>
+        )}
       </div>
     </Sheet>
   );

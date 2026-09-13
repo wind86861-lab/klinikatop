@@ -3340,6 +3340,131 @@ async function main() {
     check('odam yozgan ism qayta yozilmaydi', again.firstName === 'Anvar' && again.lastName === 'Rasulov');
   }
 
+  /* ══════════════  Klinikani boshqarish  ══════════════ */
+
+  section('Klinikani tahrirlash, parol, o‘chirish');
+
+  {
+    const cl = require('../services/clinics');
+    const wa2 = require('../services/webAuth');
+
+    /* ── Tahrirlash ── */
+
+    const edited = cl.updateClinicByAdmin(clinic.id, { name: 'Yangi nom', phone: '998901112233' }, moderator.id);
+    check('nom o‘zgardi', edited.name === 'Yangi nom');
+    check('telefon o‘zgardi', edited.phone === '998901112233');
+    throws(
+      'yo‘q shahar qabul qilinmaydi',
+      () => cl.updateClinicByAdmin(clinic.id, { cityId: 999_999 }, moderator.id),
+      'bad_city',
+    );
+    cl.updateClinicByAdmin(clinic.id, { name: clinic.name }, moderator.id);
+
+    /* ── O'chirishning ta'siri ── */
+
+    const impact = cl.clinicDeletionImpact(clinic.id);
+    check('tarix sanaldi', impact.offers > 0 && impact.deals > 0, JSON.stringify(impact));
+    check('tarixi bor klinika bo‘sh emas', impact.empty === false);
+
+    throws(
+      'tarixi bor klinika oddiy yo‘l bilan o‘chmaydi',
+      () => cl.deleteClinic(clinic.id, moderator.id),
+      'clinic_has_history',
+    );
+
+    /* ── Bo'sh klinikani o'chirish ── */
+
+    const spare = cl.registerClinic({
+      userId: moderator.id,
+      name: 'O‘chiriladigan klinika',
+      cityId: tashkent.id,
+      address: 'Test',
+      about: '',
+      licenseFileId: 'lic-del',
+      operationIds: [gallbladder.id],
+    });
+    const spareImpact = cl.clinicDeletionImpact(spare.id);
+    check('yangi klinika bo‘sh', spareImpact.empty === true, JSON.stringify(spareImpact));
+
+    cl.deleteClinic(spare.id, moderator.id);
+    check(
+      'bo‘sh klinika o‘chdi',
+      !db.prepare(`SELECT id FROM clinics WHERE id = ?`).get(spare.id),
+    );
+
+    /* ── Majburiy o'chirish HAMMASINI olib ketadi ── */
+
+    const doomed = cl.registerClinic({
+      userId: moderator.id,
+      name: 'Tarixi bor klinika',
+      cityId: tashkent.id,
+      address: 'Test',
+      about: '',
+      licenseFileId: 'lic-doom',
+      operationIds: [gallbladder.id],
+    });
+    const acc = wa2.createAccount({
+      phone: '998900999111',
+      fullName: 'Sinov egasi',
+      level: 'clinic_admin',
+      clinicId: doomed.id,
+    });
+    db.prepare(
+      `INSERT INTO offers (request_id, clinic_id, price_uzs, includes, status)
+       VALUES (?, ?, 1000000, '[]', 'SENT')`,
+    ).run(request.id, doomed.id);
+
+    const doomedImpact = cl.clinicDeletionImpact(doomed.id);
+    check('taklif sanaldi', doomedImpact.offers === 1 && doomedImpact.empty === false);
+    check('hisob sanaldi', doomedImpact.accounts === 1);
+
+    cl.deleteClinic(doomed.id, moderator.id, { force: true });
+    check('majburiy o‘chirish ishladi', !db.prepare(`SELECT id FROM clinics WHERE id = ?`).get(doomed.id));
+    check(
+      'taklif ham ketdi (CASCADE)',
+      (db.prepare(`SELECT COUNT(*) n FROM offers WHERE clinic_id = ?`).get(doomed.id) as any).n === 0,
+    );
+    check(
+      'hisob ham ketdi',
+      !db.prepare(`SELECT id FROM admin_users WHERE id = ?`).get(acc.user.id),
+    );
+    /*
+     * `users` dagi juftlik QOLADI — unga jurnal va yozishmalar
+     * ishora qiladi — lekin roli olib tashlanadi.
+     */
+    const mirror = db.prepare(`SELECT roles, clinic_id FROM users WHERE telegram_id = ?`).get(-acc.user.id) as any;
+    check('juftlik qatori saqlandi', Boolean(mirror));
+    check('juftlikning roli olindi', mirror?.roles === '[]' && mirror?.clinic_id === null);
+    check(
+      'o‘chirish jurnalga yozildi',
+      Boolean(
+        db
+          .prepare(`SELECT id FROM moderation_log WHERE entity = 'clinic' AND entity_id = ? AND action = 'delete'`)
+          .get(doomed.id),
+      ),
+    );
+
+    /* ── Parolni tiklash ── */
+
+    const before = db.prepare(`SELECT password_hash FROM admin_users WHERE clinic_id = ? LIMIT 1`).get(clinic.id) as any;
+    check('tiklashdan oldin parol bor', Boolean(before?.password_hash));
+
+    const reset = cl.resetClinicPassword(clinic.id, moderator.id);
+    check('havola berildi', reset.setupToken.length > 20);
+
+    const after = db
+      .prepare(`SELECT password_hash, setup_token FROM admin_users WHERE phone = ?`)
+      .get(reset.phone) as any;
+    check('parol tozalandi', after.password_hash === '');
+    check('sozlash tokeni qo‘yildi', after.setup_token === reset.setupToken);
+    check(
+      'token jurnalga YOZILMADI',
+      !(db.prepare(`SELECT note FROM moderation_log WHERE action = 'password:reset'`).all() as any[]).some(
+        (r) => String(r.note ?? '').includes(reset.setupToken),
+      ),
+    );
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

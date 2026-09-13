@@ -57,7 +57,15 @@ import {
   upsertManualPrice,
   listClinicsForAdmin,
 } from '../services/admin';
-import { listPendingVerifications, setVerification, suspendSubscription } from '../services/clinics';
+import {
+  clinicDeletionImpact,
+  deleteClinic,
+  listPendingVerifications,
+  resetClinicPassword,
+  setVerification,
+  suspendSubscription,
+  updateClinicByAdmin,
+} from '../services/clinics';
 import { getDeal } from '../services/deals';
 import { listMessages } from '../services/chat';
 
@@ -135,6 +143,56 @@ adminRouter.post('/users/:id/roles', requireRole('admin'), (req, res) => {
 adminRouter.post('/users/:id/block', requireRole('admin'), (req, res) => {
   const body = z.object({ blocked: z.boolean(), note: z.string().max(600).default('') }).parse(req.body);
   res.json(setUserBlocked(Number(req.params.id), body.blocked, req.user!.id, body.note));
+});
+
+/**
+ * Klinikani tahrirlash — kimlik maydonlari.
+ *
+ * Tarif, komissiya va verifikatsiya o'z amallarida qoladi: ular
+ * boshqa qaror va boshqa jurnal yozuvi.
+ */
+adminRouter.patch('/clinics/:id', requireRole('admin'), (req, res) => {
+  const body = z
+    .object({
+      name: z.string().trim().min(2).max(200).optional(),
+      cityId: z.number().int().positive().optional(),
+      phone: z.string().trim().max(40).nullable().optional(),
+      address: z.string().trim().max(300).optional(),
+      website: z.string().trim().max(200).nullable().optional(),
+    })
+    .parse(req.body);
+
+  res.json(updateClinicByAdmin(Number(req.params.id), body, req.user!.id));
+});
+
+/**
+ * O'chirishdan OLDIN: nima yo'qoladi.
+ *
+ * Ekran shu sonlarni ko'rsatadi — odam nimani yo'qotayotganini
+ * bilib turib tasdiqlasin.
+ */
+adminRouter.get('/clinics/:id/deletion-impact', requireRole('admin'), (req, res) => {
+  res.json(clinicDeletionImpact(Number(req.params.id)));
+});
+
+/**
+ * Klinikani butunlay o'chirish.
+ *
+ * `force` bo'lmasa tarixi bor klinika o'chmaydi — xizmat 409 qaytaradi.
+ */
+adminRouter.delete('/clinics/:id', requireRole('admin'), (req, res) => {
+  const force = req.query.force === '1' || req.query.force === 'true';
+  res.json(deleteClinic(Number(req.params.id), req.user!.id, { force }));
+});
+
+/**
+ * Parolni tiklash — bir martalik havola.
+ *
+ * Javob BIR MARTA qaytadi va hech qayerda saqlanmaydi: administrator
+ * uni klinikaga yetkazadi, parolni klinikaning o'zi qo'yadi.
+ */
+adminRouter.post('/clinics/:id/reset-password', requireRole('admin'), (req, res) => {
+  res.json(resetClinicPassword(Number(req.params.id), req.user!.id));
 });
 
 adminRouter.post('/clinics/:id/suspend', requireRole('admin'), (req, res) => {
