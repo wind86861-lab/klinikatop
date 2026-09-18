@@ -13,7 +13,6 @@
  *   /kabinet/parol  — birinchi kirishda parol o'rnatish
  */
 import { useEffect, useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
 import { Navigate, Route, Routes, useLocation, useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { ErrorState, Screen, Toaster } from '@/ui';
@@ -124,7 +123,26 @@ export function WebApp() {
     <>
       <OfflineBanner />
 
-      <AnimatePresence mode="wait" initial={false}>
+      {/*
+        `AnimatePresence` bu yerda ATAYLAB YO'Q.
+
+        Ilgari `Routes` uning to'g'ridan-to'g'ri bolasi edi, `mode="wait"`
+        bilan. Bu rejim eski daraxt to'liq chiqib ketishini kutadi va
+        yangisini shundan keyingina mount qiladi. Tab bar'dagi
+        `layoutId` li belgi esa o'z o'rnini YANGI daraxtdagi juftiga
+        uzatmoqchi bo'ladi — u hali yo'q. Natija: eski ekran chiqmaydi,
+        yangisi kirmaydi, manzil esa allaqachon yangi. Kabinetda tugma
+        bosilardi, sahifa esa o'tmasdi — besh kun prodda shunday turdi.
+
+        `Screen` da chiqish animatsiyasi yo'q, faqat kirish; ya'ni
+        `AnimatePresence` bu yerda hech narsa bermasdi, faqat shu
+        tuzoqni. `key` esa qoladi: manzil o'zgarsa ekran qayta
+        mount bo'lib, kirish animatsiyasi qayta o'ynaydi.
+
+        Bemor ilovasida (`App.tsx`) xuddi shu belgi ishlaydi, chunki u
+        yerda `Routes` `Suspense` ichida — `AnimatePresence` almashinuvni
+        ko'rmaydi ham. Bu tasodif, kafolat emas.
+      */}
         <Routes location={location} key={location.pathname}>
             {/* ── Klinika kabineti — 23 ekran, 8 soha ── */}
             {/* Klinika kabineti — 23 ekran, 8 soha bo'yicha */}
@@ -356,7 +374,6 @@ export function WebApp() {
 
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </AnimatePresence>
 
       <Toaster toasts={toasts} onDismiss={dismissToast} />
     </>
