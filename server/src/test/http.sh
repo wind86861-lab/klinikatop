@@ -1079,6 +1079,36 @@ for a in $(curl -s "${MOD[@]}" "$API/admin/applications?status=pending" | jqv '.
 done
 
 echo
+echo "21. Haqiqiy hajmdagi fayl"
+#
+# Bu test ATAYLAB katta: ilgari fayl yuklash faqat 70 baytlik PNG
+# bilan sinalgan va o'tib ketgan, prodda esa 750 KB dan katta har
+# qanday rasm 500 bilan yiqilardi — global `express.json` 1 MB
+# chegarasi fayl yo'nalishidagi 12 MB dan OLDIN ishlagani uchun.
+# Telefon rasmi 2–6 MB; shuning uchun 3 MB bilan sinaymiz.
+#
+BIG=$(node -e "
+  const raw = require('crypto').randomBytes(3 * 1024 * 1024);
+  process.stdout.write(JSON.stringify({ name: 'IMG_3mb.jpg', mimeType: 'image/jpeg', kind: 'xulosa', dataBase64: raw.toString('base64') }));
+")
+BIG_RESP=$(echo "$BIG" | curl -s -w '\n%{http_code}' "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/files" --data-binary @-)
+BIG_CODE=$(echo "$BIG_RESP" | tail -1)
+BIG_BYTES=$(echo "$BIG_RESP" | head -1 | jqv '.sizeBytes')
+check "3 MB rasm qabul qilindi (201)" "$([ "$BIG_CODE" = "201" ] && echo 1)" "$BIG_CODE"
+check "hajmi to'g'ri saqlandi" "$([ "$BIG_BYTES" = "3145728" ] && echo 1)" "$BIG_BYTES"
+
+# 8 MB dan katta — rad etiladi, lekin TUSHUNARLI xabar bilan, 500 emas
+HUGE=$(node -e "
+  const raw = require('crypto').randomBytes(9 * 1024 * 1024);
+  process.stdout.write(JSON.stringify({ name: 'IMG_9mb.jpg', mimeType: 'image/jpeg', kind: 'xulosa', dataBase64: raw.toString('base64') }));
+")
+HUGE_RESP=$(echo "$HUGE" | curl -s -w '\n%{http_code}' "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/files" --data-binary @-)
+HUGE_CODE=$(echo "$HUGE_RESP" | tail -1)
+HUGE_ERR=$(echo "$HUGE_RESP" | head -1 | jqv '.code')
+check "9 MB rasm 413 bilan rad etiladi (500 emas)" "$([ "$HUGE_CODE" = "413" ] && echo 1)" "$HUGE_CODE"
+check "xato kodi o'qiladigan" "$([ "$HUGE_ERR" = "file_too_large" ] && echo 1)" "$HUGE_ERR"
+
+echo
 echo "──────────────────────────────────────────────────"
 echo "HTTP natija: $pass o'tdi, $fail yiqildi"
 [ "$fail" -eq 0 ]

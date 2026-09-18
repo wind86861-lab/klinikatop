@@ -63,7 +63,23 @@ app.use((_req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '1mb' }));
+/*
+ * JSON tanasi — 1 MB, FAYL YO'NALISHIDAN TASHQARI.
+ *
+ * Bu parser har so'rovda birinchi ishlaydi. Fayl yo'nalishida
+ * (`routes/files.ts`) 12 MB lik o'z parseri bor, lekin ilgari u
+ * hech qachon ishlamagan: 1 MB dan katta tana unga yetib bormasdan
+ * shu yerda rad etilardi. Natijada 750 KB dan katta HAR QANDAY rasm
+ * — kamera kadri ham, galereya surati ham — prodda 500 bilan
+ * yiqilardi, sinovlar esa 70 baytlik PNG bilan o'tib ketgan.
+ *
+ * Fayl yo'nalishi o'tkazib yuboriladi: uning o'z chegarasi bor.
+ */
+const jsonBody = express.json({ limit: '1mb' });
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/files')) return next();
+  jsonBody(req, res, next);
+});
 // Har so'rov uchun umumiy himoya — autentifikatsiyadan oldin, IP bo'yicha
 app.use('/api', limits.global);
 
@@ -77,6 +93,18 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   // express.json() buzuq tanani SyntaxError bilan rad etadi — bu klient xatosi, 500 emas
   if (err instanceof SyntaxError && 'body' in (err as any)) {
     return res.status(400).json({ error: 'JSON tanasi buzuq', code: 'malformed_json' });
+  }
+  /*
+   * Tana chegaradan katta — bu ham klient xatosi va odam uchun
+   * TUSHUNARLI bo'lishi kerak: "rasm juda katta" degan xabar bilan
+   * u kichikroq oladi, "ichki xatolik" bilan esa ilova buzilgan deb
+   * o'ylab ketadi.
+   */
+  if ((err as { type?: string })?.type === 'entity.too.large') {
+    return res.status(413).json({
+      error: 'Fayl juda katta — 8 MB gacha bo‘lsin',
+      code: 'file_too_large',
+    });
   }
   if (err instanceof ZodError) {
     return res.status(400).json({
