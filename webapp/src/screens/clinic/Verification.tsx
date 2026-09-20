@@ -541,12 +541,10 @@ export function ClinicLabServices() {
 
   const res = useResource(() => api.clinicLabTests());
   const [selected, setSelected] = useState<Set<number> | null>(null);
-  const [referral, setReferral] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
 
   const current = selected ?? new Set(res.data?.selected ?? []);
   const all = res.data?.all ?? [];
-  const acceptsReferral = referral ?? res.data?.acceptsReferral ?? true;
 
   const toggle = (id: number) => {
     const next = new Set(current);
@@ -568,7 +566,6 @@ export function ClinicLabServices() {
     setSaving(true);
     try {
       await api.saveClinicLabTests([...current]);
-      if (referral !== null) await api.updateClinic({ acceptsReferral: referral });
       haptic.success();
       toast(t('lab.saved'), 'success');
       navigate(-1);
@@ -603,27 +600,6 @@ export function ClinicLabServices() {
         <>
           <Notice tone="info">{t('lab.hint')}</Notice>
 
-          {/*
-            Yo'llanma (rasm) so'rovlari — katalogsiz, shuning uchun alohida
-            kalit. Jarrohlik markazi buni o'chirib, qon tahlili
-            yo'llanmalarini olmay qo'yadi.
-          */}
-          <button
-            type="button"
-            className={`svc__item svc__head ${acceptsReferral ? 'is-on' : ''}`}
-            onClick={() => {
-              setReferral(!acceptsReferral);
-              haptic.tap();
-            }}
-          >
-            <span className="svc__icon" aria-hidden>📄</span>
-            <span className="svc__text">
-              <span className="svc__title">{t('lab.referral')}</span>
-              <span className="svc__sub">{t('lab.referralSub')}</span>
-            </span>
-            <span className={`svc__switch ${acceptsReferral ? 'is-on' : ''}`} aria-hidden />
-          </button>
-
           <LabTestPicker
             tests={all}
             lang={lang}
@@ -636,6 +612,86 @@ export function ClinicLabServices() {
           {current.size === 0 && <Notice tone="warning">{t('lab.none')}</Notice>}
         </>
       )}
+    </Screen>
+  );
+}
+
+/* ═════════════════  Yo'llanma (rasm) so'rovlari  ═════════════════ */
+
+/**
+ * Shifokor yo'llanmasini qabul qilish — alohida ekran.
+ *
+ * Bu ro'yxatdan o'tishdagi uchinchi karta bilan bir xil narsa: bemor
+ * qog'ozni rasmga oladi, klinika ro'yxat bo'yicha narx aytadi.
+ * Katalog yo'q — nima yozilgani rasmda, shuning uchun bu yerda
+ * tanlaydigan ro'yxat emas, bitta qaror bor: qabul qilamizmi.
+ *
+ * Avval bu kalit tahlil ekranining ichida turgan edi va menyuda
+ * ko'rinmasdi — klinika uni topolmasdi. Menyuda uchta bo'lim
+ * ro'yxatdan o'tishdagi uchta karta bilan bir xil turishi kerak.
+ */
+export function ClinicReferral() {
+  const { t, toast } = useApp();
+  const navigate = useNavigate();
+
+  const res = useResource(() => api.clinic());
+  const [next, setNext] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const on = next ?? res.data?.clinic.acceptsReferral ?? true;
+  const dirty = next !== null && next !== res.data?.clinic.acceptsReferral;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.updateClinic({ acceptsReferral: on });
+      haptic.success();
+      toast(t('ref.saved'), 'success');
+      navigate(-1);
+    } catch (err: any) {
+      haptic.error();
+      toast(err?.message ?? t('common.error'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Screen
+      title={t('ref.title')}
+      subtitle={t('ref.sub')}
+      onBack={() => navigate(-1)}
+      footer={
+        <Button block loading={saving} disabled={!dirty} onClick={save}>
+          {t('common.save')}
+        </Button>
+      }
+    >
+      <Async resource={res} skeleton={<Skeleton h={160} />}>
+        {() => (
+          <>
+            <button
+              type="button"
+              className={`svc__item svc__head ${on ? 'is-on' : ''}`}
+              onClick={() => {
+                setNext(!on);
+                haptic.tap();
+              }}
+              aria-pressed={on}
+            >
+              <span className="svc__icon" aria-hidden>📄</span>
+              <span className="svc__text">
+                <span className="svc__title">{t('ref.toggle')}</span>
+                <span className="svc__sub">{on ? t('ref.on') : t('ref.off')}</span>
+              </span>
+              <span className={`svc__switch ${on ? 'is-on' : ''}`} aria-hidden />
+            </button>
+
+            <Notice tone="info">{t('ref.how')}</Notice>
+            {!on && <Notice tone="warning">{t('ref.offWarn')}</Notice>}
+          </>
+        )}
+      </Async>
     </Screen>
   );
 }

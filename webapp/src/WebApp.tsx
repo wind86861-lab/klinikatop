@@ -24,7 +24,7 @@ import { BanisaLink } from '@/screens/web/BanisaLink';
 import { CabinetLogin } from '@/screens/web/CabinetLogin';
 import { SetPassword } from '@/screens/web/SetPassword';
 import { Dashboard, MoreMenu, NotificationPrefs, ClinicSettings } from '@/screens/clinic/Cabinet';
-import { VerificationStatus, VerificationDocs, ClinicOperations, ClinicLabServices } from '@/screens/clinic/Verification';
+import { VerificationStatus, VerificationDocs, ClinicOperations, ClinicLabServices, ClinicReferral } from '@/screens/clinic/Verification';
 import { RequestsFeed, OfferBuilder, Templates, MyOffers } from '@/screens/clinic/Work';
 import { DealsBoard, ClinicDeal, ClinicChat } from '@/screens/clinic/Deals';
 import { Calendar, Analytics, Subscription, Revenue } from '@/screens/clinic/Money';
@@ -169,6 +169,14 @@ export function WebApp() {
               element={
                 <RequireRole roles={CLINIC_ROLES} needsClinic>
                   <ClinicLabServices />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/clinic/referral"
+              element={
+                <RequireRole roles={CLINIC_ROLES} needsClinic>
+                  <ClinicReferral />
                 </RequireRole>
               }
             />
