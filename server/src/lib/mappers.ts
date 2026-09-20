@@ -105,6 +105,7 @@ export function mapClinic(r: any): Clinic {
     beds: r.beds ?? null,
     foundedYear: r.founded_year ?? null,
     equipment: jsonArray(r.equipment),
+    acceptsReferral: r.accepts_referral !== 0,
     photos: jsonArray(r.photos),
     verification: r.verification,
     verificationNote: r.verification_note,

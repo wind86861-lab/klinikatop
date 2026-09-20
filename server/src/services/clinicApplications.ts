@@ -38,6 +38,10 @@ export interface ClinicApplication {
   contactPhone: string;
   contactEmail: string | null;
   operationIds: number[];
+  /** Qaysi tahlillarni qiladi (tekshiruv id'lari) */
+  labTestIds: number[];
+  /** Shifokor yo'llanmasi (rasm) so'rovlarini qabul qiladimi */
+  acceptsReferral: boolean;
   status: ApplicationStatus;
   note: string | null;
   clinicId: number | null;
@@ -65,6 +69,8 @@ function map(row: any): ClinicApplication {
     contactPhone: row.contact_phone,
     contactEmail: row.contact_email ?? null,
     operationIds: JSON.parse(row.operation_ids || '[]'),
+    labTestIds: JSON.parse(row.lab_test_ids || '[]'),
+    acceptsReferral: row.accepts_referral === 1,
     status: row.status,
     note: row.note ?? null,
     clinicId: row.clinic_id ?? null,
@@ -84,6 +90,8 @@ export interface ApplicationInput {
   contactPhone: string;
   contactEmail: string | null;
   operationIds: number[];
+  labTestIds: number[];
+  acceptsReferral: boolean;
   ip: string | null;
 }
 
@@ -104,8 +112,13 @@ export function submitApplication(input: ApplicationInput): { id: number; status
   if (!db.prepare(`SELECT 1 FROM cities WHERE id = ?`).get(input.cityId)) {
     throw badRequest('unknown_city', 'Bunday viloyat topilmadi');
   }
-  if (input.operationIds.length === 0) {
-    throw badRequest('operations_required', 'Kamida bitta yo‘nalish tanlang');
+  /*
+   * Kamida BITTA xizmat: operatsiya, tahlil yoki yo'llanma. Ilgari
+   * faqat operatsiya majburiy edi — sof laboratoriya ro'yxatdan
+   * o'tolmasdi.
+   */
+  if (input.operationIds.length === 0 && input.labTestIds.length === 0 && !input.acceptsReferral) {
+    throw badRequest('services_required', 'Kamida bitta xizmat turini tanlang');
   }
 
   const license = input.licenseNo.trim();
@@ -143,8 +156,8 @@ export function submitApplication(input: ApplicationInput): { id: number; status
     .prepare(
       `INSERT INTO clinic_applications
          (name, city_id, address, about, license_no, contact_name, contact_phone,
-          contact_email, operation_ids, submitted_ip)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          contact_email, operation_ids, lab_test_ids, accepts_referral, submitted_ip)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name.trim().slice(0, 200),
@@ -156,6 +169,8 @@ export function submitApplication(input: ApplicationInput): { id: number; status
       input.contactPhone.trim().slice(0, 40),
       input.contactEmail?.trim()?.slice(0, 160) || null,
       JSON.stringify(input.operationIds.slice(0, 60)),
+      JSON.stringify(input.labTestIds.slice(0, 120)),
+      input.acceptsReferral ? 1 : 0,
       input.ip,
     );
 
@@ -204,16 +219,20 @@ export function approveApplication(id: number, moderatorId: number): ClinicAppli
   db.transaction(() => {
     const info = db
       .prepare(
-        `INSERT INTO clinics (name, city_id, address, about, license_file_id, verification)
-         VALUES (?, ?, ?, ?, ?, 'pending')`,
+        `INSERT INTO clinics (name, city_id, address, about, license_file_id, verification, accepts_referral)
+         VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
       )
-      .run(app.name, app.cityId, app.address, app.about, app.licenseNo);
+      .run(app.name, app.cityId, app.address, app.about, app.licenseNo, app.acceptsReferral ? 1 : 0);
 
     const clinicId = Number(info.lastInsertRowid);
     const insOp = db.prepare(
       `INSERT OR IGNORE INTO clinic_operations (clinic_id, operation_id) VALUES (?, ?)`,
     );
     for (const opId of app.operationIds) insOp.run(clinicId, opId);
+
+    // Arizadagi tahlillar ham klinikaga ko'chadi — profildan qayta belgilash shart emas
+    const insLab = db.prepare(`INSERT OR IGNORE INTO clinic_lab_tests (clinic_id, test_id) VALUES (?, ?)`);
+    for (const testId of app.labTestIds) insLab.run(clinicId, testId);
 
     /*
      * Hisob ARIZADAGI RAQAM bilan ochiladi — o'sha raqamga moderator

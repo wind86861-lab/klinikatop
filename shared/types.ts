@@ -287,6 +287,14 @@ export interface Clinic {
   equipment: string[];
   /** Klinika suratlari (fayl id'lari) */
   photos: string[];
+  /**
+   * Shifokor yo'llanmasi (rasm) so'rovlarini qabul qiladimi.
+   *
+   * Yo'llanma katalogsiz — qog'ozda nima yozilgani noma'lum, shuning
+   * uchun u tekshiruv ro'yxati bo'yicha emas, shu bayroq bo'yicha
+   * tarqatiladi. Jarrohlik markazi buni o'chirib qo'yadi.
+   */
+  acceptsReferral: boolean;
   verification: VerificationStatus;
   verificationNote: string | null;
   licenseFileId: string | null;

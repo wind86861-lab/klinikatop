@@ -90,6 +90,7 @@ clinicRouter.patch('/', (req, res) => {
       foundedYear: z.number().int().min(1800).max(new Date().getFullYear()).nullable().optional(),
       equipment: z.array(z.string().trim().min(1).max(120)).max(24).optional(),
       photos: z.array(z.string().min(1).max(200)).max(12).optional(),
+      acceptsReferral: z.boolean().optional(),
       operationIds: z.array(z.number().int().positive()).min(1).optional(),
     })
     .parse(req.body);
@@ -388,9 +389,12 @@ clinicRouter.post('/commission/pay', (req, res) => {
  * operatsiyalardagi bilan bir xil qoida.
  */
 clinicRouter.get('/lab-tests', (req, res) => {
+  const clinicId = requireClinic(req);
   res.json({
     all: listLabTests(),
-    selected: clinicLabTestIds(requireClinic(req)),
+    selected: clinicLabTestIds(clinicId),
+    // Yo'llanma bayrog'i shu ekranda boshqariladi — ikkalasi "tahlil" mavzusi
+    acceptsReferral: getClinic(clinicId).acceptsReferral,
   });
 });
 

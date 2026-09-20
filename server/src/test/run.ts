@@ -1965,17 +1965,37 @@ async function main() {
     check('sarlavha bo‘sh qolmadi', requestTitle(ref) === 'Shifokor yo‘llanmasi');
 
     /*
-     * Tarqatish: yo'llanma shahardagi HAMMA tasdiqlangan klinikaga
-     * boradi — tahlil ro'yxatini belgilamagani ham.
+     * Tarqatish: yo'llanma shahardagi yo'llanmani QABUL QILADIGAN
+     * tasdiqlangan klinikalarga boradi — tahlil ro'yxatini
+     * belgilamagani ham, lekin `accepts_referral` o'chirilgani EMAS.
      */
     const approved = db
-      .prepare(`SELECT COUNT(*) n FROM clinics WHERE verification = 'approved' AND city_id = ?`)
+      .prepare(
+        `SELECT COUNT(*) n FROM clinics
+          WHERE verification = 'approved' AND city_id = ? AND accepts_referral = 1`,
+      )
       .get(tashkent.id) as { n: number };
     check(
-      'yo‘llanma shahardagi hamma klinikaga ketdi',
+      'yo‘llanma shahardagi qabul qiladigan klinikalarga ketdi',
       ref.broadcastCount === approved.n,
       `${ref.broadcastCount} / ${approved.n}`,
     );
+
+    // Bitta klinika yo'llanmani o'chiradi — keyingi yo'llanma unga bormasin
+    const optedOut = db
+      .prepare(`SELECT id FROM clinics WHERE verification = 'approved' AND city_id = ? LIMIT 1`)
+      .get(tashkent.id) as { id: number };
+    db.prepare(`UPDATE clinics SET accepts_referral = 0 WHERE id = ?`).run(optedOut.id);
+    const afterOptOut = requests.createRequest(refBody() as any);
+    check(
+      'yo‘llanmani o‘chirgan klinikaga bormaydi',
+      afterOptOut.broadcastCount === approved.n - 1 &&
+        !db
+          .prepare(`SELECT 1 FROM request_broadcasts WHERE request_id = ? AND clinic_id = ?`)
+          .get(afterOptOut.id, optedOut.id),
+      `${afterOptOut.broadcastCount} / ${approved.n - 1}`,
+    );
+    db.prepare(`UPDATE clinics SET accepts_referral = 1 WHERE id = ?`).run(optedOut.id);
 
     check(
       'yo‘llanmada byudjet 200 mingdan boshlanadi',

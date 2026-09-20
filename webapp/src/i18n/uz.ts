@@ -599,6 +599,8 @@ export const uz = {
   'lab.tests': 'Tekshiruvlar',
   'lab.selectAll': 'Barchasini tanlash',
   'lab.hint': 'Qaysi tekshiruvlarni qilasiz? Tahlil so‘rovi faqat shu tekshiruvlarni belgilagan klinikalarga boradi.',
+  'lab.referral': 'Shifokor yo‘llanmasi',
+  'lab.referralSub': 'Bemor qog‘ozni rasmga oladi — siz ro‘yxat bo‘yicha narx aytasiz',
   'lab.none': 'Hech biri tanlanmagan — tahlil so‘rovlari sizga kelmaydi.',
   'lab.saved': 'Tahlil yo‘nalishlari saqlandi',
   'ops.title': 'Yo‘nalishlar',

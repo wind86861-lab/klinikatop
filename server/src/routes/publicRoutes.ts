@@ -14,6 +14,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { rateLimit } from '../middleware/rateLimit';
 import { submitApplication } from '../services/clinicApplications';
+import { listLabTests } from '../services/labOrgans';
 import { catalogTree, listCities, listOperations } from '../services/catalog';
 import { getPublicStats } from '../services/publicStats';
 import { asyncHandler } from '../lib/asyncHandler';
@@ -41,6 +42,8 @@ publicRouter.get('/reference', (_req, res) => {
     operations: listOperations().filter((o) => o.slug !== 'unknown'),
     // Ariza formasi ham daraxt ko'rinishida ko'rsatadi
     tree: catalogTree(),
+    // Tahlil katalogi — klinika arizada o'zi qiladiganini belgilaydi
+    labTests: listLabTests(false),
   });
 });
 
@@ -58,7 +61,9 @@ const applicationSchema = z.object({
    * va uni moderator qo'ng'iroq qilib tekshiradi.
    */
   contactEmail: z.string().trim().email().max(160).nullable().default(null),
-  operationIds: z.array(z.number().int().positive()).min(1).max(60),
+  operationIds: z.array(z.number().int().positive()).max(60).default([]),
+  labTestIds: z.array(z.number().int().positive()).max(120).default([]),
+  acceptsReferral: z.boolean().default(false),
 });
 
 /**

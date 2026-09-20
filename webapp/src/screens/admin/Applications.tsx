@@ -138,9 +138,18 @@ export function Applications() {
                         <a href={`mailto:${app.contactEmail}`}>{app.contactEmail}</a>
                       </div>
                     )}
+                    {/* Uchala xizmat turi — moderator nima tasdiqlayotganini ko'rsin */}
                     <div className="app-row">
                       <span className="tiny">{t('app.operations')}</span>
                       <span className="num">{app.operationIds.length}</span>
+                    </div>
+                    <div className="app-row">
+                      <span className="tiny">Tahlillar</span>
+                      <span className="num">{app.labTestIds?.length ?? 0}</span>
+                    </div>
+                    <div className="app-row">
+                      <span className="tiny">Yo‘llanma (rasm)</span>
+                      <span>{app.acceptsReferral ? 'qabul qiladi' : '—'}</span>
                     </div>
                   </div>
 

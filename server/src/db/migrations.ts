@@ -2047,6 +2047,27 @@ export const MIGRATIONS: Migration[] = [
       addColumn(db, 'requests', 'referral_items', 'TEXT');
     },
   },
+  {
+    /**
+     * Klinika UCHALA so'rov turini ham qabul qilishi mumkin.
+     *
+     * Ro'yxatdan o'tishda faqat operatsiya tanlanardi; tahlil va
+     * yo'llanma esa keyin profildan yoqilardi — ko'p klinika buni
+     * bilmasdi ham. Endi ariza uchalasini ham olib yuradi va
+     * tasdiqlanganda klinikaga to'liq ko'chadi.
+     *
+     * `accepts_referral` klinikada SUKUT BO'YICHA 1: shu paytgacha
+     * yo'llanma hamma tasdiqlangan klinikaga borardi, mavjudlar
+     * uchun bu o'zgarmasin. Yangi klinika esa arizada o'zi hal
+     * qiladi.
+     */
+    id: '036_application_services',
+    up: (db) => {
+      addColumn(db, 'clinic_applications', 'lab_test_ids', "TEXT NOT NULL DEFAULT '[]'");
+      addColumn(db, 'clinic_applications', 'accepts_referral', 'INTEGER NOT NULL DEFAULT 0');
+      addColumn(db, 'clinics', 'accepts_referral', 'INTEGER NOT NULL DEFAULT 1');
+    },
+  },
 ];
 
 /**

@@ -157,7 +157,7 @@ export function clinicMatchesRequest(clinicId: number, requestId: number): boole
     | undefined;
   if (!request) return false;
 
-  // Yo'llanma shahardagi hamma tasdiqlangan klinikaga ochiq
+  // Yo'llanma — shahardagi yo'llanmani QABUL QILADIGAN klinikalarga (accepts_referral)
   if (request.kind === 'referral') {
     return findAllClinicsInCity(request.cityId, {
       otherRegionsOk: Boolean(request.otherRegionsOk),
@@ -183,9 +183,11 @@ export function clinicMatchesRequest(clinicId: number, requestId: number): boole
 /**
  * Yo'llanma so'rovi uchun klinikalar — shahardagi HAMMASI.
  *
- * Bu yerda saralanadigan narsa yo'q: yo'llanmada nima yozilgani
- * rasmda qoladi va uni faqat odam o'qiy oladi. Shuning uchun shart
- * bittagina — klinika tasdiqlangan bo'lsin.
+ * Bu yerda katalog bo'yicha saralanadigan narsa yo'q: yo'llanmada
+ * nima yozilgani rasmda qoladi va uni faqat odam o'qiy oladi. Shart
+ * ikkita — klinika tasdiqlangan va yo'llanmani QABUL QILADIGAN
+ * bo'lsin (`accepts_referral`). Ilgari ikkinchisi yo'q edi va
+ * jarrohlik markaziga ham qon tahlili yo'llanmasi borardi.
  *
  * Tartib boshqalari bilan bir xil: avval o'z shahri, keyin obunasi
  * faol bo'lganlar, keyin reytingi yuqorilar.
@@ -201,6 +203,7 @@ export function findAllClinicsInCity(
       `SELECT c.*
          FROM clinics c
         WHERE c.verification = 'approved'
+          AND c.accepts_referral = 1
           AND (@anyCity = 1 OR c.city_id = @cityId)
         ORDER BY (c.city_id = @cityId) DESC,
                  (c.subscription_status = 'active') DESC,

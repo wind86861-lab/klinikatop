@@ -350,7 +350,7 @@ export const api = {
   labTests: () => get<LabTest[]>('/catalog/lab-tests'),
 
   /* ── Klinikaning tahlil xizmatlari ── */
-  clinicLabTests: () => get<{ all: LabTest[]; selected: number[] }>('/clinic/lab-tests'),
+  clinicLabTests: () => get<{ all: LabTest[]; selected: number[]; acceptsReferral: boolean }>('/clinic/lab-tests'),
   saveClinicLabTests: (testIds: number[]) =>
     put<{ selected: number[] }>('/clinic/lab-tests', { testIds }),
 
@@ -749,6 +749,8 @@ export interface ClinicApplication {
   contactPhone: string;
   contactEmail: string | null;
   operationIds: number[];
+  labTestIds: number[];
+  acceptsReferral: boolean;
   status: 'pending' | 'approved' | 'rejected';
   note: string | null;
   clinicId: number | null;
@@ -770,6 +772,7 @@ export interface ClinicProfileBody {
   equipment: string[];
   photos: string[];
   operationIds: number[];
+  acceptsReferral: boolean;
 }
 
 export interface DoctorBody {

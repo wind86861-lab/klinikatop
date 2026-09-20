@@ -126,6 +126,7 @@ export function updateClinicProfile(
     foundedYear: number | null;
     equipment: string[];
     photos: string[];
+    acceptsReferral: boolean;
   }>,
 ): Clinic {
   const current = db.prepare(`SELECT * FROM clinics WHERE id = ?`).get(clinicId) as any;
@@ -140,7 +141,8 @@ export function updateClinicProfile(
   db.prepare(
     `UPDATE clinics
         SET name = ?, address = ?, about = ?, logo_url = ?, phone = ?, website = ?,
-            work_hours = ?, beds = ?, founded_year = ?, equipment = ?, photos = ?
+            work_hours = ?, beds = ?, founded_year = ?, equipment = ?, photos = ?,
+            accepts_referral = ?
       WHERE id = ?`,
   ).run(
     pick(input.name, current.name).trim().slice(0, 200),
@@ -154,6 +156,7 @@ export function updateClinicProfile(
     pick(input.foundedYear, current.founded_year),
     list(input.equipment, current.equipment ?? '[]'),
     list(input.photos, current.photos ?? '[]'),
+    pick(input.acceptsReferral, current.accepts_referral !== 0) ? 1 : 0,
     clinicId,
   );
 

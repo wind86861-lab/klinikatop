@@ -9,19 +9,17 @@
  * so'rov olishga tayyormi? Tayyor bo'lmasa boshqa ekranlarning ma'nosi yo'q.
  */
 import { useMemo, useState } from 'react';
-import { AnimatePresence, m } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
-import type { LabTest } from '@shared/types';
 import { api, clinicApi } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
-import { EASE, popVariants } from '@/lib/motion';
+import { popVariants } from '@/lib/motion';
 import { formatDate } from '@/lib/format';
 import { FileOpenButton, FileThumb } from '@/components/wizard/FileThumb';
 import {
   Button,
   Card,
-  Chip,
   Field,
   IconAlert,
   IconCheck,
@@ -42,6 +40,7 @@ import {
   type StoredFile,
 } from '@shared/types';
 import { CatalogBrowser } from '@/components/CatalogBrowser';
+import { LabTestPicker } from '@/components/LabTestPicker';
 
 /* ═════════════════  3-ekran: verifikatsiya holati  ═════════════════ */
 
@@ -542,18 +541,17 @@ export function ClinicLabServices() {
 
   const res = useResource(() => api.clinicLabTests());
   const [selected, setSelected] = useState<Set<number> | null>(null);
-  const [open, setOpen] = useState<number | null>(null);
+  const [referral, setReferral] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
 
   const current = selected ?? new Set(res.data?.selected ?? []);
   const all = res.data?.all ?? [];
-  const name = (x: LabTest) => (lang === 'ru' ? x.nameRu : x.nameUz);
+  const acceptsReferral = referral ?? res.data?.acceptsReferral ?? true;
 
   const toggle = (id: number) => {
     const next = new Set(current);
     next.has(id) ? next.delete(id) : next.add(id);
     setSelected(next);
-    haptic.tap();
   };
 
   const toggleGroup = (ids: number[]) => {
@@ -564,13 +562,13 @@ export function ClinicLabServices() {
       else next.add(id);
     }
     setSelected(next);
-    haptic.tap();
   };
 
   const save = async () => {
     setSaving(true);
     try {
       await api.saveClinicLabTests([...current]);
+      if (referral !== null) await api.updateClinic({ acceptsReferral: referral });
       haptic.success();
       toast(t('lab.saved'), 'success');
       navigate(-1);
@@ -605,96 +603,35 @@ export function ClinicLabServices() {
         <>
           <Notice tone="info">{t('lab.hint')}</Notice>
 
-          <div className="cat__tree">
-            {all
-              .filter((x) => x.parentId === null)
-              .map((g) => {
-                const kids = all.filter((x) => x.parentId === g.id);
+          {/*
+            Yo'llanma (rasm) so'rovlari — katalogsiz, shuning uchun alohida
+            kalit. Jarrohlik markazi buni o'chirib, qon tahlili
+            yo'llanmalarini olmay qo'yadi.
+          */}
+          <button
+            type="button"
+            className={`svc__item svc__head ${acceptsReferral ? 'is-on' : ''}`}
+            onClick={() => {
+              setReferral(!acceptsReferral);
+              haptic.tap();
+            }}
+          >
+            <span className="svc__icon" aria-hidden>📄</span>
+            <span className="svc__text">
+              <span className="svc__title">{t('lab.referral')}</span>
+              <span className="svc__sub">{t('lab.referralSub')}</span>
+            </span>
+            <span className={`svc__switch ${acceptsReferral ? 'is-on' : ''}`} aria-hidden />
+          </button>
 
-                /* Bolasi yo'q guruh — o'zi bitta tekshiruv */
-                if (kids.length === 0) {
-                  return (
-                    <div key={g.id} className="cat__branch">
-                      <button
-                        type="button"
-                        className="cat__head"
-                        onClick={() => toggle(g.id)}
-                      >
-                        <span className="labtest__icon">{g.icon}</span>
-                        <span className="cat__name truncate">{name(g)}</span>
-                        {current.has(g.id) && (
-                          <span style={{ color: 'var(--primary)' }}>
-                            <IconCheck size={16} />
-                          </span>
-                        )}
-                      </button>
-                    </div>
-                  );
-                }
-
-                const isOpen = open === g.id;
-                const on = kids.filter((x) => current.has(x.id)).length;
-                const allOn = on === kids.length;
-
-                return (
-                  <div key={g.id} className="cat__branch">
-                    <button
-                      type="button"
-                      className={`cat__head ${isOpen ? 'is-open' : ''}`}
-                      onClick={() => setOpen(isOpen ? null : g.id)}
-                    >
-                      <span className={`cat__caret ${isOpen ? 'is-open' : ''}`}>›</span>
-                      <span className="labtest__icon">{g.icon}</span>
-                      <span className="cat__name truncate">{name(g)}</span>
-                      <span className={`cat__count ${on > 0 ? 'is-on' : ''} num`}>
-                        {on}/{kids.length}
-                      </span>
-                    </button>
-
-                    <AnimatePresence initial={false}>
-                      {isOpen && (
-                        <m.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2, ease: EASE }}
-                          style={{ overflow: 'hidden' }}
-                        >
-                          <div className="cat__body">
-                            <div className="cat__section">
-                              <div className="cat__sectionHead">
-                                <span className="cat__sectionName">{t('lab.tests')}</span>
-                                <button
-                                  type="button"
-                                  className="cat__all"
-                                  onClick={() => toggleGroup(kids.map((x) => x.id))}
-                                >
-                                  {allOn ? t('ops.clearAll') : t('lab.selectAll')}
-                                </button>
-                              </div>
-
-                              <div className="cat__ops">
-                                {kids.map((x) => (
-                                  <Chip
-                                    key={x.id}
-                                    size="sm"
-                                    active={current.has(x.id)}
-                                    onClick={() => toggle(x.id)}
-                                  >
-                                    {current.has(x.id) && <IconCheck size={11} />}
-                                    {name(x)}
-                                  </Chip>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </m.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
-          </div>
+          <LabTestPicker
+            tests={all}
+            lang={lang}
+            selected={current}
+            onToggle={toggle}
+            onToggleMany={toggleGroup}
+            labels={{ tests: t('lab.tests'), selectAll: t('lab.selectAll'), clearAll: t('ops.clearAll') }}
+          />
 
           {current.size === 0 && <Notice tone="warning">{t('lab.none')}</Notice>}
         </>

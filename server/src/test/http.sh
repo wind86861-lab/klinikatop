@@ -702,10 +702,28 @@ code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
   -d "{\"name\":\"Takror\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"+998901112233\",\"contactEmail\":\"takror-$EMAIL\",\"operationIds\":[1]}")
 check "takroriy litsenziya rad etiladi (409)" "$([ "$code" = 409 ] && echo 1)" "$code"
 
-# Yo'nalishsiz ariza
+# Hech qanday xizmatsiz ariza — uchalasi ham bo'sh
 code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
-  -d '{"name":"Yonalishsiz","cityId":1,"address":"Toshkent","licenseNo":"LIC-X","contactName":"A","contactPhone":"+998901112233","contactEmail":"x@test.local","operationIds":[]}')
-check "yo'nalishsiz ariza rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+  -d '{"name":"Yonalishsiz","cityId":1,"address":"Toshkent","licenseNo":"LIC-X","contactName":"A","contactPhone":"+998901112233","contactEmail":"x@test.local","operationIds":[],"labTestIds":[],"acceptsReferral":false}')
+check "xizmatsiz ariza rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+#
+# SOF LABORATORIYA: operatsiyasiz, faqat tahlil + yo'llanma.
+# Ilgari bunday ariza umuman qabul qilinmasdi (operatsiya majburiy edi).
+# Tasdiqlanganda tahlillar `clinic_lab_tests` ga, yo'llanma bayrog'i
+# klinikaga ko'chishi kerak — profildan qayta belgilash shart emas.
+#
+LAB_IDS=$(curl -s "$API/catalog/lab-tests" | jqv '.filter(x=>x.parentId!==null).slice(0,3).map(x=>x.id).join(",")')
+LAB_PHONE="99892$(date +%H%M%S)"
+LAB_APP=$(curl -s "${JSON[@]}" -X POST "$API/public/clinic-application" \
+  -d "{\"name\":\"Sof Laboratoriya\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"LIC-LAB-$(date +%s)\",\"contactName\":\"Lola\",\"contactPhone\":\"$LAB_PHONE\",\"operationIds\":[],\"labTestIds\":[$LAB_IDS],\"acceptsReferral\":true}" | jqv '.id')
+check "operatsiyasiz (faqat tahlil) ariza qabul qilindi" "$([ -n "$LAB_APP" ] && echo 1)" "#$LAB_APP"
+
+LAB_CLINIC=$(curl -s "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/applications/$LAB_APP/approve" | jqv '.clinicId')
+check "laboratoriya arizasi tasdiqlandi" "$([ -n "$LAB_CLINIC" ] && echo 1)" "$LAB_CLINIC"
+LAB_N=$(node -e "const D=require('better-sqlite3');const d=new D(process.argv[1],{readonly:true});console.log(d.prepare('SELECT COUNT(*) n FROM clinic_lab_tests WHERE clinic_id=?').get(+process.argv[2]).n, d.prepare('SELECT accepts_referral FROM clinics WHERE id=?').get(+process.argv[2]).accepts_referral)" "$ROOT/data/klinikatop.db" "$LAB_CLINIC")
+check "tahlillar klinikaga ko'chdi (3 ta)" "$([ "${LAB_N%% *}" = "3" ] && echo 1)" "$LAB_N"
+check "yo'llanma bayrog'i klinikaga ko'chdi" "$([ "${LAB_N##* }" = "1" ] && echo 1)" "$LAB_N"
 
 # Ochiq marshrut faqat YOZUV uchun: GET ta'riflanmagan, shuning uchun
 # so'rov autentifikatsiyaga tushadi va 401 qaytadi. Muhimi — 200 EMAS:
