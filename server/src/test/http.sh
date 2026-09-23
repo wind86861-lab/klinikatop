@@ -1127,6 +1127,49 @@ check "9 MB rasm 413 bilan rad etiladi (500 emas)" "$([ "$HUGE_CODE" = "413" ] &
 check "xato kodi o'qiladigan" "$([ "$HUGE_ERR" = "file_too_large" ] && echo 1)" "$HUGE_ERR"
 
 echo
+echo "22. Auksion turi"
+#
+# Raqobat ma'lumoti SERVERDA kesiladi. Ekranda filtrlash yetarli
+# emas edi: ma'lumot baribir javobda ketardi.
+#
+#
+# So'rovni YANGIDAN YARATMAYMIZ: test oxiriga kelib bemor so'rov
+# yaratish chegarasiga uriladi (rate limit) va yangi so'rov bo'sh
+# qaytadi. Klinikaning o'z oqimidagi ochiq so'rovni olamiz —
+# u yerda taklif berilgani ham bor.
+#
+AUC_REQ=$(curl -s "${CLINIC[@]}" "$API/clinic/requests" | jqv '[0].id')
+
+AUC=$(curl -s "${MOD[@]}" "${JSON[@]}" -X PATCH "$API/admin/settings" -d '{"auctionMode":"sealed"}' | jqv '.auctionMode')
+check "admin auksion turini yopiqqa qo'ydi" "$([ "$AUC" = "sealed" ] && echo 1)" "$AUC"
+SEALED=$(curl -s "${CLINIC[@]}" "$API/clinic/requests/$AUC_REQ" | jqv '.competition.offers.length')
+check "yopiqda raqobatchi narxi berilmaydi" "$([ "$SEALED" = "0" ] && echo 1)" "$SEALED"
+
+curl -s "${MOD[@]}" "${JSON[@]}" -X PATCH "$API/admin/settings" -d '{"auctionMode":"named"}' > /dev/null
+NAMED=$(curl -s "${CLINIC[@]}" "$API/clinic/requests/$AUC_REQ" | jqv '.competition.mode')
+check "nom bilan rejimga o'tdi" "$([ "$NAMED" = "named" ] && echo 1)" "$NAMED"
+
+#
+# Taklif berib, u tahrirlash uchun qaytishini tekshiramiz.
+# Narx SO'ROV BYUDJETIDAN olinadi: har so'rovning ruxsat etilgan
+# oralig'i o'z byudjetiga bog'liq va qotib qolgan raqam mos kelmaydi.
+#
+AUC_BUDGET=$(curl -s "${CLINIC[@]}" "$API/clinic/requests/$AUC_REQ" | jqv '.request.budgetUzs')
+curl -s "${CLINIC[@]}" "${JSON[@]}" -X POST "$API/offers" \
+  -d "{\"requestId\":$AUC_REQ,\"priceUzs\":$AUC_BUDGET,\"includes\":[\"Operatsiya\"],\"proposedDates\":[\"$DAY\"]}" > /dev/null
+MINE=$(curl -s "${CLINIC[@]}" "$API/clinic/requests/$AUC_REQ" | jqv '.myOffer.priceUzs')
+check "o'z taklifi tahrirlash uchun qaytadi" "$([ -n "$MINE" ] && echo 1)" "$MINE"
+
+code=$(status "${MOD[@]}" "${JSON[@]}" -X PATCH "$API/admin/settings" -d '{"auctionMode":"yoq-bunday"}')
+check "noma'lum rejim rad etiladi (400)" "$([ "$code" = "400" ] && echo 1)" "$code"
+
+code=$(status "${CLINIC[@]}" "${JSON[@]}" -X PATCH "$API/admin/settings" -d '{"auctionMode":"sealed"}')
+check "klinika auksion turini o'zgartira olmaydi (403)" "$([ "$code" = "403" ] && echo 1)" "$code"
+
+# Sinovdan keyin nomsizga qaytaramiz
+curl -s "${MOD[@]}" "${JSON[@]}" -X PATCH "$API/admin/settings" -d '{"auctionMode":"anonymous"}' > /dev/null
+
+echo
 echo "──────────────────────────────────────────────────"
 echo "HTTP natija: $pass o'tdi, $fail yiqildi"
 [ "$fail" -eq 0 ]

@@ -14,10 +14,24 @@
 import { db } from '../db';
 import { config } from '../lib/config';
 import { badRequest } from '../lib/errors';
+import { AUCTION_MODES, type AuctionMode } from '../../../shared/types';
 
 export const SETTING_COMMISSION = 'commission_percent';
 export const SETTING_TRIAL_MONTHS = 'trial_months';
 export const SETTING_AUTO_CONFIRM_DAYS = 'auto_confirm_days';
+export const SETTING_AUCTION_MODE = 'auction_mode';
+
+/**
+ * Amaldagi auksion turi.
+ *
+ * Noma'lum qiymat `anonymous` ga tushadi — bazaga qo'lda yozilgan
+ * xato so'rov ekranini yiqitmasligi kerak, va ikki chekkaning
+ * o'rtasi eng xavfsiz zaxira.
+ */
+export function auctionMode(): AuctionMode {
+  const raw = textSetting(SETTING_AUCTION_MODE, 'anonymous');
+  return (AUCTION_MODES as readonly string[]).includes(raw) ? (raw as AuctionMode) : 'anonymous';
+}
 
 /** Raqamli sozlama — buzuq qiymat zaxiraga tushadi, ishni to'xtatmaydi. */
 function numericSetting(key: string, fallback: number): number {
@@ -68,6 +82,7 @@ export function listSettings() {
     commissionPercent: numericSetting(SETTING_COMMISSION, config.rules.commissionPercent),
     trialMonths: numericSetting(SETTING_TRIAL_MONTHS, config.rules.trialMonths),
     autoConfirmDays: numericSetting(SETTING_AUTO_CONFIRM_DAYS, config.rules.autoConfirmDays),
+    auctionMode: auctionMode(),
   };
 }
 

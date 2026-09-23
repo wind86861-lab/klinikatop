@@ -36,6 +36,7 @@ import type {
   PatientCase,
   PriceStats,
   RequestStatus,
+  RequestCompetition,
   RequestWithMeta,
   Review,
   StoredFile,
@@ -487,7 +488,14 @@ export const api = {
   clinicReviews: () => get<Review[]>('/clinic/reviews'),
   clinicRequests: (onlyNew = false) => get<RequestWithMeta[]>(`/clinic/requests?onlyNew=${onlyNew}`),
   clinicRequest: (id: number) =>
-    get<{ request: RequestWithMeta; patientCase: PatientCase; stats: PriceStats }>(`/clinic/requests/${id}`),
+    get<{
+      request: RequestWithMeta;
+      patientCase: PatientCase;
+      stats: PriceStats;
+      competition: RequestCompetition;
+      /** Shu klinikaning shu so'rovga bergan taklifi — bo'lsa, forma tahrirga o'tadi */
+      myOffer: OfferWithClinic | null;
+    }>(`/clinic/requests/${id}`),
   clinicDeals: () => get<DealDetail[]>('/clinic/deals'),
   clinicOffers: () =>
     get<(OfferWithClinic & { requestStatus: RequestStatus; operationName: string })[]>('/offers'),

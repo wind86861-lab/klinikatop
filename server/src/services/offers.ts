@@ -12,12 +12,14 @@ import {
   UNKNOWN_OPERATION_SLUG,
   type OfferBadge,
   type OfferWithClinic,
+  type RequestCompetition,
   requestTitle,
 } from '../../../shared/types';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { formatUzs } from '../lib/format';
 import { mapClinicPublic, mapOffer } from '../lib/mappers';
 import { bus, ch } from './events';
+import { auctionMode } from './terms.business';
 import { clinicMatchesRequest } from './matching';
 import { notify } from './notifications';
 import { getRequest, markViewed, publishProgress } from './requests';
@@ -169,6 +171,84 @@ export function getOffer(id: number): OfferWithClinic {
 }
 
 /** Obuna limiti — joriy oyda yuborilgan takliflar soni. */
+/**
+ * So'rov bo'yicha raqobat holati — taklif beradigan klinika uchun.
+ *
+ * Nima ko'rsatilishini AUKSION TURI hal qiladi (`auction_mode`
+ * sozlamasi), va qaror bu yerda — bitta joyda — qabul qilinadi.
+ * Ekranda filtrlash yetarli emas edi: ma'lumot baribir tarmoq
+ * javobida ketardi va uni ko'rish uchun brauzer konsoli yetarli
+ * bo'lardi.
+ *
+ * `count` har uchala rejimda ham beriladi: nechta raqobatchi
+ * borligi ilgari ham ko'rinardi (`offersCount`) va uni yashirish
+ * hech narsani qo'shmaydi.
+ *
+ * Chaqiruvchi klinikaning SHU so'rovni ko'rish huquqini allaqachon
+ * tekshirgan bo'lishi shart.
+ */
+export function competitionFor(requestId: number, clinicId: number): RequestCompetition {
+  const mode = auctionMode();
+
+  const rows = db
+    .prepare(
+      `SELECT o.id, o.clinic_id, o.price_uzs, o.includes, o.created_at, c.name AS clinic_name
+         FROM offers o
+         JOIN clinics c ON c.id = o.clinic_id
+        WHERE o.request_id = ? AND o.status IN ('SENT','CHOSEN')
+        ORDER BY o.price_uzs ASC, o.id ASC`,
+    )
+    .all(requestId) as {
+    id: number;
+    clinic_id: number;
+    price_uzs: number;
+    includes: string;
+    created_at: string;
+    clinic_name: string;
+  }[];
+
+  const mineIndex = rows.findIndex((r) => r.clinic_id === clinicId);
+  const mineRow = mineIndex === -1 ? null : rows[mineIndex];
+
+  const base: RequestCompetition = {
+    mode,
+    count: rows.length,
+    minUzs: null,
+    maxUzs: null,
+    medianUzs: null,
+    // O'rin va o'z taklifi HAR DOIM beriladi: bu o'z ma'lumoti
+    myRank: mineIndex === -1 ? null : mineIndex + 1,
+    myOfferId: mineRow?.id ?? null,
+    offers: [],
+  };
+
+  if (mode === 'sealed' || rows.length === 0) return base;
+
+  const prices = rows.map((r) => r.price_uzs);
+  const mid = Math.floor(prices.length / 2);
+
+  return {
+    ...base,
+    minUzs: prices[0],
+    maxUzs: prices[prices.length - 1],
+    medianUzs:
+      prices.length % 2 === 1 ? prices[mid] : Math.round((prices[mid - 1] + prices[mid]) / 2),
+    offers: rows.map((r) => ({
+      id: r.id,
+      priceUzs: r.price_uzs,
+      includes: JSON.parse(r.includes || '[]'),
+      /*
+       * Nom faqat `named` da. O'Z nomini esa klinika baribir biladi,
+       * lekin uni ham bermaymiz — ekran `mine` bo'yicha "Sizning
+       * taklifingiz" deb yozadi va tarjimasi bitta joyda qoladi.
+       */
+      clinicName: mode === 'named' ? r.clinic_name : null,
+      mine: r.clinic_id === clinicId,
+      createdAt: dateFromSql(r.created_at).toISOString(),
+    })),
+  };
+}
+
 export function monthlyOfferCount(clinicId: number): number {
   const r = db
     .prepare(

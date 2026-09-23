@@ -22,6 +22,7 @@ import {
   Card,
   Chip,
   Field,
+  IconCheck,
   IconShield,
   Input,
   Notice,
@@ -36,6 +37,7 @@ import { DataTable, Empty, PageHeader, RowMenu, Tag } from './ui';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   ADMIN_CLINIC_FILTERS,
+  AUCTION_MODES,
   type AdminClinicFilter,
   type AdminClinicRow,
   type City,
@@ -619,7 +621,7 @@ export function PlatformSettingsScreen() {
   const [saving, setSaving] = useState(false);
 
   const dirty = Object.keys(draft).length > 0;
-  const set = <K extends keyof PlatformSettings>(key: K, v: number) =>
+  const set = <K extends keyof PlatformSettings>(key: K, v: PlatformSettings[K]) =>
     setDraft((d) => ({ ...d, [key]: v }));
 
   const save = async () => {
@@ -664,6 +666,36 @@ export function PlatformSettingsScreen() {
                     <Chip key={m} size="sm" active={value('trialMonths') === m} onClick={() => set('trialMonths', m)}>
                       {m}
                     </Chip>
+                  ))}
+                </div>
+              </Field>
+
+              {/*
+                Auksion turi — eng ta'sirli sozlama, shuning uchun
+                izohi ham eng uzun. Har variantning oqibati yozilgan:
+                admin "shaffofroq yaxshiroq" deb o'ylab, bilmagan
+                holda til biriktirishga yo'l ochib qo'ymasin.
+              */}
+              <Field label={t('ps.auction')} hint={t('ps.auctionHint')}>
+                <div className="stack" style={{ gap: 'var(--s-2)' }}>
+                  {AUCTION_MODES.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`svc__item svc__head ${value('auctionMode') === m ? 'is-on' : ''}`}
+                      onClick={() => set('auctionMode', m)}
+                      aria-pressed={value('auctionMode') === m}
+                    >
+                      <span className="svc__text">
+                        <span className="svc__title">{t(`ps.auction.${m}` as any)}</span>
+                        <span className="svc__sub">{t(`ps.auction.${m}.sub` as any)}</span>
+                      </span>
+                      {value('auctionMode') === m && (
+                        <span style={{ color: 'var(--primary)' }}>
+                          <IconCheck size={16} />
+                        </span>
+                      )}
+                    </button>
                   ))}
                 </div>
               </Field>

@@ -29,8 +29,16 @@ import {
   Textarea,
 } from '@/ui';
 import { requestTitle } from '@shared/types';
-import type { PatientCase, PriceStats, RequestKind, RequestWithMeta } from '@shared/types';
+import type {
+  OfferWithClinic,
+  PatientCase,
+  PriceStats,
+  RequestCompetition,
+  RequestKind,
+  RequestWithMeta,
+} from '@shared/types';
 import { PatientCaseCard } from '@/components/PatientCaseCard';
+import { CompetitionPanel } from '@/components/CompetitionPanel';
 import { ChipPicker } from '@/components/ChipPicker';
 import { DatePicker } from '@/components/DatePicker';
 
@@ -118,6 +126,9 @@ export function ClinicRequest() {
   const [request, setRequest] = useState<RequestWithMeta | null>(null);
   const [patientCase, setPatientCase] = useState<PatientCase | null>(null);
   const [stats, setStats] = useState<PriceStats | null>(null);
+  const [competition, setCompetition] = useState<RequestCompetition | null>(null);
+  /** Shu so'rovga allaqachon berilgan taklif — bo'lsa forma tahrirga o'tadi */
+  const [myOffer, setMyOffer] = useState<OfferWithClinic | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [price, setPrice] = useState(0);
@@ -147,10 +158,29 @@ export function ClinicRequest() {
         setRequest(data.request);
         setPatientCase(data.patientCase ?? null);
         setStats(data.stats);
-        // Turga mos boshlang'ich bandlar — endi turni bilamiz
-        setIncludes(DEFAULT_INCLUDES[data.request.kind]);
-        // Boshlang'ich narx: bemor byudjeti yoki bozor medianasi
-        setPrice(data.request.budgetUzs ?? data.stats.median ?? 0);
+        setCompetition(data.competition);
+        setMyOffer(data.myOffer);
+
+        /*
+         * Taklif allaqachon berilgan bo'lsa — forma O'SHA taklif
+         * bilan to'ladi va tahrirga aylanadi. Ilgari klinika taklif
+         * yuborgach "Bajarildi" ko'rar va qaytib kira olmasdi:
+         * narxni o'zgartirish uchun taklifni qaytarib olib, qaytadan
+         * yozishdan boshqa yo'l yo'q edi.
+         */
+        if (data.myOffer) {
+          setPrice(data.myOffer.priceUzs);
+          setIncludes(data.myOffer.includes);
+          setAdvantages(data.myOffer.advantages);
+          setDates(data.myOffer.proposedDates ?? []);
+          setAboveReason(data.myOffer.aboveBudgetReason ?? '');
+          setNote(data.myOffer.note ?? '');
+        } else {
+          // Turga mos boshlang'ich bandlar — endi turni bilamiz
+          setIncludes(DEFAULT_INCLUDES[data.request.kind]);
+          // Boshlang'ich narx: bemor byudjeti yoki bozor medianasi
+          setPrice(data.request.budgetUzs ?? data.stats.median ?? 0);
+        }
       })
       .catch((err) => !cancelled && setError(err?.message ?? t('common.error')));
     return () => {
@@ -166,18 +196,21 @@ export function ClinicRequest() {
   const submit = async () => {
     setSending(true);
     try {
-      await api.createOffer({
-        requestId,
+      const body = {
         priceUzs: price,
         includes,
         advantages,
         proposedDates: dates,
         aboveBudgetReason: aboveReason.trim() || null,
         note: note.trim() || null,
-      });
+      };
+
+      if (myOffer) await api.updateOffer(myOffer.id, body);
+      else await api.createOffer({ requestId, ...body });
+
       haptic.success();
       setSent(true);
-      toast(t('clinic.offerSent'), 'success');
+      toast(t(myOffer ? 'clinic.offerUpdated' : 'clinic.offerSent'), 'success');
       window.setTimeout(() => navigate('/clinic', { replace: true }), 1200);
     } catch (err: any) {
       haptic.error();
@@ -244,7 +277,7 @@ export function ClinicRequest() {
       onBack={() => navigate('/clinic')}
       footer={
         <Button block loading={sending} disabled={!valid} onClick={submit}>
-          {sent ? t('common.done') : t('clinic.makeOffer')}
+          {sent ? t('common.done') : t(myOffer ? 'clinic.updateOffer' : 'clinic.makeOffer')}
         </Button>
       }
     >
@@ -363,6 +396,9 @@ export function ClinicRequest() {
           </div>
         </Card>
       )}
+
+      {/* Raqobat — shu so'rovga kelgan jonli takliflar */}
+      {competition && <CompetitionPanel data={competition} />}
 
       {/* Bozor narxi — klinika o'zini joylashtirsin */}
       {stats?.median != null && (

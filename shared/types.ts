@@ -1097,10 +1097,63 @@ export const ADMIN_CLINIC_FILTERS = ['all', 'pending', 'approved', 'no_subscript
 export type AdminClinicFilter = (typeof ADMIN_CLINIC_FILTERS)[number];
 
 /** Platforma sozlamalari — admin kod'siz o'zgartiradi. */
+/**
+ * Auksion turi — klinika raqobatchilarning taklifini ko'radimi.
+ *
+ * Bu MAHSULOT QARORI va oqibati jiddiy, shuning uchun kodda emas,
+ * admin qo'lida:
+ *
+ *   sealed    — hech kim hech kimnikini ko'rmaydi (yopiq konvert).
+ *               Narx barqaror, lekin klinika qayerda turganini bilmaydi.
+ *   anonymous — narxlar ko'rinadi, NOM ko'rinmaydi. Klinika o'zini
+ *               joylashtira oladi, lekin kim bilan til biriktirishni
+ *               bilmaydi.
+ *   named     — nom ham, narx ham ochiq. Eng shaffof va eng xavfli:
+ *               raqobatchilar bir-birini tanib, narxni sun'iy ushlab
+ *               turishi osonlashadi.
+ *
+ * Sozlama BUTUN PLATFORMA uchun bitta: klinikaga alohida qo'yilsa,
+ * kimdir ko'proq ko'radigan holat paydo bo'lardi va bu auksionni
+ * adolatsiz qilardi.
+ */
+export const AUCTION_MODES = ['sealed', 'anonymous', 'named'] as const;
+export type AuctionMode = (typeof AUCTION_MODES)[number];
+
 export interface PlatformSettings {
   commissionPercent: number;
   trialMonths: number;
   autoConfirmDays: number;
+  auctionMode: AuctionMode;
+}
+
+/** Bitta raqobatchi taklifi — auksion turiga qarab qisqartirilgan. */
+export interface CompetitorOffer {
+  id: number;
+  priceUzs: number;
+  includes: string[];
+  /** Faqat `named` rejimida to'ldiriladi */
+  clinicName: string | null;
+  /** Shu klinikaning o'z taklifi — ro'yxatda ajratib ko'rsatiladi */
+  mine: boolean;
+  createdAt: string;
+}
+
+/**
+ * So'rov bo'yicha raqobat holati — klinika ekrani uchun.
+ *
+ * `count` HAR DOIM beriladi (u ilgari ham ko'rinardi), qolgani esa
+ * auksion turiga bog'liq.
+ */
+export interface RequestCompetition {
+  mode: AuctionMode;
+  count: number;
+  minUzs: number | null;
+  maxUzs: number | null;
+  medianUzs: number | null;
+  /** Shu klinika narx bo'yicha nechanchi o'rinda (1 — eng arzoni) */
+  myRank: number | null;
+  myOfferId: number | null;
+  offers: CompetitorOffer[];
 }
 
 

@@ -5907,3 +5907,80 @@
 .svc__switch.is-on::after {
   transform: translateX(18px);
 }
+
+/* ─────────────────────────  Raqobat paneli  ─────────────────────────
+ *
+ * Klinika shu so'rovda qayerda turganini bir qarashda ko'rsin. O'z
+ * qatori ajratib ko'rsatiladi — uzun ro'yxatda o'zini qidirib
+ * o'tirmasin.
+ */
+.comp__rank {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.comp__rankN {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  font-weight: 700;
+}
+
+.comp__range {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+}
+
+.comp__range > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.comp__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+}
+
+.comp__row.is-mine {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.comp__pos {
+  flex: none;
+  width: 20px;
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.comp__who {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--t-sm);
+}
+
+.comp__row.is-mine .comp__who {
+  font-weight: 600;
+  color: var(--primary-deep);
+}
+
+.comp__price {
+  flex: none;
+  font-weight: 600;
+}

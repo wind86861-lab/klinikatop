@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { REQUEST_KINDS, STEP_KINDS } from '../../../shared/types';
+import { AUCTION_MODES, REQUEST_KINDS, STEP_KINDS } from '../../../shared/types';
 import { listSteps, saveSteps } from '../services/requestSteps';
 import { listPendingCommissionPayments, reviewCommissionPayment } from '../services/clinicCabinet';
 import {
@@ -21,6 +21,7 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { db } from '../db';
 import { listDocumentsForModeration, setDocumentStatus } from '../services/clinicCabinet';
 import {
+  SETTING_AUCTION_MODE,
   SETTING_AUTO_CONFIRM_DAYS,
   SETTING_COMMISSION,
   SETTING_TRIAL_MONTHS,
@@ -256,6 +257,7 @@ adminRouter.patch('/settings', (req, res) => {
       commissionPercent: z.number().min(0).max(50).optional(),
       trialMonths: z.number().int().min(0).max(36).optional(),
       autoConfirmDays: z.number().int().min(1).max(90).optional(),
+      auctionMode: z.enum(AUCTION_MODES).optional(),
     })
     .parse(req.body);
 
@@ -269,6 +271,8 @@ adminRouter.patch('/settings', (req, res) => {
   if (body.commissionPercent !== undefined) setSetting(SETTING_COMMISSION, body.commissionPercent, null);
   if (body.trialMonths !== undefined) setSetting(SETTING_TRIAL_MONTHS, body.trialMonths, null);
   if (body.autoConfirmDays !== undefined) setSetting(SETTING_AUTO_CONFIRM_DAYS, body.autoConfirmDays, null);
+  // Auksion turi — matnli sozlama, `setSetting` faqat raqam oladi
+  if (body.auctionMode !== undefined) setTextSetting(SETTING_AUCTION_MODE, body.auctionMode, null);
 
   const after = listSettings();
   logModeration(req.user!.id, 'platform', 0, 'settings:update', JSON.stringify({ before, after }));

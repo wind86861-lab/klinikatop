@@ -391,6 +391,68 @@ async function main() {
   const updated = offers.updateOffer(offer.id, clinic.id, { priceUzs: 10_800_000 });
   check('taklifni tahrirlash mumkin (tanlangunicha)', updated.priceUzs === 10_800_000);
 
+  /* ── Auksion turi: klinika raqobatchini ko'radimi ── */
+
+  const terms = require('../services/terms.business');
+  const setMode = (mode: string) => terms.setTextSetting('auction_mode', mode, null);
+
+  // Ikkinchi klinika — raqobatchi bo'lishi uchun
+  const rivalUser = upsertUser({ id: 900_077, first_name: 'Raqib', language_code: 'uz' });
+  const rival = clinics.registerClinic({
+    userId: rivalUser.id,
+    name: 'Raqib Klinika',
+    cityId: tashkent.id,
+    address: 'Toshkent',
+    about: 'Test',
+    licenseFileId: 'lic-2',
+    operationIds: [gallbladder.id],
+  });
+  clinics.setVerification(rival.id, moderator.id, 'approved', null);
+  clinics.activateSubscription(rival.id, 'pro', 1);
+  offers.createOffer({
+    requestId: request.id,
+    clinicId: rival.id,
+    // Byudjet chegarasi ichida, lekin biznikidan ARZON — birinchi o'rinda tursin
+    priceUzs: 10_000_000,
+    includes: ['Operatsiya'],
+    advantages: [],
+    note: null,
+    proposedDates: [futureDate(6)],
+  });
+
+  setMode('sealed');
+  const sealed = offers.competitionFor(request.id, clinic.id);
+  check('yopiq: soni ko‘rinadi', sealed.count === 2, sealed.count);
+  check('yopiq: o‘z o‘rni ko‘rinadi', sealed.myRank === 2, sealed.myRank);
+  check(
+    'yopiq: raqobatchi narxi BERILMAYDI',
+    sealed.offers.length === 0 && sealed.minUzs === null && sealed.medianUzs === null,
+  );
+
+  setMode('anonymous');
+  const anon = offers.competitionFor(request.id, clinic.id);
+  check('nomsiz: narxlar ko‘rinadi', anon.offers.length === 2 && anon.minUzs === 10_000_000);
+  check('nomsiz: NOM berilmaydi', anon.offers.every((o: any) => o.clinicName === null));
+  check('nomsiz: o‘z taklifi belgilangan', anon.offers.filter((o: any) => o.mine).length === 1);
+  check('nomsiz: mediana hisoblandi', anon.medianUzs === Math.round((10_000_000 + 10_800_000) / 2), anon.medianUzs);
+
+  setMode('named');
+  const named = offers.competitionFor(request.id, clinic.id);
+  check(
+    'nom bilan: raqobatchi nomi ko‘rinadi',
+    named.offers.find((o: any) => !o.mine)?.clinicName === 'Raqib Klinika',
+  );
+
+  // Buzuq qiymat ishni to'xtatmasin
+  setMode('allaqachon-yoq-rejim');
+  check('noma‘lum rejim nomsizga tushadi', offers.competitionFor(request.id, clinic.id).mode === 'anonymous');
+  setMode('anonymous');
+
+  // Taklif qaytarib olinsa raqobatdan ham chiqadi
+  const rivalOffer = named.offers.find((o: any) => !o.mine)!;
+  offers.withdrawOffer(rivalOffer.id, rival.id);
+  check('qaytarib olingan taklif raqobatda ko‘rinmaydi', offers.competitionFor(request.id, clinic.id).count === 1);
+
   section('6. Chat kirish nazorati va bypass himoyasi');
   throws(
     'tanlovdan OLDIN chat ochilmaydi',

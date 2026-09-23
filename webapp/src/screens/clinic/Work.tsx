@@ -766,9 +766,24 @@ export function MyOffers() {
                   <div className="between">
                     <span className="tiny">{formatDate(offer.createdAt, lang)}</span>
                     {offer.status === 'SENT' && (
+                      <div className="row" style={{ gap: 'var(--s-2)' }}>
+                        {/*
+                          Tahrirlash so'rov ekraniga olib boradi: forma
+                          o'sha yerda va u taklifni o'zi topib to'ldiradi.
+                          Alohida tahrir ekrani yasalsa, ikki nusxa
+                          bo'lib, vaqt o'tib ajralib ketardi.
+                        */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => navigate(`/clinic/requests/${offer.requestId}`)}
+                        >
+                          {t('mo.edit')}
+                        </Button>
                       <Button size="sm" variant="ghost" onClick={() => withdraw(offer.id)}>
                         {t('mo.withdraw')}
                       </Button>
+                      </div>
                     )}
                   </div>
                 </Card>

@@ -13,6 +13,7 @@ import {
 import { listClinicRequests, markViewed, getRequest } from '../services/requests';
 import { listClinicDeals } from '../services/deals';
 import { listClinicReviews } from '../services/reviews';
+import { competitionFor, getOffer } from '../services/offers';
 import { statsForRequest } from '../services/priceStats';
 import { clinicLabTestIds, listLabTests, saveClinicLabTests } from '../services/labOrgans';
 import {
@@ -129,10 +130,28 @@ clinicRouter.get('/requests/:id', (req, res) => {
    * bo'ladi va bemor kelganda o'zgaradi — nizolar aynan shundan
    * chiqadi. Shaxsni aniqlaydigan ma'lumot bu yerda yo'q.
    */
+  const competition = competitionFor(requestId, clinicId);
+
   res.json({
     request,
     patientCase: patientCaseForRequest(requestId),
     stats: statsForRequest(request),
+    /*
+     * Raqobat: kim qancha taklif qilgani. Nima ko'rinishini auksion
+     * turi hal qiladi va u SERVERDA kesiladi — ekranda yashirish
+     * yetarli emas edi.
+     *
+     * `stats` bilan adashtirmaslik kerak: u o'tmish (yakunlangan
+     * bitimlar medianasi), bu esa hozir — shu so'rovga kelgan
+     * jonli takliflar.
+     */
+    competition: competition,
+    /*
+     * O'Z taklifi TO'LIQ — tahrirlash uchun forma shu bilan
+     * to'ldiriladi. Raqobat ro'yxatidagi qisqartirilgan yozuv
+     * yetarli emas: u yerda na afzalliklar, na sanalar bor.
+     */
+    myOffer: competition.myOfferId ? getOffer(competition.myOfferId) : null,
   });
 });
 
