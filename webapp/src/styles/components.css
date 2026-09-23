@@ -5984,3 +5984,54 @@
   flex: none;
   font-weight: 600;
 }
+
+/* ─────────────────────────  Bemor kirishi (brauzer)  ─────────────────────────
+ *
+ * Telegramsiz ochilgan sahifa: markazda bitta quti. Ilovaning
+ * qolgan qismi hali yuklanmagan — shuning uchun bu yerda pastki
+ * menyu ham, sarlavha paneli ham yo'q.
+ */
+.plogin {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--s-4);
+  background: var(--bg);
+}
+
+.plogin__box {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: var(--s-6);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.plogin__title {
+  font-size: var(--t-2xl);
+  margin: 0;
+}
+
+.plogin__sub {
+  margin: calc(-1 * var(--s-2)) 0 0;
+  color: var(--body);
+  font-size: var(--t-sm);
+}
+
+.plogin__back {
+  background: none;
+  border: 0;
+  padding: var(--s-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+
+.plogin__back:hover {
+  color: var(--ink);
+}

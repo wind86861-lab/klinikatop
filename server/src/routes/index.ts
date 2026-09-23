@@ -12,6 +12,7 @@ import { filesRouter } from './files';
 import { telegramRouter } from './telegram';
 import { publicRouter } from './publicRoutes';
 import { webAuthRouter } from './webAuthRoutes';
+import { patientAuthRouter } from './patientAuthRoutes';
 import { limits } from '../middleware/rateLimit';
 
 export const apiRouter = Router();
@@ -32,6 +33,8 @@ apiRouter.use('/public', publicRouter);
  * Bu ham autentifikatsiyadan oldin: kirayotgan odamda hali sessiya yo'q.
  */
 apiRouter.use('/web', webAuthRouter);
+// Bemorning brauzer kirishi — ochiq, autentifikatsiyadan OLDIN
+apiRouter.use('/auth/phone', patientAuthRouter);
 
 /*
  * Telegram webhook autentifikatsiyadan OLDIN turadi: Telegram bizga

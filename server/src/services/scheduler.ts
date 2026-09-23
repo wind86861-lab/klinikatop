@@ -8,6 +8,7 @@ import { processSubscriptions } from './clinics';
 import { syncLinkedClinics } from './clinicSync';
 import { runSync as runCatalogSync } from './catalogSync';
 import { purgeUsedTickets } from './clinicLink';
+import { purgePatientAuth } from './patientAuth';
 
 const TICK_MS = 60_000;
 
@@ -89,6 +90,8 @@ export function tick() {
 
   // Ishlatilgan biletlar abadiy saqlanmasin
   safe('purgeUsedTickets', purgeUsedTickets);
+  // Eskirgan bemor sessiyalari va ishlatilgan kodlar
+  safe('purgePatientAuth', purgePatientAuth);
 
   if (exp?.expired || exp?.warned || subs?.suspended || confirms || autoClosed) {
     console.log(

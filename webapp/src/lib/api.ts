@@ -1,6 +1,6 @@
 /** REST klienti — autentifikatsiya sarlavhalari bir joyda. */
 import { tg } from './telegram';
-import { isCabinetPath, setWebToken, webToken } from './session';
+import { isCabinetPath, patientToken, setWebToken, webToken } from './session';
 import type { CatalogBranch } from '@/components/CatalogBrowser';
 import type {
   AdminClinicFilter,
@@ -131,7 +131,15 @@ export function authHeaders(): Record<string, string> {
     return token ? { authorization: `Bearer ${token}` } : {};
   }
 
-  return tg?.initData ? { 'x-init-data': tg.initData } : {};
+  if (tg?.initData) return { 'x-init-data': tg.initData };
+
+  /*
+   * Telegramdan tashqarida — bemorning brauzer sessiyasi.
+   * Kabinet tokeni bu yerga TUSHMAYDI: u boshqa kalitda va faqat
+   * kabinet manzillarida yuboriladi.
+   */
+  const patient = patientToken();
+  return patient ? { authorization: `Bearer ${patient}` } : {};
 }
 
 /**
@@ -528,6 +536,13 @@ export const api = {
     post<ClinicApplication>(`/admin/applications/${id}/reject`, { note }),
   /* Ulanish kodi bilan klinikaga biriktirilish */
   connectClinic: (code: string) => post<{ clinic: Clinic }>('/clinic/connect', { code }),
+
+  /* ── Bemorning brauzerdan kirishi ── */
+  requestPhoneCode: (phone: string) =>
+    post<{ found: boolean; sent: boolean }>('/auth/phone/request-code', { phone }),
+  verifyPhoneCode: (phone: string, code: string) =>
+    post<{ token: string; expiresAt: string; user: User }>('/auth/phone/verify-code', { phone, code }),
+  patientLogout: () => post<{ ok: true }>('/auth/phone/logout', {}),
 
   adminClinics: (filter: AdminClinicFilter = 'all') =>
     get<AdminClinicRow[]>(`/admin/clinics?filter=${filter}`),

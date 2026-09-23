@@ -1170,6 +1170,55 @@ check "klinika auksion turini o'zgartira olmaydi (403)" "$([ "$code" = "403" ] &
 curl -s "${MOD[@]}" "${JSON[@]}" -X PATCH "$API/admin/settings" -d '{"auctionMode":"anonymous"}' > /dev/null
 
 echo
+echo "23. Bemor brauzerdan kiradi"
+#
+# Eng muhimi OXIRGI ikki tekshiruv: bemorning brauzer tokeni
+# klinika va admin eshiklarini OCHMASLIGI kerak. Sessiya alohida
+# jadvalda va `req.web` ni to'ldirmaydi — aynan shuning uchun.
+#
+# 998 + 9 xona = 12 raqam; soat-daqiqa-soniya aynan 6 xona beradi
+PL_PHONE="998907$(date +%H%M%S)"
+PL_USER=$(node -e "
+  const D=require('better-sqlite3');const d=new D(process.argv[1]);
+  d.prepare(\"DELETE FROM users WHERE phone=?\").run(process.argv[2]);
+  const i=d.prepare(\"INSERT INTO users (telegram_id, first_name, lang, roles, phone, onboarded_at, profile_completed_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))\").run(970001+Math.floor(Math.random()*9999),'Brauzer','uz','[\\\"patient\\\"]',process.argv[2]);
+  console.log(i.lastInsertRowid);
+" "$ROOT/data/klinikatop.db" "$PL_PHONE")
+check "brauzer bemori yaratildi" "$([ -n "$PL_USER" ] && echo 1)" "id=$PL_USER"
+
+FOUND=$(curl -s "${JSON[@]}" -X POST "$API/auth/phone/request-code" -d "{\"phone\":\"+$PL_PHONE\"}" | jqv '.found')
+check "boshqa formatda ham hisob topildi" "$([ "$FOUND" = "true" ] && echo 1)" "$FOUND"
+
+NOPE=$(curl -s "${JSON[@]}" -X POST "$API/auth/phone/request-code" -d '{"phone":"998900000009"}' | jqv '.found')
+check "noma'lum raqam topilmaydi" "$([ "$NOPE" = "false" ] && echo 1)" "$NOPE"
+
+# Kod xeshini bilib qo'yamiz — bot dev'da yubormaydi
+node -e "
+  const D=require('better-sqlite3');const c=require('crypto');const d=new D(process.argv[1]);
+  const r=d.prepare(\"SELECT id FROM phone_login_codes WHERE phone=? AND consumed_at IS NULL ORDER BY id DESC LIMIT 1\").get(process.argv[2]);
+  d.prepare('UPDATE phone_login_codes SET code_hash=? WHERE id=?').run(c.createHash('sha256').update(process.argv[2]+':654321').digest('hex'), r.id);
+" "$ROOT/data/klinikatop.db" "$PL_PHONE"
+
+code=$(status "${JSON[@]}" -X POST "$API/auth/phone/verify-code" -d "{\"phone\":\"$PL_PHONE\",\"code\":\"111111\"}")
+check "noto'g'ri kod rad etiladi (401)" "$([ "$code" = "401" ] && echo 1)" "$code"
+
+PTOK=$(curl -s "${JSON[@]}" -X POST "$API/auth/phone/verify-code" -d "{\"phone\":\"$PL_PHONE\",\"code\":\"654321\"}" | jqv '.token')
+check "to'g'ri kod token berdi" "$([ -n "$PTOK" ] && echo 1)" "${PTOK:0:8}"
+
+PME=$(curl -s -H "authorization: Bearer $PTOK" "$API/me" | jqv '.user.id')
+check "token o'z hisobini ochadi" "$([ "$PME" = "$PL_USER" ] && echo 1)" "$PME"
+
+code=$(status -H "authorization: Bearer $PTOK" "$API/clinic/dashboard")
+check "bemor tokeni klinika kabinetini OCHMAYDI (403)" "$([ "$code" = "403" ] && echo 1)" "$code"
+
+code=$(status -H "authorization: Bearer $PTOK" "$API/admin/settings")
+check "bemor tokeni admin panelini OCHMAYDI (403)" "$([ "$code" = "403" ] && echo 1)" "$code"
+
+curl -s -H "authorization: Bearer $PTOK" -X POST "$API/auth/phone/logout" > /dev/null
+code=$(status -H "authorization: Bearer $PTOK" "$API/me")
+check "chiqqandan keyin token o'lik (401)" "$([ "$code" = "401" ] && echo 1)" "$code"
+
+echo
 echo "──────────────────────────────────────────────────"
 echo "HTTP natija: $pass o'tdi, $fail yiqildi"
 [ "$fail" -eq 0 ]

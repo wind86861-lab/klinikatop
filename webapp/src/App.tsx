@@ -1,8 +1,9 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Route, Routes, useLocation, useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { tg } from '@/lib/telegram';
+import { patientToken } from '@/lib/session';
 import { ErrorState, Screen, Toaster } from '@/ui';
 import { Onboarding } from '@/screens/Onboarding';
 import { Register } from '@/screens/Register';
@@ -45,6 +46,7 @@ const Settings = lazy(() => import('@/screens/Settings').then((mod) => ({ defaul
  * ko'rinmaydi, shuning uchun uning kodi ham u yerga tushmaydi.
  */
 const Landing = lazy(() => import('@/screens/Landing').then((mod) => ({ default: mod.Landing })));
+const PhoneLogin = lazy(() => import('@/screens/PhoneLogin').then((mod) => ({ default: mod.PhoneLogin })));
 
 /**
  * Bemor ilovasi — Telegram Mini App.
@@ -59,6 +61,8 @@ export function App() {
 
   /* Telegram ichidamizmi — bosh sahifa shunga qarab hal qilinadi */
   const insideTelegram = Boolean(tg?.initData);
+  /* Brauzerda kirgan bemor bormi — bir marta o'qiladi */
+  const [browserSession] = useState(() => Boolean(patientToken()));
 
   useEffect(() => {
     void bootstrap();
@@ -134,12 +138,34 @@ export function App() {
    * Sahifa alohida bo'lakda: uni faqat brauzerdan kirgan odam
    * ko'radi va Mini App'ga og'irlik qilmasligi kerak.
    */
+  /*
+   * Brauzerda uch holat bor, va tartib muhim:
+   *
+   *   1. Kirish sahifasi so'ralgan — uni har doim ko'rsatamiz.
+   *   2. Bemor sessiyasi bor — ilovaning O'ZI ochiladi, xuddi
+   *      Telegramdagidek.
+   *   3. Aks holda — bosh sahifa (nima ekanini tushuntiradi).
+   *
+   * Sessiya `localStorage` dan BIR MARTA o'qiladi (`useState`
+   * boshlang'ich qiymati): shuning uchun kirgandan keyin sahifa
+   * to'liq qayta yuklanadi — `PhoneLogin` shuni qiladi.
+   */
   if (!insideTelegram) {
-    return (
-      <Suspense fallback={<Splash />}>
-        <Landing />
-      </Suspense>
-    );
+    if (location.pathname === '/kirish') {
+      return (
+        <Suspense fallback={<Splash />}>
+          <PhoneLogin />
+        </Suspense>
+      );
+    }
+
+    if (!browserSession) {
+      return (
+        <Suspense fallback={<Splash />}>
+          <Landing />
+        </Suspense>
+      );
+    }
   }
 
   if (!ready) return <Splash />;

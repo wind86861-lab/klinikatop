@@ -3547,6 +3547,96 @@ async function main() {
     );
   }
 
+  /* ══════════════  Bemorning brauzerdan kirishi  ══════════════ */
+
+  section('Bemor brauzerdan kiradi');
+  {
+    const pa = require('../services/patientAuth');
+    const crypto = require('node:crypto');
+
+    // ── Raqamni normallash ──
+    check('mahalliy raqamga kod qo‘shiladi', pa.normalizePhone('901234567') === '998901234567');
+    check('bezaklar tushadi', pa.normalizePhone('+998 90 123-45-67') === '998901234567');
+    check('to‘liq raqam o‘zgarmaydi', pa.normalizePhone('998901234567') === '998901234567');
+    check('qisqa raqam rad etiladi', pa.normalizePhone('12345') === null);
+    check('boshqa mamlakat rad etiladi', pa.normalizePhone('79161234567') === null);
+
+    // ── Bitta raqam = bitta hisob ──
+    const phone = '998909998877';
+    const browserUser = upsertUser({ id: 960_001, first_name: 'Brauzer', language_code: 'uz' });
+    db.prepare(`UPDATE users SET phone = ? WHERE id = ?`).run(phone, browserUser.id);
+
+    throws(
+      'bir xil raqamli ikkinchi hisob yaratilmaydi',
+      () => {
+        const other = upsertUser({ id: 960_002, first_name: 'Takror', language_code: 'uz' });
+        db.prepare(`UPDATE users SET phone = ? WHERE id = ?`).run(phone, other.id);
+      },
+    );
+
+    // ── Kod so‘rash ──
+    check(
+      'noma‘lum raqamga hisob topilmaydi',
+      !(await pa.requestLoginCode('998900000001', null)).found,
+    );
+    const asked = await pa.requestLoginCode('+998 90 999-88-77', null);
+    check('mavjud raqam turli formatda ham topiladi', asked.found === true);
+
+    // Dev'da bot yubormaydi, lekin kod BAZAGA yozilgan bo'lishi kerak
+    const codeRow = db
+      .prepare(`SELECT id FROM phone_login_codes WHERE phone = ? ORDER BY id DESC LIMIT 1`)
+      .get(phone) as { id: number } | undefined;
+    check('kod saqlandi', Boolean(codeRow));
+
+    // Kodning o'zi saqlanmaydi — xeshini bilgan holda sinaymiz
+    const known = '424242';
+    db.prepare(`UPDATE phone_login_codes SET code_hash = ? WHERE id = ?`).run(
+      crypto.createHash('sha256').update(`${phone}:${known}`).digest('hex'),
+      codeRow!.id,
+    );
+
+    throws('noto‘g‘ri kod o‘tmaydi', () => pa.verifyLoginCode(phone, '000000', null, null));
+    check(
+      'xato urinish sanaldi',
+      (db.prepare(`SELECT attempts FROM phone_login_codes WHERE id = ?`).get(codeRow!.id) as any)
+        .attempts === 1,
+    );
+
+    const session = pa.verifyLoginCode(phone, known, null, null);
+    check('to‘g‘ri kod sessiya berdi', Boolean(session.token) && session.user.id === browserUser.id);
+    check('sessiya AYNAN o‘sha hisobga', session.user.phone === phone);
+
+    throws('kod ikkinchi marta ishlamaydi', () => pa.verifyLoginCode(phone, known, null, null));
+
+    check('token foydalanuvchini beradi', pa.resolvePatientSession(session.token)?.id === browserUser.id);
+    check('yo‘q token hech kimni bermaydi', pa.resolvePatientSession('yoq-token') === null);
+
+    // Muddati o'tgan sessiya ishlamasin
+    db.prepare(`UPDATE patient_sessions SET expires_at = datetime('now','-1 hour') WHERE token = ?`)
+      .run(session.token);
+    check('muddati o‘tgan sessiya rad etiladi', pa.resolvePatientSession(session.token) === null);
+
+    // Chiqish tokenni darhol o'chiradi
+    const second = (() => {
+      db.prepare(
+        `INSERT INTO phone_login_codes (phone, code_hash, expires_at) VALUES (?, ?, datetime('now','+5 minutes'))`,
+      ).run(phone, crypto.createHash('sha256').update(`${phone}:${known}`).digest('hex'));
+      return pa.verifyLoginCode(phone, known, null, null);
+    })();
+    pa.endPatientSession(second.token);
+    check('chiqqandan keyin token o‘lik', pa.resolvePatientSession(second.token) === null);
+
+    // Bir soatda 5 tadan ko'p kod so'ralmaydi
+    for (let i = 0; i < 6; i++) await pa.requestLoginCode(phone, null).catch(() => {});
+    let limited = false;
+    try {
+      await pa.requestLoginCode(phone, null);
+    } catch (err: any) {
+      limited = err?.code === 'rate_limited';
+    }
+    check('bir raqamga kod so‘rash cheklangan', limited);
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);

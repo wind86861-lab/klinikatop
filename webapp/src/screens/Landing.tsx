@@ -106,6 +106,14 @@ export function Landing() {
       */}
       <header className="lp__top">
         <span className="lp__mark">KlinikaTop</span>
+        {/*
+          Allaqachon ro'yxatdan o'tgan odam uchun — brauzerdan kirish.
+          Telegram shart emas: kod o'sha yerga keladi, lekin ilovaning
+          o'zi shu sahifada ochiladi.
+        */}
+        <a className="lp__topLink" href="/kirish">
+          {ru ? 'Вход' : 'Kirish'}
+        </a>
       </header>
 
       {/* ── Sarlavha ── */}

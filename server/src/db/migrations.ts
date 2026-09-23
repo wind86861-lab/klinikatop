@@ -2068,6 +2068,95 @@ export const MIGRATIONS: Migration[] = [
       addColumn(db, 'clinics', 'accepts_referral', 'INTEGER NOT NULL DEFAULT 1');
     },
   },
+  {
+    /**
+     * Bemor BRAUZERDAN ham kira olsin — telefon raqami bo'yicha.
+     *
+     * Shu paytgacha bemorning yagona eshigi Telegram edi. Havolani
+     * kompyuterda ochgan yoki Telegramdan chiqib ketgan odam
+     * hisobiga umuman kira olmasdi.
+     *
+     * ── Bitta raqam = BITTA hisob ──
+     *
+     * `users.phone` noyob EMAS edi. Hozir takrori yo'q (prodda 33
+     * telefondan 0 takror), lekin qoida bo'lmasa ertaga paydo
+     * bo'ladi va "qaysi hisobga kiraman" degan savol chiqadi.
+     * Shuning uchun avval formatlar bir xillashtiriladi
+     * (`+998…` → `998…`), keyin qisman noyob indeks qo'yiladi.
+     * Qisman: telefonsiz foydalanuvchilar ko'p va ular bir-biriga
+     * xalaqit bermasligi kerak.
+     *
+     * ── Nega ALOHIDA sessiya jadvali ──
+     *
+     * `admin_sessions` xodimlar jadvaliga (`admin_users`) bog'langan.
+     * Bemorni o'sha yerga qo'shish eshiklar ajratilishini buzardi:
+     * klinika va admin paneliga kirish aynan shu bog'lanish orqali
+     * tekshiriladi. Alohida jadval bunday xatoni IMKONSIZ qiladi —
+     * bemor sessiyasi boshqa hech qaysi eshikka mos kelmaydi.
+     */
+    id: '037_patient_web_login',
+    up: (db) => {
+      // Formatni bir xillashtiramiz: faqat raqamlar, 998 bilan
+      db.prepare(
+        `UPDATE users
+            SET phone = REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', ''), '(', '')
+          WHERE phone IS NOT NULL AND phone != ''`,
+      ).run();
+      db.prepare(`UPDATE users SET phone = REPLACE(phone, ')', '') WHERE phone LIKE '%)%'`).run();
+
+      /*
+       * Indeks qo'yishdan OLDIN takrorni tekshiramiz. Takror bo'lsa
+       * indeks yaratilmaydi va migratsiya butunlay yiqilardi —
+       * o'rniga ogohlantirib o'tamiz: hisoblarni qo'shib yuborish
+       * odam qaroriga muhtoj, avtomatik qilinmaydi.
+       */
+      const dup = db
+        .prepare(
+          `SELECT phone, COUNT(*) n FROM users
+            WHERE phone IS NOT NULL AND phone != ''
+            GROUP BY phone HAVING n > 1`,
+        )
+        .all() as { phone: string; n: number }[];
+
+      if (dup.length) {
+        console.warn(
+          `[db] telefon takrorlangan (${dup.length} ta) — noyoblik indeksi qo‘yilmadi:`,
+          dup.slice(0, 5).map((d) => d.phone),
+        );
+      } else {
+        db.exec(
+          `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique
+             ON users(phone) WHERE phone IS NOT NULL AND phone != ''`,
+        );
+      }
+
+      db.exec(`
+        -- Brauzerdan kirgan BEMOR sessiyasi
+        CREATE TABLE IF NOT EXISTS patient_sessions (
+          token       TEXT PRIMARY KEY,
+          user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          ip          TEXT,
+          user_agent  TEXT,
+          expires_at  TEXT NOT NULL,
+          created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_patient_sessions_user ON patient_sessions(user_id);
+
+        -- Bir martalik kirish kodi. Kodning O'ZI saqlanmaydi, xeshi saqlanadi.
+        CREATE TABLE IF NOT EXISTS phone_login_codes (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          phone       TEXT NOT NULL,
+          code_hash   TEXT NOT NULL,
+          expires_at  TEXT NOT NULL,
+          attempts    INTEGER NOT NULL DEFAULT 0,
+          consumed_at TEXT,
+          ip          TEXT,
+          created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_phone_codes ON phone_login_codes(phone, created_at DESC);
+      `);
+    },
+  },
 ];
 
 /**

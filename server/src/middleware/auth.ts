@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { db, nowSql, toJson } from '../db';
 import { config } from '../lib/config';
+import { resolvePatientSession } from '../services/patientAuth';
 import { forbidden, unauthorized } from '../lib/errors';
 import { mapUser } from '../lib/mappers';
 import { verifyInitData, type TelegramUser } from '../lib/telegram';
@@ -174,6 +175,24 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
     req.user = web.user;
     req.web = web.web;
     return next();
+  }
+
+  /*
+   * BEMORNING brauzer sessiyasi — alohida jadval, alohida resolver.
+   *
+   * `req.web` ATAYLAB to'ldirilmaydi: aynan o'sha maydon klinika
+   * kabineti va admin paneliga kirishni ochadi (`requireWeb`,
+   * `requireDoor`). Bemor sessiyasi o'sha eshiklarga umuman mos
+   * kelmasligi kerak, shuning uchun u oddiy foydalanuvchi bo'lib
+   * kiradi — xuddi Telegramdan kirgandek.
+   */
+  if (hasWeb) {
+    const patient = resolvePatientSession((req.header('authorization') ?? '').slice(7).trim());
+    if (patient) {
+      if (patient.blockedAt) return next(forbidden('Hisobingiz bloklangan'));
+      req.user = patient;
+      return next();
+    }
   }
 
   const user = resolveUser(req);
