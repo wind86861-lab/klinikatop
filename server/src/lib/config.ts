@@ -27,6 +27,21 @@ export const config = {
     webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET ?? '',
   },
 
+  /**
+   * SMS — faqat Telegramda bo'lmagan odamga kirish kodi uchun.
+   *
+   * Sozlanmagan bo'lsa ish to'xtamaydi: kod jurnalga yoziladi
+   * (`services/sms.ts`). Prodda `SMS_EMAIL` va `SMS_PASSWORD`
+   * qo'yilishi kerak, aks holda brauzerdan NOLDAN ro'yxatdan
+   * o'tish ishlamaydi — Telegramli odamlar baribir kira oladi.
+   */
+  sms: {
+    email: process.env.SMS_EMAIL ?? '',
+    password: process.env.SMS_PASSWORD ?? '',
+    /** Tasdiqlangan jo'natuvchi nomi; Eskiz'da sukut bo'yicha `4546` */
+    from: process.env.SMS_FROM ?? '4546',
+  },
+
   db: {
     path: process.env.DATABASE_PATH ?? path.resolve(__dirname, '../../../data/klinikatop.db'),
   },

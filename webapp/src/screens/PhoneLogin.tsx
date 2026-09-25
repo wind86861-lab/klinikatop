@@ -1,18 +1,16 @@
 /**
  * Bemorning brauzerdan kirishi — telefon raqami bilan.
  *
- * Ikki qadam: raqam → Telegramga kelgan kod. Kod SMS emas, chunki
- * raqamning o'zi Telegram tasdiqlagan (`users.phone` boshqa yo'l
- * bilan to'lmaydi) va bot allaqachon bor.
+ * Ikki qadam: raqam → kod. Kirish ham, NOLDAN ro'yxatdan o'tish ham
+ * shu yerda: raqam bazada bo'lmasa hisob kod tasdiqlangach
+ * yaratiladi.
  *
- * Shuning uchun bu yerda ochiq aytiladi: kod TELEGRAMGA keladi.
- * "Kod yuborildi" deb qo'yilsa, odam SMS kutib o'tirardi.
- *
- * Telegramda hech qachon bo'lmagan odam bu yerdan ro'yxatdan o'ta
- * olmaydi — unga kod yuboradigan kanal yo'q. Shuning uchun raqam
- * topilmaganda xato emas, BOTGA yo'l ko'rsatiladi.
+ * Kod qayerga borgani EKRANDA aytiladi. Server ikki kanaldan
+ * birini tanlaydi — Telegram hisobi borga bot yozadi (tekin),
+ * qolganiga SMS. Odam qayerga qarashni bilishi kerak, aks holda
+ * SMS kutib o'tirardi yoki aksincha.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { m } from 'framer-motion';
 import { useNavigate } from '@/lib/router';
 import { api } from '@/lib/api';
@@ -21,38 +19,71 @@ import { useApp } from '@/store/app';
 import { EASE } from '@/lib/motion';
 import { Button, Field, Input, Notice } from '@/ui';
 
-export function PhoneLogin({ botUrl }: { botUrl?: string | null }) {
+const BASE = import.meta.env.VITE_API_URL ?? '';
+
+export function PhoneLogin() {
   const { t, toast } = useApp();
   const navigate = useNavigate();
+
+  /*
+   * Bot havolasi — kanal topilmagan holat uchun zaxira yo'l.
+   * Ochiq statistikadan olinadi; kelmasa havola ko'rsatilmaydi,
+   * xolos.
+   */
+  const [botUrl, setBotUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${BASE}/api/public/stats`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((s: { botUrl: string | null }) => alive && setBotUrl(s.botUrl))
+      .catch(() => {
+        /* havolasiz ham ekran ishlayveradi */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
-  /** Raqam topilmadi — ro'yxatdan o'tish kerak */
-  const [unknown, setUnknown] = useState(false);
+  /** Kod qaysi kanaldan ketdi — ikkinchi qadamdagi matn shunga bog'liq */
+  const [channel, setChannel] = useState<'telegram' | 'sms' | null>(null);
+  /** Yangi raqam — bu kirish emas, ro'yxatdan o'tish */
+  const [isNew, setIsNew] = useState(false);
+  /** Hech qanday kanal yo'q: SMS sozlanmagan va Telegram hisobi ham yo'q */
+  const [noChannel, setNoChannel] = useState(false);
 
   const digits = phone.replace(/\D/g, '');
   const phoneOk = digits.length === 9 || /^998\d{9}$/.test(digits);
 
   const ask = async () => {
     setBusy(true);
-    setUnknown(false);
+    setNoChannel(false);
     try {
       const res = await api.requestPhoneCode(phone);
-      if (!res.found) {
-        setUnknown(true);
+
+      /*
+       * Kanal umuman yo'q — bu sozlash muammosi, odamning aybi
+       * emas. Uni "kod yuborildi" deb kutib qoldirmaymiz.
+       */
+      if (!res.channel) {
+        setNoChannel(true);
         return;
       }
+
       /*
-       * `sent: false` — hisob bor, lekin botga yozib bo'lmadi
-       * (odam botni bloklagan yoki chat yo'q). Buni jimgina
-       * "kod yuborildi" deb ko'rsatish odamni kutib qoldirardi.
+       * Kanal bor, lekin yetkazib bo'lmadi: botni bloklagan yoki
+       * SMS o'tmagan. Bu ham jim qolmasligi kerak.
        */
       if (!res.sent) {
         toast(t('plogin.notSent'), 'error');
         return;
       }
+
+      setChannel(res.channel);
+      setIsNew(!res.found);
       setStep('code');
     } catch (err: any) {
       toast(err?.message ?? t('common.error'), 'error');
@@ -88,7 +119,9 @@ export function PhoneLogin({ botUrl }: { botUrl?: string | null }) {
       >
         <h1 className="plogin__title">{t('plogin.title')}</h1>
         <p className="plogin__sub">
-          {step === 'phone' ? t('plogin.sub') : t('plogin.codeSub', { phone })}
+          {step === 'phone'
+            ? t('plogin.sub')
+            : t(channel === 'sms' ? 'plogin.codeSubSms' : 'plogin.codeSubTg', { phone })}
         </p>
 
         {step === 'phone' ? (
@@ -105,9 +138,9 @@ export function PhoneLogin({ botUrl }: { botUrl?: string | null }) {
               />
             </Field>
 
-            {unknown && (
+            {noChannel && (
               <Notice tone="warning">
-                {t('plogin.unknown')}
+                {t('plogin.noChannel')}
                 {botUrl && (
                   <>
                     {' '}
@@ -137,8 +170,10 @@ export function PhoneLogin({ botUrl }: { botUrl?: string | null }) {
               />
             </Field>
 
+            {isNew && <Notice tone="info">{t('plogin.willRegister')}</Notice>}
+
             <Button block loading={busy} disabled={code.length !== 6} onClick={verify}>
-              {t('plogin.enter')}
+              {t(isNew ? 'plogin.register' : 'plogin.enter')}
             </Button>
 
             <button

@@ -539,9 +539,15 @@ export const api = {
 
   /* ── Bemorning brauzerdan kirishi ── */
   requestPhoneCode: (phone: string) =>
-    post<{ found: boolean; sent: boolean }>('/auth/phone/request-code', { phone }),
+    post<{ found: boolean; sent: boolean; channel: 'telegram' | 'sms' | null }>(
+      '/auth/phone/request-code',
+      { phone },
+    ),
   verifyPhoneCode: (phone: string, code: string) =>
-    post<{ token: string; expiresAt: string; user: User }>('/auth/phone/verify-code', { phone, code }),
+    post<{ token: string; expiresAt: string; user: User; isNew: boolean }>(
+      '/auth/phone/verify-code',
+      { phone, code },
+    ),
   patientLogout: () => post<{ ok: true }>('/auth/phone/logout', {}),
 
   adminClinics: (filter: AdminClinicFilter = 'all') =>

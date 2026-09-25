@@ -1,22 +1,20 @@
 /**
  * Bemorning BRAUZERDAN kirishi — telefon raqami bo'yicha.
  *
- * ── Kod qayerdan keladi ──
+ * ── Kod qaysi kanaldan keladi ──
  *
- * SMS emas, TELEGRAM. Sababi ikkita va ikkalasi ham amaliy:
+ * Ikki kanal bor va tartib TEJAMKORLIK bo'yicha:
  *
- *   1. SMS provayderi ulanmagan va u pul turadi. Telegram boti
- *      allaqachon bor va tekin.
- *   2. `users.phone` ning O'ZI Telegram tasdiqlagan raqam —
- *      `PATCH /me` uni ataylab qabul qilmaydi. Ya'ni raqam va
- *      Telegram hisobi allaqachon bog'langan; kodni o'sha kanalga
- *      yuborish hech qanday yangi ishonch talab qilmaydi.
+ *   1. TELEGRAM — hisobi bor odamga. Tekin, bir zumda, va raqam
+ *      allaqachon o'sha hisobga bog'langan (`users.phone` ni
+ *      `PATCH /me` qabul qilmaydi, u faqat Telegram kontaktidan
+ *      to'ladi). Yangi ishonch talab qilmaydi.
+ *   2. SMS — Telegramda umuman bo'lmagan odamga. Pul turadi,
+ *      shuning uchun faqat boshqa yo'l qolmaganda.
  *
- * CHEGARASI ochiq aytilsin: Telegramda hech qachon bo'lmagan odam
- * brauzerdan RO'YXATDAN O'TA OLMAYDI — unga kod yuboradigan kanal
- * yo'q. Brauzer — allaqachon ro'yxatdan o'tgan odam uchun ikkinchi
- * eshik. Brauzerdan ro'yxatdan o'tish kerak bo'lsa, SMS provayderi
- * ulanadi va shu yerga ikkinchi kanal bo'lib qo'shiladi.
+ * Shu sababli brauzerdan NOLDAN ro'yxatdan o'tish mumkin: raqam
+ * bazada bo'lmasa ham kod SMS bilan yuboriladi va kod tasdiqlangach
+ * hisob O'SHA YERDA yaratiladi.
  *
  * ── Bitta raqam = bitta hisob ──
  *
@@ -25,9 +23,10 @@
  * "bir xil raqam" har doim bir xil hisobga olib boradi.
  */
 import crypto from 'node:crypto';
-import { db } from '../db';
+import { db, tx } from '../db';
 import { badRequest, tooManyRequests, unauthorized } from '../lib/errors';
 import { sendTelegramMessage } from '../lib/telegram';
+import { sendSms, smsEnabled } from './sms';
 import type { User } from '../../../shared/types';
 import { mapUser } from '../lib/mappers';
 
@@ -39,6 +38,30 @@ const MAX_ATTEMPTS = 5;
 const SESSION_DAYS = 30;
 /** Bir raqamga soatiga nechta kod */
 const CODES_PER_HOUR = 5;
+
+/**
+ * Telegramsiz hisoblar uchun AJRATILGAN identifikator diapazoni.
+ *
+ * `users.telegram_id` — `NOT NULL UNIQUE`, ya'ni har yozuvda
+ * nimadir turishi shart. Bazada uch xil egasi bor:
+ *
+ *   musbat        — haqiqiy Telegram foydalanuvchisi
+ *   -1 … -999999  — veb hisob, qiymati `-admin_users.id`
+ *                   (`telegramChatFor` shunga tayanadi)
+ *   bu diapazon   — brauzerdan ro'yxatdan o'tgan bemor
+ *
+ * Uchinchisi ikkinchisiga TEGMASLIGI shart: `telegramChatFor`
+ * manfiy id ni `admin_users.id` deb qidiradi. Diapazon shu qadar
+ * uzoqdaki, `admin_users` da bunday id hech qachon bo'lmaydi —
+ * qidiruv bo'sh qaytadi va xabar jimgina o'tkazib yuboriladi. Bu
+ * to'g'ri xatti-harakat: bunday odamning Telegram chati yo'q.
+ *
+ * Jadvalni qayta qurish (`telegram_id` ni `NULL` qilish) ham yo'l
+ * edi, lekin `users` — bazadagi eng markaziy jadval va uni qayta
+ * qurish bir marta ma'lumot yo'qotishga olib kelgan. Ajratilgan
+ * diapazon xuddi shu natijani xavfsizroq beradi.
+ */
+const BROWSER_ID_BASE = -2_000_000_000;
 
 /**
  * Raqamni yagona ko'rinishga keltiradi: faqat raqamlar, 998 bilan.
@@ -74,21 +97,24 @@ function findByPhone(phone: string): { id: number; telegram_id: number; lang: st
     .get(phone) as { id: number; telegram_id: number; lang: string } | undefined;
 }
 
+export type CodeChannel = 'telegram' | 'sms';
+
 export interface CodeRequestResult {
-  /** Shu raqamli hisob topildimi */
+  /** Shu raqamli hisob bormi — yo'q bo'lsa bu RO'YXATDAN O'TISH */
   found: boolean;
-  /** Kod haqiqatan yuborildimi (bot javob bermasligi mumkin) */
+  /** Kod haqiqatan yetkazildimi */
   sent: boolean;
+  /** Qaysi kanal ishlatildi — ekran shunga qarab matn yozadi */
+  channel: CodeChannel | null;
 }
 
 /**
- * Kirish kodini so'rash.
+ * Kirish yoki ro'yxatdan o'tish uchun kod so'rash.
  *
- * Hisob topilmasa ham xato QAYTARILMAYDI, `found: false` qaytadi:
- * ilova "avval botdan ro'yxatdan o'ting" deb yo'l ko'rsatishi kerak.
- * Bu raqam bor-yo'qligini bilib olish imkonini beradi, lekin bu
- * baribir ochiq ma'lumot emas va chastota cheklangan — foydasi
- * zararidan ko'p.
+ * Hisob BO'LMASA ham kod yuboriladi — bu ro'yxatdan o'tish yo'li.
+ * Hisob kod tasdiqlangandan KEYIN yaratiladi (`verifyLoginCode`):
+ * aks holda raqam terib chiqqan har kim bazada bo'sh yozuv
+ * qoldirib ketardi.
  */
 export async function requestLoginCode(rawPhone: string, ip: string | null): Promise<CodeRequestResult> {
   const phone = normalizePhone(rawPhone);
@@ -105,13 +131,20 @@ export async function requestLoginCode(rawPhone: string, ip: string | null): Pro
   }
 
   const user = findByPhone(phone);
-  if (!user) return { found: false, sent: false };
 
   /*
-   * Bot faqat MUSBAT `telegram_id` ga yoza oladi. Manfiysi — veb
-   * hisob (klinika/admin), unda chat yo'q va kod yetib bormaydi.
+   * Kanal tanlash — TEJAMKORLIK bo'yicha.
+   *
+   * Telegram chati bor odamga bot yozadi: tekin va bir zumda.
+   * Qolganiga SMS — u pul turadi, shuning uchun oxirgi yo'l.
+   * `telegram_id <= 0` — veb hisob yoki brauzerdan ro'yxatdan
+   * o'tgan bemor; ikkalasida ham chat yo'q.
    */
-  if (user.telegram_id <= 0) return { found: true, sent: false };
+  const viaTelegram = Boolean(user && user.telegram_id > 0);
+  const channel: CodeChannel | null = viaTelegram ? 'telegram' : smsEnabled() ? 'sms' : null;
+
+  // Hech qanday kanal yo'q — kod yasashning ma'nosi yo'q
+  if (!channel) return { found: Boolean(user), sent: false, channel: null };
 
   const code = String(crypto.randomInt(100_000, 1_000_000));
 
@@ -120,19 +153,62 @@ export async function requestLoginCode(rawPhone: string, ip: string | null): Pro
      VALUES (?, ?, datetime('now', '+${CODE_TTL_MIN} minutes'), ?)`,
   ).run(phone, hashCode(phone, code), ip);
 
-  const text =
-    user.lang === 'ru'
+  const ru = user?.lang === 'ru';
+  let sent = false;
+
+  if (viaTelegram) {
+    const text = ru
       ? `Код для входа: <b>${code}</b>\n\nДействует ${CODE_TTL_MIN} минут. Если это не вы — просто не вводите его.`
       : `Kirish kodi: <b>${code}</b>\n\n${CODE_TTL_MIN} daqiqa amal qiladi. Agar bu siz bo‘lmasangiz — kiritmang.`;
+    sent = await sendTelegramMessage(user!.telegram_id, text);
+  } else {
+    // SMS'da HTML yo'q va joy tor — matn qisqa
+    const text = ru
+      ? `KlinikaTop: код ${code}. Действует ${CODE_TTL_MIN} мин.`
+      : `KlinikaTop: kod ${code}. ${CODE_TTL_MIN} daqiqa amal qiladi.`;
+    sent = await sendSms(phone, text);
+  }
 
-  const sent = await sendTelegramMessage(user.telegram_id, text);
-  return { found: true, sent };
+  return { found: Boolean(user), sent, channel };
 }
 
 export interface PatientSession {
   token: string;
   expiresAt: string;
   user: User;
+  /** Hisob AYNAN HOZIR yaratildimi — ilova onboardingga yuboradi */
+  isNew: boolean;
+}
+
+/**
+ * Telegramsiz bemor hisobini yaratadi.
+ *
+ * Faqat raqam va til ma'lum: ism, yosh, shahar keyin
+ * `/register` ekranida to'ldiriladi (`profile_completed_at`
+ * bo'sh qolgani uchun ilova o'zi o'sha yerga yo'naltiradi).
+ *
+ * `telegram_id` ikki qadamda qo'yiladi: qiymat `id` ga bog'liq,
+ * `id` esa yozuv kiritilmaguncha ma'lum emas. Ikkalasi bitta
+ * tranzaksiyada — yarim holat qolmaydi.
+ */
+function createBrowserUser(phone: string): number {
+  return tx(() => {
+    const info = db
+      .prepare(
+        `INSERT INTO users (telegram_id, first_name, lang, roles, phone)
+         VALUES (?, '', 'uz', '["patient"]', ?)`,
+      )
+      /*
+       * Vaqtinchalik qiymat ham AJRATILGAN diapazonda bo'lishi
+       * kerak: `NOT NULL UNIQUE` bo'sh qoldirmaydi, tasodifiy
+       * raqam esa mavjud yozuvga urilishi mumkin edi.
+       */
+      .run(BROWSER_ID_BASE - Date.now(), phone);
+
+    const id = Number(info.lastInsertRowid);
+    db.prepare(`UPDATE users SET telegram_id = ? WHERE id = ?`).run(BROWSER_ID_BASE - id, id);
+    return id;
+  });
 }
 
 /** Kodni tekshirib, brauzer sessiyasini beradi. */
@@ -170,17 +246,23 @@ export function verifyLoginCode(
     throw unauthorized('Kod noto‘g‘ri');
   }
 
-  const user = findByPhone(phone);
-  if (!user) throw unauthorized('Hisob topilmadi');
-
   // Kod BIR MARTALIK: to'g'ri kelgan zahoti kuyadi
   db.prepare(`UPDATE phone_login_codes SET consumed_at = datetime('now') WHERE id = ?`).run(row.id);
+
+  /*
+   * Hisob bo'lmasa — SHU YERDA yaratiladi. Kod tasdiqlangani
+   * raqam haqiqatan shu odamniki ekanini bildiradi, ya'ni
+   * ro'yxatdan o'tish uchun boshqa hech narsa kerak emas.
+   */
+  const existing = findByPhone(phone);
+  const isNew = !existing;
+  const userId = existing?.id ?? createBrowserUser(phone);
 
   const token = crypto.randomBytes(32).toString('base64url');
   db.prepare(
     `INSERT INTO patient_sessions (token, user_id, ip, user_agent, expires_at)
      VALUES (?, ?, ?, ?, datetime('now', '+${SESSION_DAYS} days'))`,
-  ).run(token, user.id, ip, userAgent);
+  ).run(token, userId, ip, userAgent);
 
   const expiresAt = db
     .prepare(`SELECT expires_at FROM patient_sessions WHERE token = ?`)
@@ -189,7 +271,8 @@ export function verifyLoginCode(
   return {
     token,
     expiresAt: new Date(expiresAt.expires_at.replace(' ', 'T') + 'Z').toISOString(),
-    user: mapUser(db.prepare(`SELECT * FROM users WHERE id = ?`).get(user.id)),
+    user: mapUser(db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId)),
+    isNew,
   };
 }
 

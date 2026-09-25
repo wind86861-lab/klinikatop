@@ -3626,6 +3626,61 @@ async function main() {
     pa.endPatientSession(second.token);
     check('chiqqandan keyin token o‘lik', pa.resolvePatientSession(second.token) === null);
 
+    /* ── NOLDAN ro'yxatdan o'tish: Telegramsiz odam ── */
+
+    const fresh = '998911100011';
+    db.prepare(`DELETE FROM users WHERE phone = ?`).run(fresh);
+    db.prepare(`DELETE FROM phone_login_codes WHERE phone = ?`).run(fresh);
+
+    // SMS sozlanmagan va Telegram hisobi ham yo'q — kanal yo'q
+    const noChannel = await pa.requestLoginCode(fresh, null);
+    check('kanalsiz raqamga kod yasalmaydi', noChannel.channel === null && !noChannel.sent);
+    check(
+      'kanalsiz holatda bo‘sh kod yozuvi qolmaydi',
+      (db.prepare(`SELECT COUNT(*) n FROM phone_login_codes WHERE phone = ?`).get(fresh) as any).n === 0,
+    );
+
+    // Kanal bo'lganda hisob tasdiqlangach YARATILADI
+    db.prepare(
+      `INSERT INTO phone_login_codes (phone, code_hash, expires_at) VALUES (?, ?, datetime('now','+5 minutes'))`,
+    ).run(fresh, crypto.createHash('sha256').update(`${fresh}:135790`).digest('hex'));
+
+    const born = pa.verifyLoginCode(fresh, '135790', null, null);
+    check('yangi hisob yaratildi', born.isNew === true && born.user.phone === fresh);
+    check('bemor roli berildi', born.user.roles.includes('patient'));
+    check(
+      'profil to‘ldirilmagan — ilova ro‘yxatdan o‘tishga yuboradi',
+      born.user.profileCompletedAt === null && born.user.onboardedAt === null,
+    );
+
+    /*
+     * Eng nozik joy: `telegram_id` AJRATILGAN diapazonda bo'lishi va
+     * `admin_users.id` bilan to'qnashmasligi kerak — aks holda
+     * `telegramChatFor` begona odamning chatini topib berardi.
+     */
+    const bornRow = db
+      .prepare(`SELECT telegram_id FROM users WHERE id = ?`)
+      .get(born.user.id) as { telegram_id: number };
+    check('ajratilgan diapazonda', bornRow.telegram_id <= -2_000_000_000, bornRow.telegram_id);
+    check(
+      'admin hisobi bilan to‘qnashmaydi',
+      (db.prepare(`SELECT COUNT(*) n FROM admin_users WHERE id = ?`).get(-bornRow.telegram_id) as any)
+        .n === 0,
+    );
+
+    const { telegramChatForTest } = require('../services/notifications');
+    check(
+      'Telegramsiz hisobga chat topilmaydi',
+      telegramChatForTest({ telegram_id: bornRow.telegram_id }) === null,
+    );
+
+    // Ikkinchi marta KIRISH bo'ladi, yangi hisob emas
+    db.prepare(
+      `INSERT INTO phone_login_codes (phone, code_hash, expires_at) VALUES (?, ?, datetime('now','+5 minutes'))`,
+    ).run(fresh, crypto.createHash('sha256').update(`${fresh}:246800`).digest('hex'));
+    const again = pa.verifyLoginCode(fresh, '246800', null, null);
+    check('ikkinchi kirish yangi hisob ochmaydi', again.isNew === false && again.user.id === born.user.id);
+
     // Bir soatda 5 tadan ko'p kod so'ralmaydi
     for (let i = 0; i < 6; i++) await pa.requestLoginCode(phone, null).catch(() => {});
     let limited = false;
