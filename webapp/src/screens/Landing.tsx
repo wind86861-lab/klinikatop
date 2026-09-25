@@ -4,12 +4,34 @@
  * Ilova Telegram Mini App: haqiqiy ish o'sha yerda bo'ladi. Lekin
  * `klinikatop.uz` ni brauzerda ochgan odam ham bor — havolani
  * ko'rgan bemor, qidiruvdan kelgan klinika egasi, tanishi aytgan
- * odam. Ilgari ular bitta "Telegramda oching" degan quti ko'rardi
- * va nima uchun ochishlari kerakligini bilmasdi.
+ * odam. Sahifaning vazifasi — ishonch berish va BOTGA yuborish.
  *
- * Sahifaning yagona vazifasi — ishonch berish va BOTGA yuborish.
- * Shuning uchun tuzilishi qisqa: nima qilamiz, raqamlar, qanday
- * ishlaydi, klinikalar uchun yo'l.
+ * ── Nega ilovaning suratlari ──
+ *
+ * Marketpleysda eng ishonarli dalil — odam nimani ko'rishini
+ * ko'rsatish: haqiqiy takliflar, haqiqiy narxlar, "eng arzon"
+ * belgisi. Sotib olingan surat yoki chizma buni bermaydi.
+ *
+ * Suratlar ilovaning O'ZIDAN olingan. Klinika nomlari olishdan
+ * oldin neytrallashtirilgan: haqiqiy brendni ruxsatsiz reklama
+ * qilib bo'lmaydi.
+ *
+ * Og'irligi hisobga olingan — uchalasi WebP, jami ~67 KB.
+ * Birinchi ekrandagisi darhol, qolgani ko'rinishga kelganda
+ * yuklanadi (`loading="lazy"`), o'lchami esa oldindan berilgan:
+ * rasm kelganda maket sakramaydi.
+ *
+ * ── Nega pastdagi bo'limlarda animatsiya yo'q ──
+ *
+ * `framer-motion` bu ilovada KECHIKTIRIB yuklanadi (`LazyMotion`).
+ * Kirish animatsiyasi `opacity: 0` dan boshlanadi, ya'ni o'sha
+ * bo'lak kelguncha kontent KO'RINMAYDI. Sekin internetda bu
+ * marketing sahifasining yarmi bir necha soniya bo'sh turishi
+ * demak. Kontentning ko'rinishi hech qachon animatsiyaga bog'liq
+ * bo'lmasligi kerak — pastdagi bo'limlar oddiy chiziladi.
+ *
+ * Sarlavhadagi harakat qoladi: u ekranning eng tepasida va
+ * ilgaridan shunday edi.
  *
  * Raqamlar HAQIQIY va serverdan keladi. Platforma yangi, sonlar
  * kichik — shuning uchun urg'u katalog kengligida: u haqiqatan
@@ -19,6 +41,10 @@ import { useEffect, useState } from 'react';
 import { m } from 'framer-motion';
 import { EASE } from '@/lib/motion';
 import { useApp } from '@/store/app';
+import { IconCheck } from '@/ui';
+import shotOffers from '@/assets/offers.webp';
+import shotWizard from '@/assets/wizard.webp';
+import shotHome from '@/assets/home.webp';
 
 interface Stats {
   clinics: number;
@@ -36,6 +62,33 @@ const BASE = import.meta.env.VITE_API_URL ?? '';
 
 /** "1 240" — uch xonali guruhlar ajratilgan son */
 const num = (n: number) => n.toLocaleString('uz-UZ').replace(/,/g, ' ');
+
+/** Telefon ramkasi — sof CSS, rasm emas */
+function Phone({
+  src,
+  alt,
+  eager,
+  className = '',
+}: {
+  src: string;
+  alt: string;
+  eager?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={`lp__phone ${className}`}>
+      <img
+        className="lp__phoneScreen"
+        src={src}
+        alt={alt}
+        width={520}
+        height={1000}
+        loading={eager ? 'eager' : 'lazy'}
+        decoding="async"
+      />
+    </div>
+  );
+}
 
 export function Landing() {
   const { lang } = useApp();
@@ -65,7 +118,12 @@ export function Landing() {
       : 'Nima kerakligini yozing — operatsiya yoki tekshiruv. Mos klinikalar o‘zi narx va bo‘sh kunlarini yuboradi. Siz taqqoslab tanlaysiz.',
     cta: ru ? 'Открыть в Telegram' : 'Telegramda ochish',
     ctaHint: ru ? 'Бесплатно для пациента' : 'Bemor uchun bepul',
+    login: ru ? 'Вход' : 'Kirish',
+
     stepsTitle: ru ? 'Как это работает' : 'Qanday ishlaydi',
+    stepsSub: ru
+      ? 'Три шага. Ходить по клиникам и спрашивать цену не нужно.'
+      : 'Uch qadam. Klinikama-klinika yurib narx so‘rash kerak emas.',
     steps: ru
       ? [
           ['Заявка', 'Операция или обследование, город и удобные дни. Минута времени.'],
@@ -77,6 +135,33 @@ export function Landing() {
           ['Takliflar', 'Klinikalar narx, nima kirishi va bo‘sh kunlarini yuboradi.'],
           ['Tanlov', 'Taqqoslab tanlaysiz. Keyin — klinika bilan chat.'],
         ],
+
+    askTitle: ru ? 'Опишите — и всё' : 'Yozasiz — tamom',
+    askList: ru
+      ? [
+          'Операция, обследование или фото направления врача',
+          'Свой бюджет — клиники видят его и отвечают по нему',
+          'Город и удобные дни',
+        ]
+      : [
+          'Operatsiya, tekshiruv yoki shifokor yo‘llanmasining rasmi',
+          'O‘z byudjetingiz — klinikalar shuni ko‘rib javob beradi',
+          'Shahar va qulay kunlar',
+        ],
+
+    compareTitle: ru ? 'Сравниваете в одном месте' : 'Bitta joyda taqqoslaysiz',
+    compareList: ru
+      ? [
+          'Цена и что в неё входит — без «уточним на месте»',
+          'Рейтинг клиники и отзывы прошлых пациентов',
+          'Свободные дни — выбираете удобный',
+        ]
+      : [
+          'Narx va unga nima kirishi — «kelganda aytamiz» yo‘q',
+          'Klinika reytingi va oldingi bemorlar sharhi',
+          'Bo‘sh kunlar — o‘zingizga qulayini tanlaysiz',
+        ],
+
     clinicTitle: ru ? 'Вы клиника?' : 'Siz klinikamisiz?',
     clinicText: ru
       ? 'Получайте заявки пациентов из своего города и отвечайте своей ценой. Проверка — вручную, каждая клиника подтверждается.'
@@ -106,18 +191,15 @@ export function Landing() {
       */}
       <header className="lp__top">
         <span className="lp__mark">KlinikaTop</span>
-        {/*
-          Allaqachon ro'yxatdan o'tgan odam uchun — brauzerdan kirish.
-          Telegram shart emas: kod o'sha yerga keladi, lekin ilovaning
-          o'zi shu sahifada ochiladi.
-        */}
         <a className="lp__topLink" href="/kirish">
-          {ru ? 'Вход' : 'Kirish'}
+          {t.login}
         </a>
       </header>
 
-      {/* ── Sarlavha ── */}
+      {/* ── Sarlavha va mahsulot ── */}
       <section className="lp__hero">
+        <div className="lp__glow" aria-hidden />
+
         <m.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -138,69 +220,127 @@ export function Landing() {
             <span className="lp__ctaHint">{t.ctaHint}</span>
           </div>
         </m.div>
+
+        {/*
+          Ikki telefon: orqadagisi so'rov yuborish, oldingisi
+          takliflar. Tartib ataylab — odam avval nimani beradi,
+          keyin nimani oladi.
+        */}
+        <m.div
+          className="lp__phoneStack"
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1, ease: EASE }}
+        >
+          <Phone
+            className="lp__phone--back"
+            src={shotWizard}
+            alt={ru ? 'Экран заявки' : 'So‘rov ekrani'}
+          />
+          <Phone
+            className="lp__phone--front"
+            src={shotOffers}
+            alt={ru ? 'Предложения клиник с ценами' : 'Klinikalarning narx takliflari'}
+            eager
+          />
+        </m.div>
       </section>
 
       {/* ── Raqamlar ── */}
       {cards.length > 0 && (
         <section className="lp__stats">
-          {cards.map((c, i) => (
-            <m.div
-              key={c.label}
-              className="lp__stat"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: EASE, delay: 0.05 * i }}
-            >
+          {cards.map((c) => (
+            <div className="lp__stat" key={c.label}>
               <span className="lp__statValue num">{c.value}</span>
               <span className="lp__statLabel">{c.label}</span>
-            </m.div>
+            </div>
           ))}
-        </section>
-      )}
-
-      {/*
-        Bitim va baho FAQAT bor bo'lganda ko'rsatiladi.
-        "0 bitim" degan quti ishonch bermaydi — u yo'qligini
-        e'lon qiladi.
-      */}
-      {stats && (stats.deals > 0 || stats.ratingAvg !== null) && (
-        <section className="lp__proof">
-          {stats.deals > 0 && (
-            <span>
-              <strong className="num">{num(stats.deals)}</strong>{' '}
-              {ru ? 'завершённых сделок' : 'yakunlangan bitim'}
-            </span>
-          )}
-          {stats.ratingAvg !== null && (
-            <span>
-              <strong className="num">★ {stats.ratingAvg}</strong>{' '}
-              {ru ? `по ${num(stats.reviews)} отзывам` : `${num(stats.reviews)} ta sharh bo‘yicha`}
-            </span>
-          )}
-          {stats.avgResponseMinutes !== null && (
-            <span>
-              {ru ? 'Ответ в среднем за ' : 'O‘rtacha javob '}
-              <strong className="num">
-                {stats.avgResponseMinutes} {ru ? 'мин' : 'daqiqa'}
-              </strong>
-            </span>
-          )}
         </section>
       )}
 
       {/* ── Qanday ishlaydi ── */}
       <section className="lp__how">
-        <h2 className="lp__h2">{t.stepsTitle}</h2>
-        <div className="lp__steps">
-          {t.steps.map(([title, text], i) => (
-            <div className="lp__step" key={title}>
-              <span className="lp__stepNum num">{i + 1}</span>
-              <strong>{title}</strong>
-              <p>{text}</p>
-            </div>
-          ))}
+        <div className="lp__wrap">
+          <h2 className="lp__h2">{t.stepsTitle}</h2>
+          <p className="lp__h2sub">{t.stepsSub}</p>
+
+          <div className="lp__steps">
+            {t.steps.map(([title, text], i) => (
+              <div className="lp__step" key={title}>
+                <span className="lp__stepNum num">{i + 1}</span>
+                <span className="lp__stepTitle">{title}</span>
+                <span className="lp__stepText">{text}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
+
+      {/* ── Ko'rsatish: so'rov ── */}
+      <div className="lp__wrap">
+        <section className="lp__show">
+          <div className="lp__showText">
+            <h2 className="lp__h2">{t.askTitle}</h2>
+            <ul className="lp__showList">
+              {t.askList.map((line) => (
+                <li key={line}>
+                  <span className="lp__tick">
+                    <IconCheck size={13} />
+                  </span>
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <Phone src={shotHome} alt={ru ? 'Главный экран' : 'Bosh ekran'} />
+        </section>
+
+        {/* ── Ko'rsatish: taqqoslash ── */}
+        <section className="lp__show lp__show--flip">
+          <div className="lp__showText">
+            <h2 className="lp__h2">{t.compareTitle}</h2>
+            <ul className="lp__showList">
+              {t.compareList.map((line) => (
+                <li key={line}>
+                  <span className="lp__tick">
+                    <IconCheck size={13} />
+                  </span>
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <Phone src={shotOffers} alt={ru ? 'Сравнение предложений' : 'Takliflarni taqqoslash'} />
+        </section>
+      </div>
+
+      {/*
+        Ishonch qatori — FAQAT haqiqiy son bo'lganda. Nol bitim va
+        nol sharhni ko'rsatish ishonch bermaydi, aksincha.
+      */}
+      {stats && (stats.deals > 0 || stats.ratingAvg !== null) && (
+        <div className="lp__proof">
+          {stats.deals > 0 && (
+            <span>
+              <b className="num">{num(stats.deals)}</b> {ru ? 'завершённых сделок' : 'yakunlangan bitim'}
+            </span>
+          )}
+          {stats.ratingAvg !== null && (
+            <span>
+              ★ <b className="num">{stats.ratingAvg.toFixed(1)}</b>{' '}
+              {ru ? `по ${num(stats.reviews)} отзывам` : `${num(stats.reviews)} ta sharh bo‘yicha`}
+            </span>
+          )}
+          {stats.avgResponseMinutes !== null && (
+            <span>
+              {ru ? 'Средний ответ' : 'O‘rtacha javob'}{' '}
+              <b className="num">
+                {stats.avgResponseMinutes} {ru ? 'мин' : 'daqiqa'}
+              </b>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ── Klinikalar uchun ── */}
       <section className="lp__clinic">
@@ -215,6 +355,7 @@ export function Landing() {
 
       <footer className="lp__foot">
         <span>KlinikaTop</span>
+        <a href="/klinika">{t.clinicCta}</a>
       </footer>
     </div>
   );

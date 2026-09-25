@@ -5223,246 +5223,540 @@
   padding: var(--s-2) var(--s-3);
 }
 
-/* ══════════════════  Bosh sahifa (brauzer)  ══════════════════ */
-
-/*
+/* ══════════════════  Bosh sahifa (brauzer)  ══════════════════
+ *
  * Bemor ilovasi telefon uchun bitta ustunga qurilgan. Bosh sahifa
- * esa brauzerda ochiladi — ko'pincha kompyuterda — shuning uchun
- * uning o'z kengligi va o'z nafas oladigan joyi bor.
+ * esa ish stolida ham ochiladi va u yerda bitta tor ustun bo'sh
+ * ko'rinardi — shuning uchun bu yerda o'z tarmog'i bor.
+ *
+ * ── Rasmlar haqida ──
+ *
+ * Sahifadagi ekranlar — MAHSULOTNING O'ZI, haqiqiy ilovadan
+ * olingan. Sotib olingan surat yoki chizma emas: marketpleysda
+ * eng ishonarli dalil — bemor nimani ko'rishini ko'rsatish.
+ * Klinika nomlari suratga olishdan oldin neytrallashtirilgan —
+ * haqiqiy brendni ruxsatsiz reklama qilib bo'lmaydi.
+ *
+ * Telefon ramkasi — sof CSS. Rasm qilib qo'yilsa yana bitta
+ * so'rov va mavzu bilan mos kelmaydigan chekka bo'lardi.
  */
 .lp {
   min-height: 100dvh;
   background: var(--bg);
-  color: var(--body);
-  line-height: 1.55;
+  color: var(--ink);
+  overflow-x: hidden;
 }
 
+/*
+ * Yumshoq brend nuri — orqa fon. Rasm emas, gradient: og'irligi
+ * nol va mavzu bilan birga o'zgaradi.
+ */
+.lp__glow {
+  position: absolute;
+  /*
+   * Eni EKRAN bo'ylab, konteyner bo'ylab emas: `.lp__hero` da
+   * `max-width` bor va nur uning chegarasida keskin to'rtburchak
+   * bo'lib ko'rinib qolgandi.
+   */
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 100vw;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 78% 12%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 70%),
+    radial-gradient(45% 40% at 8% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%);
+}
+
+.lp__wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 var(--s-4);
+}
+
+/* ── Ustki qator ── */
+
 .lp__top {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s-4);
-  max-width: 1040px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: var(--s-6) var(--s-6) 0;
+  padding: var(--s-4);
 }
+
 .lp__mark {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: var(--t-md);
+  font-size: var(--t-lg);
   letter-spacing: -0.02em;
-  color: var(--primary);
 }
+
 .lp__topLink {
-  font-size: var(--t-sm);
-  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
   color: var(--body);
   text-decoration: none;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  transition: border-color var(--d-base) var(--ease), color var(--d-base) var(--ease);
 }
-.lp__topLink:hover { color: var(--primary); }
+
+.lp__topLink:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* ── Sarlavha ── */
 
 .lp__hero {
-  max-width: 1040px;
+  position: relative;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: clamp(var(--s-8), 9vw, 96px) var(--s-6) var(--s-8);
+  padding: var(--s-6) var(--s-4) var(--s-12);
+  display: grid;
+  gap: var(--s-8);
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .lp__hero {
+    /* Matn kengroq: o'qiladigan qism asosiy, surat dalil */
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: var(--s-12);
+    padding-top: var(--s-8);
+  }
 }
 
 .lp__eyebrow {
   display: inline-block;
-  font-size: var(--t-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--primary);
   margin-bottom: var(--s-3);
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-/*
- * Sarlavha ikki qatorga ataylab bo'lingan (`\n` + `pre-line`):
- * "Bitta so'rov." va "Klinikalardan takliflar." — ikki gap, ikki
- * fikr. Brauzerning o'zi bo'lsa, ular tasodifiy joyda uzilardi.
- */
 .lp__title {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2rem, 5.5vw, 3.4rem);
-  line-height: 1.06;
-  letter-spacing: -0.035em;
-  font-weight: 700;
-  color: var(--ink);
-  margin: 0 0 var(--s-4);
-  white-space: pre-line;
+  /* Ekran kengaygani sari o'sadi, lekin chegarasi bor */
+  font-size: clamp(32px, 5.4vw, 56px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
   text-wrap: balance;
+  white-space: pre-line;
 }
 
 .lp__lead {
-  font-size: var(--t-md);
+  margin: var(--s-4) 0 0;
+  max-width: 34em;
   color: var(--body);
-  max-width: 56ch;
-  margin: 0;
+  font-size: var(--t-lg);
+  line-height: 1.55;
 }
 
 .lp__actions {
   display: flex;
-  align-items: center;
-  gap: var(--s-4);
   flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
   margin-top: var(--s-6);
 }
 
 .lp__cta {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 52px;
-  padding: 0 var(--s-6);
-  border-radius: 999px;
+  gap: var(--s-2);
+  padding: 15px 30px;
+  border-radius: var(--r-pill);
   background: var(--primary);
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
   font-size: var(--t-md);
   text-decoration: none;
-  box-shadow: var(--shadow-lg);
-  transition: transform 0.15s, filter 0.15s;
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--primary) 32%, transparent);
+  transition: transform var(--d-base) var(--ease), box-shadow var(--d-base) var(--ease);
 }
-.lp__cta:hover { filter: brightness(1.06); }
-.lp__cta:active { transform: scale(0.985); }
-/* Bot manzili hali ma'lum emas — tugma ko'rinadi, lekin ishlamaydi */
-.lp__cta.is-off { opacity: 0.5; box-shadow: none; cursor: default; }
+
+.lp__cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--primary) 38%, transparent);
+}
+
+.lp__cta.is-off {
+  background: var(--line);
+  color: var(--muted);
+  box-shadow: none;
+  cursor: default;
+}
 
 .lp__cta--ghost {
   background: transparent;
   color: var(--primary);
   border: 1.5px solid var(--primary);
   box-shadow: none;
-  white-space: nowrap;
 }
 
-.lp__ctaHint { font-size: var(--t-sm); color: var(--muted); }
+.lp__cta--ghost:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
+.lp__ctaHint {
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+/* ── Telefon ramkasi ── */
+
+.lp__phone {
+  position: relative;
+  width: min(300px, 78vw);
+  margin: 0 auto;
+  padding: 10px;
+  border-radius: 42px;
+  background: linear-gradient(160deg, #2a3937, #0d1a19);
+  box-shadow:
+    0 30px 70px rgba(11, 42, 34, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/*
+ * Kamera "tirqishi" ATAYLAB YO'Q.
+ *
+ * Avval qo'yilgandi va u ekrandagi HAQIQIY sarlavhani yopib
+ * qo'ydi: surat ilovadan olingan, ya'ni eng tepasida ham
+ * o'qiladigan matn turadi. Ramka yumaloq chekkasi bilan ham
+ * telefonga o'xshaydi — bezak mazmunni yopishi mumkin emas.
+ */
+
+.lp__phoneScreen {
+  display: block;
+  width: 100%;
+  border-radius: 32px;
+  /*
+   * Nisbat QAT'IY, surat balandligi bo'yicha emas.
+   *
+   * Ilova suratlari har xil uzunlikda va tabiiy balandligida
+   * qo'yilsa, telefon ramkasi yonidagi matnni pastga surib
+   * yuborardi — ikki ustun bir-biriga mos kelmasdi. Endi hamma
+   * ekran bir xil bo'yda, pastki qismi kesiladi: suratning
+   * yuqorisi muhim, pastida baribir ro'yxat davom etadi.
+   */
+  aspect-ratio: 300 / 560;
+  height: auto;
+  object-fit: cover;
+  object-position: top center;
+  background: var(--bg-elevated);
+}
+
+/*
+ * Ikkinchi telefon — birinchisining ortida, biroz burilgan.
+ * Faqat keng ekranda: telefonda u chalkashtirardi.
+ */
+.lp__phoneStack {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+@media (min-width: 900px) {
+  .lp__phoneStack .lp__phone--back {
+    position: absolute;
+    right: -6%;
+    top: 8%;
+    width: min(240px, 60%);
+    transform: rotate(7deg);
+    opacity: 0.85;
+    z-index: 0;
+  }
+
+  .lp__phoneStack .lp__phone--front {
+    position: relative;
+    z-index: 1;
+    transform: rotate(-3deg);
+  }
+}
+
+.lp__phone--back {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .lp__phone--back {
+    display: block;
+  }
+}
 
 /* ── Raqamlar ── */
+
 .lp__stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--s-3);
-  max-width: 1040px;
+  position: relative;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 0 var(--s-6);
+  padding: 0 var(--s-4) var(--s-12);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--s-3);
 }
+
+@media (min-width: 720px) {
+  .lp__stats {
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--s-4);
+  }
+}
+
 .lp__stat {
+  padding: var(--s-6) var(--s-4);
+  border-radius: var(--r-lg);
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  padding: var(--s-6);
+  text-align: center;
 }
+
 .lp__statValue {
   display: block;
   font-family: var(--font-display);
-  font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+  font-size: clamp(26px, 4vw, 38px);
   font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--primary-deep);
 }
+
 .lp__statLabel {
   display: block;
-  margin-top: 4px;
-  font-size: var(--t-sm);
+  margin-top: var(--s-1);
   color: var(--muted);
-}
-
-/* Bitim, baho, javob tezligi — bitta yengil qator */
-.lp__proof {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2) var(--s-6);
-  max-width: 1040px;
-  margin: var(--s-6) auto 0;
-  padding: 0 var(--s-6);
   font-size: var(--t-sm);
-  color: var(--muted);
 }
-.lp__proof strong { color: var(--ink); }
 
 /* ── Qanday ishlaydi ── */
-.lp__h2 {
-  font-family: var(--font-display);
-  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  color: var(--ink);
-  margin: 0 0 var(--s-2);
-}
 
 .lp__how {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: clamp(var(--s-8), 7vw, 80px) var(--s-6) 0;
+  position: relative;
+  padding: var(--s-12) 0;
+  background: var(--bg-elevated);
+  border-block: 1px solid var(--line);
 }
+
+.lp__h2 {
+  margin: 0 0 var(--s-2);
+  font-family: var(--font-display);
+  font-size: clamp(24px, 3.4vw, 34px);
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.lp__h2sub {
+  margin: 0 0 var(--s-8);
+  color: var(--body);
+  font-size: var(--t-md);
+  max-width: 44em;
+}
+
 .lp__steps {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--s-4);
-  margin-top: var(--s-6);
 }
+
+@media (min-width: 720px) {
+  .lp__steps {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--s-6);
+  }
+}
+
 .lp__step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-6);
+  border-radius: var(--r-lg);
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  padding: var(--s-6);
 }
-.lp__step strong {
-  display: block;
-  margin: var(--s-3) 0 4px;
-  color: var(--ink);
-  font-size: var(--t-md);
-}
-.lp__step p { margin: 0; font-size: var(--t-sm); }
 
-/*
- * Qadam raqami — tartib HAQIQATAN ketma-ket bo'lgani uchun bor:
- * so'rovsiz taklif kelmaydi, taklifsiz tanlov bo'lmaydi.
- */
 .lp__stepNum {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--primary);
   color: #fff;
+  font-weight: 700;
   font-size: var(--t-sm);
+}
+
+.lp__stepTitle {
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
   font-weight: 700;
 }
 
-/* ── Klinikalar uchun ── */
-.lp__clinic {
-  display: flex;
+.lp__stepText {
+  color: var(--body);
+  font-size: var(--t-sm);
+  line-height: 1.55;
+}
+
+/*
+ * Ko'rsatish qatori: matn bir yonda, ekran boshqa yonda.
+ * Ikkinchi qator teskari tartibda — sahifa bir xil ritmda
+ * ketmasin.
+ */
+.lp__show {
+  display: grid;
+  gap: var(--s-8);
   align-items: center;
-  justify-content: space-between;
-  gap: var(--s-6);
+  padding: var(--s-12) 0;
+}
+
+@media (min-width: 900px) {
+  .lp__show {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s-12);
+  }
+
+  .lp__show--flip .lp__showText {
+    order: 2;
+  }
+}
+
+.lp__showList {
+  margin: var(--s-4) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--s-3);
+}
+
+.lp__showList li {
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-start;
+  color: var(--body);
+  font-size: var(--t-md);
+}
+
+.lp__tick {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+}
+
+/* ── Ishonch qatori ── */
+
+.lp__proof {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: var(--s-8) var(--s-4);
+  display: flex;
   flex-wrap: wrap;
-  max-width: 1040px;
-  margin: clamp(var(--s-8), 7vw, 80px) auto 0;
-  padding: var(--s-6) var(--s-6);
+  justify-content: center;
+  gap: var(--s-4) var(--s-8);
+  color: var(--body);
+  font-size: var(--t-sm);
+}
+
+.lp__proof b {
+  color: var(--ink);
+}
+
+/* ── Klinikalar uchun ── */
+
+.lp__clinic {
+  max-width: 1120px;
+  margin: 0 auto var(--s-12);
+  padding: var(--s-8);
+  border-radius: var(--r-lg);
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-}
-.lp__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
   gap: var(--s-4);
-  max-width: 1040px;
-  margin: clamp(var(--s-8), 7vw, 80px) auto 0;
-  padding: var(--s-6);
+  align-items: center;
+}
+
+@media (min-width: 720px) {
+  .lp__clinic {
+    grid-template-columns: 1fr auto;
+    gap: var(--s-8);
+    margin-inline: var(--s-4);
+  }
+}
+
+/* ── Quyi qator ── */
+
+.lp__foot {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: var(--s-6) var(--s-4) var(--s-8);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s-3);
   border-top: 1px solid var(--line);
   font-size: var(--t-sm);
   color: var(--muted);
 }
+
 .lp__foot a { color: var(--body); text-decoration: none; }
 .lp__foot a:hover { color: var(--primary); }
+
+/*
+ * ── Qorong'i rejimda kontrast ──
+ *
+ * `--primary-deep` qorong'i mavzuda ham QORONG'I bo'lib qoladi
+ * (#0a4d46), fon esa #12211f — ya'ni yorliq ham, katta raqamlar
+ * ham deyarli o'qilmasdi. Yorug' mavzuda ular to'g'ri ishlaydi,
+ * shuning uchun faqat qorong'isi uchun alohida qiymat.
+ *
+ * Avval oddiy qiymat, keyin `color-mix`: brauzer uni tushunmasa
+ * birinchisi qoladi va matn baribir o'qiladi.
+ */
+:root[data-theme='dark'] .lp__eyebrow {
+  background: rgba(14, 118, 107, 0.28);
+  color: var(--ink);
+}
+
+:root[data-theme='dark'] .lp__statValue,
+:root[data-theme='dark'] .lp__tick {
+  color: var(--ink);
+  color: color-mix(in srgb, var(--primary) 40%, var(--ink));
+}
+
+:root[data-theme='dark'] .lp__tick {
+  background: rgba(14, 118, 107, 0.28);
+}
+
+/* Harakat kamaytirilgan bo'lsa — burilish va suzish yo'q */
+@media (prefers-reduced-motion: reduce) {
+  .lp__phoneStack .lp__phone--front,
+  .lp__phoneStack .lp__phone--back {
+    transform: none;
+  }
+  .lp__cta:hover {
+    transform: none;
+  }
+}
+
 
 /* ─────────────────────────  Savol qamrovi  ─────────────────────────
  *
