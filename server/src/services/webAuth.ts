@@ -130,6 +130,22 @@ export function passwordMatches(password: string, salt: string, expected: string
 }
 
 /** Parol talablari — uzunlik eng muhimi, murakkablik emas. */
+/**
+ * Administrator (butun platforma) paroli — qattiqroq: 12+ belgi, katta va
+ * kichik harf, raqam va belgi. Klinika hisoblariga oddiy qoida qoladi.
+ */
+export function assertAdminPasswordStrong(password: string): void {
+  assertPasswordStrong(password);
+  const missing: string[] = [];
+  if (password.length < 12) missing.push('kamida 12 belgi');
+  if (!/[a-z]/.test(password)) missing.push('kichik harf');
+  if (!/[A-Z]/.test(password)) missing.push('katta harf');
+  if (!/\d/.test(password)) missing.push('raqam');
+  if (!/[^A-Za-z0-9]/.test(password)) missing.push('belgi (!@#… kabi)');
+  if (password.length > 128) throw badRequest('weak_password', 'Parol 128 belgidan oshmasin');
+  if (missing.length) throw badRequest('weak_password', `Administrator paroli uchun kerak: ${missing.join(', ')}`);
+}
+
 export function assertPasswordStrong(password: string): void {
   if (password.length < 10) {
     throw badRequest('weak_password', 'Parol kamida 10 belgidan iborat bo‘lsin');
@@ -290,7 +306,23 @@ function adminTelegramId(phone: string | null): number | null {
 
 const escHtml = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function startTelegramChallenge(sessionKey: string, telegramId: number, ip: string | null, userAgent: string | null): void {
+/** Kod qayerga boradi: sozlangan guruh, bo'lmasa adminning o'z Telegram'i */
+function adminCodeChat(phone: string | null): number | null {
+  const group = Number(config.telegram.adminAlertChatId);
+  if (config.telegram.adminAlertChatId && Number.isFinite(group) && group !== 0) return group;
+  return adminTelegramId(phone);
+}
+
+/** Telefonning o'rtasini yashiradi: 99890•••4567 */
+const maskPhone = (p: string | null) => (p ? `${p.slice(0, 5)}•••${p.slice(-4)}` : '—');
+
+function startTelegramChallenge(
+  sessionKey: string,
+  telegramId: number,
+  ip: string | null,
+  userAgent: string | null,
+  who: string,
+): void {
   const now = Date.now();
   for (const [k, v] of tgChallenges) if (v.expiresAt < now) tgChallenges.delete(k);
 
@@ -301,6 +333,7 @@ function startTelegramChallenge(sessionKey: string, telegramId: number, ip: stri
   const text =
     `🔐 <b>KlinikaTop admin paneliga kirish kodi</b>\n\n` +
     `<code>${code}</code>\n\n` +
+    `Kim: ${escHtml(who)}\n` +
     `IP: ${escHtml(ip ?? 'noma’lum')}\n` +
     `Qurilma: ${escHtml((userAgent ?? 'noma’lum').slice(0, 120))}\n` +
     `Vaqt: ${when} (Toshkent)\n` +
@@ -441,7 +474,7 @@ export function login(
    */
   const tgId =
     row.totp_enabled !== 1 && scope === 'admin' && config.telegram.adminTelegram2fa && config.telegram.botToken
-      ? adminTelegramId(row.phone)
+      ? adminCodeChat(row.phone)
       : null;
   if (row.totp_enabled !== 1 && scope === 'admin' && !tgId) {
     console.warn(`[admin-2fa] admin #${row.id}: Telegram bog'lanmagan yoki o'chirilgan — kod so'ralmadi`);
@@ -463,7 +496,9 @@ export function login(
     scope,
   );
 
-  if (mfaMethod === 'telegram' && tgId) startTelegramChallenge(tokenHash(token), tgId, ip, userAgent);
+  if (mfaMethod === 'telegram' && tgId) {
+    startTelegramChallenge(tokenHash(token), tgId, ip, userAgent, `${row.full_name ?? 'Admin'} (${maskPhone(row.phone)})`);
+  }
 
   /*
    * Admin panelga kirish IZ QOLDIRADI.
@@ -652,7 +687,12 @@ export function changePassword(
     throw unauthorized('Joriy parol noto‘g‘ri');
   }
 
-  assertPasswordStrong(newPassword);
+  const isAdmin = SCOPE_OF[row.level as WebLevel] === 'admin';
+  if (isAdmin) assertAdminPasswordStrong(newPassword);
+  else assertPasswordStrong(newPassword);
+  if (passwordMatches(newPassword, row.password_salt, row.password_hash)) {
+    throw badRequest('same_password', 'Yangi parol joriy paroldan farq qilishi kerak');
+  }
 
   const salt = crypto.randomBytes(16).toString('hex');
   db.prepare(`UPDATE admin_users SET password_salt = ?, password_hash = ? WHERE id = ?`).run(
@@ -665,6 +705,22 @@ export function changePassword(
     webUserId,
     tokenHash(keepToken),
   );
+
+  // Admin paroli o'zgardi — guruh (yoki adminning o'zi) darhol bilsin
+  if (isAdmin) {
+    const chat = adminCodeChat(row.phone);
+    if (chat) {
+      const when = new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
+      void sendTelegramMessage(
+        chat,
+        `🔑 <b>KlinikaTop admin paroli almashtirildi</b>\n\n` +
+          `Kim: ${escHtml(`${row.full_name ?? 'Admin'} (${maskPhone(row.phone)})`)}\n` +
+          `Vaqt: ${when} (Toshkent)\n` +
+          `Boshqa qurilmalardagi sessiyalar yopildi.\n\n` +
+          `⚠️ Agar buni siz qilmagan bo‘lsangiz — darhol tekshiring.`,
+      );
+    }
+  }
 }
 
 /** Ochiq sessiyalar — qayerdan va qachon kirilgani. */

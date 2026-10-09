@@ -33,6 +33,12 @@ export const config = {
      * `ADMIN_TELEGRAM_2FA=off` — masalan bot ishlamay qolsa.
      */
     adminTelegram2fa: process.env.ADMIN_TELEGRAM_2FA !== 'off',
+    /**
+     * Admin kirish kodlari va xavfsizlik xabarlari boradigan guruh
+     * (bot u yerda administrator bo'lishi kerak). Bo'sh bo'lsa — kod
+     * adminning o'z Telegram'iga boradi.
+     */
+    adminAlertChatId: process.env.ADMIN_ALERT_CHAT_ID ?? '',
   },
 
   /**

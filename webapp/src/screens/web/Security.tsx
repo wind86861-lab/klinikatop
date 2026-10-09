@@ -283,7 +283,10 @@ function PasswordChange({ onChanged }: { onChanged: () => void }) {
             onChange={(e) => setCurrent(e.target.value)}
           />
         </Field>
-        <Field label="Yangi parol" hint="Kamida 10 belgi">
+        <Field
+          label="Yangi parol"
+          hint="Kamida 10 belgi. Administrator uchun: 12+ belgi, katta va kichik harf, raqam va belgi (!@#…)"
+        >
           <Input
             type="password"
             autoComplete="new-password"

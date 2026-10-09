@@ -4749,9 +4749,29 @@ async function main() {
       // Klinika eshigiga ta'sir qilmaydi
       check('klinika kirishida Telegram kodi yo‘q', !sent.some((m) => /admin paneliga/.test(m.text) && m.chat_id !== 777000555));
 
+      // Guruh sozlangan — kod guruhga, kim kirayotgani bilan
+      config.telegram.adminAlertChatId = '-1009998887776';
+      const g = webAuth.login('998900000555', 'tg-admin-paroli-2026', '8.8.8.8', 'Firefox', 'admin');
+      await flush();
+      check('guruh sozlangan — kod guruhga ketdi', sent[sent.length - 1].chat_id === -1009998887776);
+      check('xabarda admin nomi va yashirilgan raqam', /Telegram Admin/.test(sent[sent.length - 1].text) && /99890•••0555/.test(sent[sent.length - 1].text));
+      webAuth.passMfa(g.token, lastCode());
+      check('guruhdagi kod bilan kirildi', webAuth.resolveSession(g.token).mfaPassed === true);
+
+      // Admin parolini almashtirish — qattiq qoida va guruhga xabar
+      throws('admin: oddiy parol rad etiladi', () => webAuth.changePassword(acc.user.id, 'tg-admin-paroli-2026', 'oddiyparol123', g.token), 'weak_password');
+      throws('admin: joriy parol bilan bir xil bo‘lmaydi', () => webAuth.changePassword(acc.user.id, 'tg-admin-paroli-2026', 'tg-admin-paroli-2026', g.token));
+      throws('admin: joriy parol noto‘g‘ri', () => webAuth.changePassword(acc.user.id, 'xato-parol', 'Yangi-Parol#2026', g.token));
+      const before = sent.length;
+      webAuth.changePassword(acc.user.id, 'tg-admin-paroli-2026', 'Yangi-Parol#2026', g.token);
+      await flush();
+      check('admin: kuchli parol qabul qilindi', webAuth.login('998900000555', 'Yangi-Parol#2026', null, null, 'admin').mfaRequired === true);
+      check('parol o‘zgargani guruhga xabar qilindi', sent.length > before && sent.slice(before).some((m) => /paroli almashtirildi/.test(m.text) && m.chat_id === -1009998887776));
+      config.telegram.adminAlertChatId = '';
+
       // Favqulodda o'chirish
       config.telegram.adminTelegram2fa = false;
-      const s5 = webAuth.login('998900000555', 'tg-admin-paroli-2026', null, null, 'admin');
+      const s5 = webAuth.login('998900000555', 'Yangi-Parol#2026', null, null, 'admin');
       check('ADMIN_TELEGRAM_2FA=off — kodsiz', s5.mfaRequired === false);
       config.telegram.adminTelegram2fa = true;
     } finally {
