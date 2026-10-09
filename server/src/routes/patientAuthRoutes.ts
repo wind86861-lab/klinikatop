@@ -13,7 +13,9 @@ import { rateLimit } from '../middleware/rateLimit';
 import { asyncHandler } from '../lib/asyncHandler';
 import {
   endPatientSession,
+  loginWithPassword,
   requestLoginCode,
+  setPatientPassword,
   verifyLoginCode,
 } from '../services/patientAuth';
 
@@ -32,8 +34,10 @@ patientAuthRouter.post(
   '/request-code',
   rateLimit({ name: 'patient-code', windowSec: 600, max: 10 }),
   asyncHandler(async (req, res) => {
-    const { phone } = phoneSchema.parse(req.body);
-    res.json(await requestLoginCode(phone, req.ip ?? null));
+    const { phone, purpose } = phoneSchema
+      .extend({ purpose: z.enum(['login', 'register', 'reset']).default('login') })
+      .parse(req.body);
+    res.json(await requestLoginCode(phone, req.ip ?? null, purpose));
   }),
 );
 
@@ -45,6 +49,38 @@ patientAuthRouter.post(
     res.json(
       verifyLoginCode(body.phone, body.code, req.ip ?? null, req.header('user-agent') ?? null),
     );
+  },
+);
+
+/**
+ * Telefon + parol bilan kirish — SMS'siz.
+ *
+ * IP bo'yicha cheklov shu yerda; hisob bo'yicha bloklash (5 xato →
+ * 15 daqiqa) xizmat ichida. Ikkovi birga: bitta IP ko'p raqamni,
+ * ko'p IP bitta raqamni sinay olmaydi.
+ */
+patientAuthRouter.post(
+  '/login',
+  rateLimit({ name: 'patient-login', windowSec: 600, max: 30 }),
+  (req, res) => {
+    const body = phoneSchema.extend({ password: z.string().min(1).max(200) }).parse(req.body);
+    res.json(loginWithPassword(body.phone, body.password, req.ip ?? null, req.header('user-agent') ?? null));
+  },
+);
+
+/**
+ * Parol o'rnatish / tiklash. Sessiya tokeni sarlavhada — va u KOD
+ * bilan yaqinda ochilgan bo'lishi shart (xizmat tekshiradi).
+ */
+patientAuthRouter.post(
+  '/set-password',
+  rateLimit({ name: 'patient-set-password', windowSec: 600, max: 10 }),
+  (req, res) => {
+    const header = req.header('authorization') ?? '';
+    const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+    const { password } = z.object({ password: z.string().min(1).max(200) }).parse(req.body);
+    setPatientPassword(token, password);
+    res.json({ ok: true });
   },
 );
 

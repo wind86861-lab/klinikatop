@@ -1,0 +1,136 @@
+---
+/**
+ * Umumiy qobiq: SEO, shrift, Telegram yo'naltirishi.
+ *
+ * SEO'ning asosiy qismi SHU YERDA: har sahifada o'z sarlavhasi,
+ * tavsifi, kanonik manzili, til juftligi (hreflang), Open Graph va
+ * JSON-LD. Sahifa statik HTML — Google hammasini birinchi so'rovda
+ * ko'radi, JS kutmaydi.
+ */
+import '@fontsource-variable/manrope';
+import '../styles/site.css';
+import { site } from '../site';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+  title: string;
+  description: string;
+  /** Joriy sahifa manzili: '/', '/ru/', '/klinikalar-uchun/' ... */
+  path: string;
+  /** Boshqa tildagi juftining manzili */
+  altPath: string;
+  /** Qo'shimcha JSON-LD bloklari */
+  schema?: Record<string, unknown>[];
+  /** Telegram'dan kelgan odamni ilovaga o'tkazish (faqat bosh sahifa) */
+  telegramRedirect?: boolean;
+}
+
+const { t, title, description, path, altPath, schema = [], telegramRedirect = false } = Astro.props;
+const canonical = new URL(path, site.url).href;
+const alternate = new URL(altPath, site.url).href;
+const uzUrl = t.lang === 'uz' ? canonical : alternate;
+const ruUrl = t.lang === 'ru' ? canonical : alternate;
+const ogImage = new URL(t.lang === 'ru' ? '/og-ru.png' : '/og.png', site.url).href;
+
+const baseSchema = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    '@id': `${site.url}/#org`,
+    name: site.name,
+    url: site.url,
+    logo: `${site.url}/icon-512.png`,
+    slogan: t.footer.tagline,
+    description: t.footer.about,
+    areaServed: { '@type': 'Country', name: 'Uzbekistan' },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    '@id': `${site.url}/#website`,
+    name: site.name,
+    url: site.url,
+    inLanguage: ['uz', 'ru'],
+    publisher: { '@id': `${site.url}/#org` },
+  },
+];
+const allSchema = [...baseSchema, ...schema];
+---
+
+<!doctype html>
+<html lang={t.lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    {
+      telegramRedirect && (
+        <script is:inline>
+          /*
+            Telegram Mini App endi /app da. Eski xabarlardagi tugmalar va
+            menyu keshi hali "/" ni ochadi — ularni DARHOL ilovaga o'tkazamiz,
+            sahifa chizilishidan oldin.
+
+            Belgi — FAQAT haqiqiy Telegram ma'lumoti (`tgWebAppData`).
+            Ilgari saqlangan parametrlar kaliti borligi yetarli deb olingan
+            edi va bu xato: `telegram-web-app.js` oddiy brauzerda ham u
+            yerga bo'sh `{}` yozadi. Natijada /app yoki /kabinet ni bir
+            marta ochgan har qanday tab saytdan ilovaga uloqtirilardi.
+            Brauzerda kirgan bemor ham yo'naltirilmaydi — sayt hammaga
+            ochiq, ilovaga "Kirish" orqali o'tiladi.
+          */
+          (function () {
+            try {
+              var h = location.hash || '';
+              var tg = h.indexOf('tgWebAppData') > -1;
+              if (!tg) {
+                var saved = JSON.parse(sessionStorage.getItem('__telegram__initParams') || '{}');
+                tg = !!(saved && saved.tgWebAppData);
+              }
+              if (tg) location.replace('/app' + location.search + h);
+            } catch (e) {}
+          })();
+        </script>
+      )
+    }
+    <script is:inline>document.documentElement.classList.add('js');</script>
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="uz" href={uzUrl} />
+    <link rel="alternate" hreflang="ru" href={ruUrl} />
+    <link rel="alternate" hreflang="x-default" href={uzUrl} />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" content="#ffffff" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:locale" content={t.locale} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="sitemap" href="/sitemap.xml" />
+
+    {allSchema.map((s) => <script type="application/ld+json" set:html={JSON.stringify(s)} />)}
+  </head>
+  <body>
+    <a class="skip" href="#main">{t.lang === 'ru' ? 'К содержимому' : 'Asosiy qismga o‘tish'}</a>
+    <slot />
+    <script>
+      import '../scripts/main';
+    </script>
+  </body>
+</html>

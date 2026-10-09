@@ -13,6 +13,24 @@ import type { Lang, Notification, NotificationType } from '../../../shared/types
 
 type Params = Record<string, string | number>;
 
+/** Odam yozgan matn HTML rejimdagi xabarga — Telegram `<` ni teg deb o'qiydi */
+const escHtml = (v: string | number | undefined) =>
+  String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Tugma yozuvi — umumiy "Ochish" o'rniga aniq harakat.
+ * Odam xabarni o'qib, keyingi qadam nima ekanini tugmadan bilishi kerak.
+ */
+const LINK_LABEL: Partial<Record<NotificationType, Record<Lang, (p: Params) => string>>> = {
+  doctor_review: {
+    uz: (p) => (p.approved ? '🩺 Kabinetga o‘tish' : '📄 Hujjat yuklash'),
+    ru: (p) => (p.approved ? '🩺 Перейти в кабинет' : '📄 Загрузить документ'),
+  },
+  doctor_case: { uz: () => '👀 Ko‘rish va tasdiqlash', ru: () => '👀 Посмотреть и подтвердить' },
+  doctor_case_update: { uz: () => '🩺 Kabinetda ko‘rish', ru: () => '🩺 Открыть в кабинете' },
+  doctor_recommendation: { uz: () => '👀 Takliflarni ko‘rish', ru: () => '👀 Посмотреть предложения' },
+};
+
 /** Push matnlari — ichki bildirishnoma sarlavhasi klientda tarjima qilinadi. */
 const PUSH: Record<NotificationType, Record<Lang, (p: Params) => string>> = {
   new_request: {
@@ -71,6 +89,52 @@ const PUSH: Record<NotificationType, Record<Lang, (p: Params) => string>> = {
     uz: (p) => (p.approved ? `✅ Klinikangiz tasdiqlandi. Endi so'rovlarni olishingiz mumkin.` : `❌ Verifikatsiya rad etildi.\nSabab: ${p.note}`),
     ru: (p) => (p.approved ? `✅ Клиника подтверждена. Заявки уже поступают.` : `❌ Верификация отклонена.\nПричина: ${p.note}`),
   },
+  doctor_review: {
+    uz: (p) =>
+      p.approved
+        ? `✅ <b>Arizangiz tasdiqlandi</b>\nTabriklaymiz! Endi bemorlaringizga klinika xizmatlarini tavsiya qila olasiz.`
+        : `❌ <b>Arizangiz rad etildi</b>\nShifokor arizangiz tasdiqlanmadi. Sabab: ${escHtml(p.note)}\n\nYangi hujjat yuklasangiz, ariza qayta ko‘rib chiqiladi.`,
+    ru: (p) =>
+      p.approved
+        ? `✅ <b>Заявка одобрена</b>\nПоздравляем! Теперь вы можете рекомендовать пациентам услуги клиник.`
+        : `❌ <b>Заявка отклонена</b>\nЗаявка врача не одобрена. Причина: ${escHtml(p.note)}\n\nЗагрузите новый документ — заявка уйдёт на повторную проверку.`,
+  },
+  doctor_case: {
+    uz: (p) =>
+      `🩺 <b>Shifokoringiz siz uchun so‘rov yaratdi</b>\n${escHtml(p.doctor)} — ${escHtml(p.specialty)}\n\n` +
+      `Ko‘rib chiqing va tasdiqlang. Siz tasdiqlamaguningizcha so‘rov hech bir klinikaga ko‘rinmaydi.`,
+    ru: (p) =>
+      `🩺 <b>Ваш врач создал для вас заявку</b>\n${escHtml(p.doctor)} — ${escHtml(p.specialty)}\n\n` +
+      `Посмотрите и подтвердите. Пока вы не подтвердите, заявку не увидит ни одна клиника.`,
+  },
+  doctor_case_update: {
+    uz: (p) =>
+      ({
+        approved: `✅ <b>Bemor tasdiqladi</b>\n${escHtml(p.patient)} — ${escHtml(p.service)}\nSo‘rov klinikalarga yuborildi, takliflar kelishi bilan kabinetda ko‘rinadi.`,
+        declined: `❌ <b>Bemor rad etdi</b>\n${escHtml(p.service)} (+${p.phone})`,
+        not_me: `⚠️ <b>Raqam egasi “Bu men emasman” dedi</b>\n${escHtml(p.service)} (+${p.phone})\nRaqamni tekshiring.`,
+        expired: `⌛ <b>Bemor javob bermadi</b>\n${escHtml(p.service)} (+${p.phone}) — taklifnoma muddati tugadi.`,
+        chosen:
+          `🎉 <b>Bemor klinikani tanladi</b>\n${escHtml(p.patient)} — ${escHtml(p.service)}\n` +
+          `${escHtml(p.clinic)} · ${escHtml(p.price)}\n` +
+          (p.recommended ? '✅ Sizning tavsiyangiz qabul qilindi.' : 'Bemor boshqa klinikani tanladi.'),
+      })[String(p.status)] ?? '',
+    ru: (p) =>
+      ({
+        approved: `✅ <b>Пациент подтвердил</b>\n${escHtml(p.patient)} — ${escHtml(p.service)}\nЗаявка отправлена клиникам, предложения появятся в кабинете.`,
+        declined: `❌ <b>Пациент отказался</b>\n${escHtml(p.service)} (+${p.phone})`,
+        not_me: `⚠️ <b>Владелец номера ответил «Это не я»</b>\n${escHtml(p.service)} (+${p.phone})\nПроверьте номер.`,
+        expired: `⌛ <b>Пациент не ответил</b>\n${escHtml(p.service)} (+${p.phone}) — срок приглашения истёк.`,
+        chosen:
+          `🎉 <b>Пациент выбрал клинику</b>\n${escHtml(p.patient)} — ${escHtml(p.service)}\n` +
+          `${escHtml(p.clinic)} · ${escHtml(p.price)}\n` +
+          (p.recommended ? '✅ Ваша рекомендация принята.' : 'Пациент выбрал другую клинику.'),
+      })[String(p.status)] ?? '',
+  },
+  doctor_recommendation: {
+    uz: (p) => `🩺 <b>Shifokoringiz tavsiyasi</b>\n${escHtml(p.doctor)} sizga <b>${escHtml(p.clinic)}</b> klinikasini tavsiya qildi (${escHtml(p.price)}).`,
+    ru: (p) => `🩺 <b>Рекомендация врача</b>\n${escHtml(p.doctor)} рекомендует клинику <b>${escHtml(p.clinic)}</b> (${escHtml(p.price)}).`,
+  },
   dispute_opened: {
     uz: () => `⚠️ Bitim bo'yicha nizo ochildi. Moderator ko'rib chiqadi.`,
     ru: () => `⚠️ По сделке открыт спор. Модератор рассмотрит его.`,
@@ -92,6 +156,8 @@ export function notify(
   type: NotificationType,
   params: Params = {},
   link: string | null = null,
+  /** `push: false` — faqat ichki markaz; Telegram xabarini chaqiruvchi o'zi yuboradi */
+  opts: { push?: boolean } = {},
 ): Notification | null {
   const user = db.prepare(`SELECT id, telegram_id, lang FROM users WHERE id = ?`).get(userId) as
     | { id: number; telegram_id: number; lang: Lang }
@@ -109,13 +175,13 @@ export function notify(
   bus.publish(ch.user(userId), { type: 'notification', notification });
 
   // Telegram push — fon rejimida, xatolik oqimni to'xtatmaydi
-  const chatId = telegramChatFor(user);
+  const chatId = opts.push === false ? null : telegramChatFor(user);
   const text = chatId ? PUSH[type]?.[user.lang]?.(params) : null;
   if (text && chatId) {
     const url = link ? `${config.telegram.webappUrl}${link.startsWith('/') ? '' : '/'}${link}` : undefined;
     void sendTelegramMessage(chatId, text, {
       link: url,
-      linkLabel: user.lang === 'ru' ? 'Открыть' : 'Ochish',
+      linkLabel: LINK_LABEL[type]?.[user.lang]?.(params) ?? (user.lang === 'ru' ? 'Открыть' : 'Ochish'),
     });
   }
 

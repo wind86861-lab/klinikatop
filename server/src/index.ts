@@ -8,6 +8,7 @@ import { config, isProd } from './lib/config';
 import { AppError } from './lib/errors';
 import { migrate } from './db';
 import { apiRouter } from './routes';
+import { renderSitePage } from './services/siteContent';
 import { attachWebSocket, closeWebSocket } from './services/ws';
 import { startScheduler, stopScheduler } from './services/scheduler';
 import { aiProvider } from './services/aiProvider';
@@ -51,8 +52,14 @@ app.use(
  * Xavfsizlik sarlavhalari. Bular API uchun ham kerak: brauzer javobni
  * noto'g'ri talqin qilmasin va sahifa ichiga joylab bo'lmasin.
  */
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   res.setHeader('x-content-type-options', 'nosniff');
+  /*
+   * Sayt sahifalari (`/__site`) — oddiy veb sahifa: skript, uslub,
+   * shrift, YouTube kerak. API'ning "hammasi taqiqlangan" CSP'si ularni
+   * butunlay buzardi. Ularga nginx o'z xavfsizlik sarlavhalarini qo'yadi.
+   */
+  if (req.path.startsWith('/__site')) return next();
   res.setHeader('x-frame-options', 'DENY');
   res.setHeader('referrer-policy', 'no-referrer');
   // API hech qachon skript bermaydi — hammasini taqiqlaymiz
@@ -78,10 +85,36 @@ app.use((_req, res, next) => {
 const jsonBody = express.json({ limit: '1mb' });
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/files')) return next();
+  // Sayt rasmi ham base64 — o'z chegarasi `routes/admin.ts` da
+  if (req.method === 'PUT' && req.path.startsWith('/api/admin/site-media/')) return next();
+  // Hamkor logosi ham base64 — o'z chegarasi `routes/admin.ts` da
+  if ((req.method === 'POST' || req.method === 'PUT') && /^\/api\/admin\/site-partners(\/\d+)?$/.test(req.path)) return next();
+  // Ilova banneri rasmi ham base64 — o'z chegarasi `routes/admin.ts` da
+  if ((req.method === 'POST' || req.method === 'PUT') && /^\/api\/admin\/app-banners(\/\d+)?$/.test(req.path)) return next();
+  // Klinika arizasi litsenziya fayli bilan keladi — o'z chegarasi `publicRoutes.ts` da
+  if (req.method === 'POST' && req.path === '/api/public/clinic-application') return next();
+  // Shifokor diplomlari — o'z chegarasi `routes/doctor.ts` da
+  if (req.method === 'POST' && (req.path === '/api/doctor/register' || req.path === '/api/doctor/documents')) return next();
   jsonBody(req, res, next);
 });
 // Har so'rov uchun umumiy himoya — autentifikatsiyadan oldin, IP bo'yicha
 app.use('/api', limits.global);
+
+/*
+ * Ochiq sayt sahifalari — shablon + admin o'zgartirgan matn/media/hamkorlar.
+ * nginx `/`, `/ru/`, `/kirish/` ... ni shu yerga `/__site` bilan yuboradi;
+ * server ishlamay qolsa nginx statik shablonni o'zi beradi.
+ */
+app.get(/^\/__site(\/.*)?$/, (req, res, next) => {
+  try {
+    const html = renderSitePage(req.path.slice('/__site'.length) || '/');
+    res.setHeader('content-type', 'text/html; charset=utf-8');
+    res.setHeader('cache-control', 'no-cache');
+    res.send(html);
+  } catch (err) {
+    next(err);
+  }
+});
 
 app.use('/api', apiRouter);
 

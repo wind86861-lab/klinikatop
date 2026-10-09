@@ -26,6 +26,7 @@ const ROLE_LABEL: Record<Role, string> = {
   clinic_admin: 'Klinika admini',
   clinic_operator: 'Klinika operatori',
   admin: 'Administrator',
+  doctor: 'Shifokor',
 };
 
 export function AdminUsers() {

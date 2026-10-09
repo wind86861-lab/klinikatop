@@ -4,6 +4,7 @@
  * TANLANGAN → KELISHILGAN → BAJARILGAN → TASDIQLANGAN
  *      └──(bekor / nizo)──→ BEKOR / NIZO
  */
+import { onOfferChosen } from './doctorCases';
 import { db, nowSql, tx } from '../db';
 import { config } from '../lib/config';
 import { commissionPercentFor, listSettings } from './terms.business';
@@ -161,6 +162,13 @@ export function chooseOffer(
   notifyClinic(offer.clinic_id, 'offer_chosen', { operation: requestTitle(req) }, `/clinic/deals/${dealId}`);
   for (const r of rejected) {
     notifyClinic(r.clinic_id, 'offer_rejected', { operation: requestTitle(req) }, `/clinic/offers`);
+  }
+
+  // Shifokor yo'naltirgan so'rov — shifokorga ham (tavsiyasi qabul qilindimi)
+  try {
+    onOfferChosen(requestId, offerId);
+  } catch (err) {
+    console.error('[deals] shifokorga xabar yuborilmadi:', err);
   }
 
   return deal;

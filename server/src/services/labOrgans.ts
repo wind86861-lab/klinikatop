@@ -126,12 +126,19 @@ export function deleteLabOrgan(id: number): void {
 export function listLabTests(includeHidden = false): LabTest[] {
   const rows = db
     .prepare(
+      /*
+       * Tartib: GURUHLAR o'z `position` i bo'yicha, ichidagilar guruhi
+       * ostida o'z `position` i bo'yicha. Ilgari guruhlar ID bo'yicha
+       * tartiblanardi — admin "tartib" maydonini o'zgartirsa ham ro'yxat
+       * siljimasdi, yangi qo'shilgan tekshiruv esa doim oxirida turardi.
+       */
       `SELECT t.*,
               (SELECT COUNT(*) FROM lab_tests c
                 WHERE c.parent_id = t.id ${includeHidden ? '' : 'AND c.active = 1'}) AS kids
          FROM lab_tests t
+         LEFT JOIN lab_tests g ON g.id = t.parent_id
         ${includeHidden ? '' : 'WHERE t.active = 1'}
-        ORDER BY COALESCE(t.parent_id, t.id), t.parent_id IS NOT NULL, t.position, t.id`,
+        ORDER BY COALESCE(g.position, t.position), COALESCE(t.parent_id, t.id), t.parent_id IS NOT NULL, t.position, t.id`,
     )
     .all() as any[];
   return rows.map((r) => mapLabTest(r, (r.kids ?? 0) > 0));
@@ -181,7 +188,14 @@ export interface LabTestInput {
    * hech qayerda o'qilmaydi.
    */
   durationMin?: number | null;
+  /** Bemordan vazn so'raladimi */
+  needsWeight?: boolean;
+  /** Qarshi ko'rsatmalar — bo'sh bo'lsa qadam chiqmaydi */
+  contraUz?: string | null;
+  contraRu?: string | null;
 }
+
+const contraText = (v: string | null | undefined) => (v ?? '').trim().slice(0, 2000) || null;
 
 export function createLabTest(input: LabTestInput): LabTest {
   const nameUz = input.nameUz.trim();
@@ -197,8 +211,8 @@ export function createLabTest(input: LabTestInput): LabTest {
     const info = db
       .prepare(
         `INSERT INTO lab_tests (slug, name_uz, name_ru, icon, position, active,
-                                parent_id, duration_min)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                                parent_id, duration_min, needs_weight, contra_uz, contra_ru)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         slug,
@@ -209,6 +223,9 @@ export function createLabTest(input: LabTestInput): LabTest {
         input.active === false ? 0 : 1,
         input.parentId ?? null,
         input.durationMin ?? null,
+        input.needsWeight === false ? 0 : 1,
+        contraText(input.contraUz),
+        contraText(input.contraRu),
       );
 
     return getLabTest(Number(info.lastInsertRowid));
@@ -217,24 +234,35 @@ export function createLabTest(input: LabTestInput): LabTest {
 
 export function updateLabTest(id: number, input: Partial<LabTestInput>): LabTest {
   const current = getLabTest(id);
+  /*
+   * Berilmagan maydon O'ZGARMAYDI. Ilgari qisman tahrirda (faqat nom)
+   * o'rin 999 ga tushib, o'chirilgan tekshiruv esa qayta yoqilib qolardi.
+   */
+  const row = db.prepare(`SELECT position, active FROM lab_tests WHERE id = ?`).get(id) as {
+    position: number;
+    active: number;
+  };
 
   return tx(() => {
     db.prepare(
       `UPDATE lab_tests SET name_uz = ?, name_ru = ?, icon = ?, position = ?, active = ?,
-                            parent_id = ?, duration_min = ?
+                            parent_id = ?, duration_min = ?, needs_weight = ?, contra_uz = ?, contra_ru = ?
         WHERE id = ?`,
     ).run(
       (input.nameUz ?? current.nameUz).trim().slice(0, 120),
       (input.nameRu ?? current.nameRu).trim().slice(0, 120),
       (input.icon ?? current.icon).slice(0, 8),
-      input.position ?? 999,
-      input.active === false ? 0 : 1,
+      input.position ?? row.position,
+      input.active === undefined ? row.active : input.active ? 1 : 0,
       /*
        * O'ziga o'zi ota bo'lib qolmasin — bunday yozuv ro'yxatda
        * hech qachon ko'rinmasdi.
        */
       input.parentId === id ? null : (input.parentId ?? current.parentId),
       input.durationMin !== undefined ? input.durationMin : current.durationMin,
+      input.needsWeight === undefined ? (current.needsWeight ? 1 : 0) : input.needsWeight ? 1 : 0,
+      input.contraUz !== undefined ? contraText(input.contraUz) : current.contraUz,
+      input.contraRu !== undefined ? contraText(input.contraRu) : current.contraRu,
       id,
     );
 

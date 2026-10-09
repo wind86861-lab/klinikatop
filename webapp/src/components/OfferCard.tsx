@@ -3,7 +3,7 @@ import { formatDate, money, responseSpeed } from '@/lib/format';
 import { spring } from '@/lib/motion';
 import { Avatar, Badge, Button, Card, IconCheck, IconShield } from '@/ui';
 import { useApp } from '@/store/app';
-import type { OfferWithClinic } from '@shared/types';
+import type { OfferWithClinic, PatientRecommendation } from '@shared/types';
 
 export function OfferCard({
   offer,
@@ -12,6 +12,7 @@ export function OfferCard({
   onToggleSelect,
   onChoose,
   isNew,
+  recommendation,
 }: {
   offer: OfferWithClinic;
   selected?: boolean;
@@ -20,13 +21,30 @@ export function OfferCard({
   onChoose?: () => void;
   /** Ko'z oldida kelgan taklif — ustidan yorug'lik yugurib o'tadi */
   isNew?: boolean;
+  /** Shifokor aynan SHU taklifni tavsiya qilgan bo'lsa */
+  recommendation?: PatientRecommendation | null;
 }) {
   const { t, lang } = useApp();
   const speed = responseSpeed(offer.clinic.avgResponseMinutes, lang);
 
   return (
-    <Card className="offer stack">
+    <Card className={`offer stack ${recommendation ? 'offer--recommended' : ''}`}>
       {isNew && <span className="offer__shine" aria-hidden />}
+
+      {/*
+        Shifokor tavsiyasi — kartaning TEPASIDA. Bemor majbur emas,
+        lekin nega aynan shu klinika ekanini shifokorning o'z so'zi
+        bilan ko'rsin.
+      */}
+      {recommendation && (
+        <div className="offer__rec">
+          <span className="offer__recTag">{t('offers.recommended')}</span>
+          <span className="tiny">
+            {recommendation.doctorName} · {recommendation.specialty}
+          </span>
+          {recommendation.comment && <span className="offer__recText">«{recommendation.comment}»</span>}
+        </div>
+      )}
 
       <div className="row" style={{ alignItems: 'flex-start' }}>
         <Avatar name={offer.clinic.name} url={offer.clinic.logoUrl} />

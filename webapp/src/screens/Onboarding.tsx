@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
-import { useNavigate } from '@/lib/router';
+import { useLocation, useNavigate } from '@/lib/router';
+import { safePath } from '@/lib/safePath';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
@@ -27,6 +28,7 @@ const SLIDES = [
 export function Onboarding() {
   const { t, lang, setLang, refreshSession } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [finishing, setFinishing] = useState(false);
@@ -49,7 +51,13 @@ export function Onboarding() {
     } catch {
       // Onboarding belgisi saqlanmasa ham ilovaga kirishga to'sqinlik qilmaymiz
     }
-    navigate('/', { replace: true });
+    /*
+     * Qaerdan kelgan bo'lsa, o'sha yerga qaytadi — masalan shifokor
+     * taklifnomasi (`/invite/...`). Aks holda odam bosh sahifaga tushib,
+     * xabardagi tugmani qayta qidirishga majbur bo'lardi.
+     */
+    const next = (location.state as { next?: string } | null)?.next;
+    navigate(safePath(next), { replace: true });
   };
 
   const { Icon } = SLIDES[index];

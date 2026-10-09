@@ -13,6 +13,8 @@ import { clinicStandingByPhone, type ClinicStanding } from './clinicIdentity';
 import { config } from '../lib/config';
 import { textSetting } from './terms.business';
 import { upsertUser } from '../middleware/auth';
+import { bindCasesByPhone, claimInvite } from './doctorCases';
+import { handleRecommendationCallback, type CallbackQuery } from './doctorRecommendations';
 
 const API = () => `https://api.telegram.org/bot${config.telegram.botToken}`;
 
@@ -208,7 +210,8 @@ function openButton() {
   const base = config.telegram.webappUrl.replace(/\/$/, '');
 
   const rows: InlineButton[][] = [
-    [{ text: '🩺 Ilovani ochish', web_app: { url: base } }],
+    // Mini App /app da — "/" endi ochiq sayt
+    [{ text: '🩺 Ilovani ochish', web_app: { url: `${base}/app` } }],
   ];
 
   /*
@@ -262,9 +265,80 @@ async function greet(chatId: number, phone: string) {
   await sendMessage(chatId, CHOOSE, openButton());
 }
 
+/* ─────────────────────────  Shifokor  ───────────────────────── */
+
+/**
+ * `/shifokor` — yo'naltiruvchi shifokor kabineti.
+ *
+ * Telefon birinchi: u botda kontakt bilan tasdiqlanmaguncha kabinet
+ * tugmasi berilmaydi. Server ham xuddi shuni tekshiradi — bu yerda
+ * odam formani to'ldirib bo'lgach rad javobini olmasligi uchun.
+ */
+async function doctorEntry(chatId: number, telegramId: number) {
+  const base = config.telegram.webappUrl.replace(/\/$/, '');
+
+  if (!phoneOf(telegramId)) {
+    await sendMessage(
+      chatId,
+      '🩺 <b>Shifokor kabineti</b>\n\nAvval 📱 telefon raqamingizni ulashing — pastdagi tugmani bosing. ' +
+        'Keyin /shifokor ni qayta bosing.',
+      contactKeyboard(),
+    );
+    return;
+  }
+
+  const doctor = db
+    .prepare(
+      `SELECT d.status, d.reject_reason FROM referring_doctors d
+         JOIN users u ON u.id = d.user_id
+        WHERE u.telegram_id = ?`,
+    )
+    .get(telegramId) as { status: string; reject_reason: string | null } | undefined;
+
+  const open = (label: string) => ({ inline_keyboard: [[{ text: label, web_app: { url: `${base}/doctor` } }]] });
+
+  if (!doctor) {
+    await sendMessage(
+      chatId,
+      '🩺 <b>Shifokor sifatida ro‘yxatdan o‘ting</b>\n\n' +
+        'Bemorlaringiz uchun so‘rov yarating — klinikalar taklif yuboradi, siz eng maqbulini tavsiya qilasiz.\n\n' +
+        'Kerak bo‘ladi: ism, mutaxassislik, ish joyi va bakalavr diplomi (rasm yoki PDF).',
+      open('📝 Ro‘yxatdan o‘tish'),
+    );
+    return;
+  }
+
+  const text: Record<string, string> = {
+    pending: '⏳ Arizangiz admin tasdig‘ini kutmoqda. Natija shu yerga keladi.',
+    in_review: '⏳ Yangi hujjatlaringiz yuborildi — ariza qayta ko‘rib chiqilmoqda.',
+    approved: '✅ Kabinetingiz tayyor.',
+    rejected:
+      '❌ Arizangiz rad etilgan.' +
+      (doctor.reject_reason ? `\n<b>Sabab:</b> ${escHtml(doctor.reject_reason)}` : '') +
+      '\n\nYangi hujjat yuklasangiz, ariza qayta ko‘rib chiqiladi.',
+  };
+  await sendMessage(chatId, `🩺 <b>Shifokor kabineti</b>\n\n${text[doctor.status] ?? ''}`, open('🩺 Kabinetni ochish'));
+}
+
+/** Shifokor havolasi bo'yicha javoblar */
+const INVITE_ASK_CONTACT =
+  '🩺 <b>Shifokoringiz siz uchun so‘rov yaratdi.</b>\n\n' +
+  'Bu siz ekaningizni tasdiqlash uchun pastdagi tugma orqali 📱 telefon raqamingizni yuboring.';
+
+const INVITE_TEXT: Record<'mismatch' | 'gone' | 'no_phone', string> = {
+  mismatch:
+    'Bu havola boshqa telefon raqami uchun yaratilgan. Shifokoringizdan raqamingizni tekshirib, qayta yuborishni so‘rang.',
+  gone: 'Bu havola eskirgan yoki so‘rov bo‘yicha qaror allaqachon qabul qilingan.',
+  no_phone: 'Avval 📱 telefon raqamingizni yuboring.',
+};
+
+const escHtml = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 /* ─────────────────────────  Yangilanishlar  ───────────────────────── */
 
 interface TelegramUpdate {
+  /** Inline tugma bosildi (shifokor tavsiyasidagi kunlar) */
+  callback_query?: CallbackQuery;
   message?: {
     chat: { id: number };
     text?: string;
@@ -280,6 +354,13 @@ interface TelegramUpdate {
  * xabarni qayta-qayta yuboraveradi va navbat to'lib ketadi.
  */
 export async function handleUpdate(update: TelegramUpdate): Promise<void> {
+  if (update.callback_query) {
+    const handled = await handleRecommendationCallback(update.callback_query);
+    // Noma'lum tugma — baribir javob beramiz, aks holda Telegram'da "yuklanmoqda" aylanib qoladi
+    if (!handled) await call('answerCallbackQuery', { callback_query_id: update.callback_query.id });
+    return;
+  }
+
   const message = update.message;
   if (!message) return;
 
@@ -315,6 +396,23 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
 
       // Klaviaturani olib tashlaymiz — kerak emas, joyni egallaydi
       await sendMessage(chatId, READY, { remove_keyboard: true });
+
+      /*
+       * Shifokor taklifnomasi. Bemor havolani ochib, raqamini hozir
+       * ulashdi — kutib turgan taklifnomani endi tekshiramiz. Havolasiz
+       * kelgan bo'lsa ham, shu raqamga yozilganlari topiladi.
+       */
+      const pending = db
+        .prepare(`SELECT token FROM bot_pending_invites WHERE telegram_id = ?`)
+        .get(from.id) as { token: string } | undefined;
+      if (pending) {
+        db.prepare(`DELETE FROM bot_pending_invites WHERE telegram_id = ?`).run(from.id);
+        const result = claimInvite(user.id, pending.token);
+        if (result === 'ok') return;
+        await sendMessage(chatId, INVITE_TEXT[result]);
+      }
+      if (bindCasesByPhone(user.id) > 0) return;
+
       await greet(chatId, message.contact.phone_number);
       return;
     }
@@ -331,6 +429,34 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   const command = text.split(/\s+/)[0].toLowerCase();
 
   if (command === '/start') {
+    /*
+     * `/start inv_XXXX` — shifokor bergan havola. Xabar (tugmasi bilan)
+     * `claimInvite` ichida yuboriladi; bu yerda faqat muammoni aytamiz.
+     */
+    const payload = text.split(/\s+/)[1] ?? '';
+    if (payload.startsWith('inv_') && from) {
+      const token = payload.slice(4).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+      const user = upsertUser({
+        id: from.id,
+        first_name: from.first_name ?? 'Foydalanuvchi',
+        last_name: from.last_name,
+        username: from.username,
+        language_code: from.language_code,
+      });
+      const result = claimInvite(user.id, token);
+      if (result === 'ok') return;
+      if (result === 'no_phone') {
+        db.prepare(
+          `INSERT INTO bot_pending_invites (telegram_id, token) VALUES (?, ?)
+           ON CONFLICT(telegram_id) DO UPDATE SET token = excluded.token, created_at = datetime('now')`,
+        ).run(from.id, token);
+        await sendMessage(chatId, INVITE_ASK_CONTACT, contactKeyboard());
+        return;
+      }
+      await sendMessage(chatId, INVITE_TEXT[result]);
+      return;
+    }
+
     await sendMessage(chatId, INTRO);
 
     // Raqam allaqachon bo'lsa qayta so'ramaymiz — bir marta yetarli
@@ -345,6 +471,30 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
 
   if (command === '/help') {
     await sendMessage(chatId, HELP, openButton());
+    return;
+  }
+
+  /*
+   * `/parol` — saytdan (klinikatop.uz/kirish/) kirish uchun parol.
+   * Parol Mini App ichida qo'yiladi: shaxs Telegram imzosi bilan
+   * tasdiqlangan, ya'ni SMS kod kerak emas.
+   */
+  if ((command === '/parol' || command === '/password') && from) {
+    const base = config.telegram.webappUrl.replace(/\/$/, '');
+    if (!phoneOf(from.id)) {
+      await sendMessage(chatId, '🔑 Avval 📱 telefon raqamingizni ulashing — saytga shu raqam bilan kirasiz.', contactKeyboard());
+      return;
+    }
+    await sendMessage(
+      chatId,
+      '🔑 <b>Saytdan kirish uchun parol</b>\n\nParol qo‘ying yoki o‘zgartiring — keyin klinikatop.uz/kirish/ sahifasida raqamingiz va shu parol bilan kirasiz.',
+      { inline_keyboard: [[{ text: '🔑 Parolni sozlash', web_app: { url: `${base}/profile/password` } }]] },
+    );
+    return;
+  }
+
+  if ((command === '/shifokor' || command === '/doctor') && from) {
+    await doctorEntry(chatId, from.id);
     return;
   }
 
@@ -420,11 +570,47 @@ export async function configureBot(): Promise<void> {
     commands: [
       { command: 'start', description: 'Ilovani ochish' },
       { command: 'clinic', description: 'Klinika uchun' },
+      { command: 'shifokor', description: 'Shifokor kabineti / Кабинет врача' },
+      { command: 'parol', description: 'Saytga kirish paroli / Пароль для сайта' },
       { command: 'help', description: 'Qanday ishlaydi' },
     ],
   });
 
   await applyBotFace(getBotFace());
+  await ensureWebhookUpdates();
+}
+
+/**
+ * Webhook tugma bosilishlarini ham qabul qilsin.
+ *
+ * Shifokor tavsiyasidagi kun tugmalari `callback_query` bo'lib keladi.
+ * Webhook `allowed_updates: ["message"]` bilan o'rnatilgan bo'lsa
+ * Telegram ularni umuman yubormaydi — tugma bosilganda hech narsa
+ * bo'lmaydi va "yuklanmoqda" aylanib qoladi. Har ko'tarilishda
+ * tekshiriladi: kimdir webhook'ni qayta o'rnatsa ham o'zi tuzaladi.
+ * Manzil va maxfiy kalit O'ZGARMAYDI — faqat ro'yxat kengaytiriladi.
+ */
+const REQUIRED_UPDATES = ['message', 'callback_query'];
+
+async function ensureWebhookUpdates(): Promise<void> {
+  if (!config.telegram.botToken || !config.telegram.webhookSecret) return;
+  try {
+    const res = await fetch(`${API()}/getWebhookInfo`, { signal: AbortSignal.timeout(10_000) });
+    const info = (await res.json()) as { ok: boolean; result?: { url?: string; allowed_updates?: string[] } };
+    const url = info.result?.url;
+    if (!info.ok || !url) return;
+    const allowed = info.result?.allowed_updates;
+    // Ro'yxat berilmagan bo'lsa Telegram hammasini yuboradi — tegmaymiz
+    if (!allowed || REQUIRED_UPDATES.every((u) => allowed.includes(u))) return;
+    const ok = await call('setWebhook', {
+      url,
+      secret_token: config.telegram.webhookSecret,
+      allowed_updates: [...new Set([...allowed, ...REQUIRED_UPDATES])],
+    });
+    console.log(`[bot] webhook yangilandi (callback_query qo'shildi): ${ok ? 'ok' : 'XATO'}`);
+  } catch (err) {
+    console.error('[bot] webhook tekshiruvi xatosi:', err);
+  }
 }
 
 /**
@@ -449,7 +635,7 @@ export async function applyBotFace(face: BotFace): Promise<boolean> {
       menu_button: {
         type: 'web_app',
         text: face.menuButton.slice(0, 30),
-        web_app: { url: config.telegram.webappUrl },
+        web_app: { url: `${config.telegram.webappUrl.replace(/\/$/, '')}/app` },
       },
     }),
     call('setMyDescription', { description: face.description.slice(0, 512) }),

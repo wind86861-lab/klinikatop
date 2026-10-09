@@ -73,6 +73,8 @@ export function mapOperation(r: any): Operation {
     descUz: r.desc_uz,
     descRu: r.desc_ru,
     keywords: parseJson<string[]>(r.keywords, []),
+    minPriceUzs: r.min_price_uzs ?? null,
+    maxPriceUzs: r.max_price_uzs ?? null,
   };
 }
 
@@ -105,7 +107,7 @@ export function mapClinic(r: any): Clinic {
     beds: r.beds ?? null,
     foundedYear: r.founded_year ?? null,
     equipment: jsonArray(r.equipment),
-    acceptsReferral: r.accepts_referral !== 0,
+    acceptsReferral: r.accepts_referral === 1,
     photos: jsonArray(r.photos),
     verification: r.verification,
     verificationNote: r.verification_note,
@@ -158,6 +160,8 @@ export function mapRequest(r: any): MedicalRequest {
     dateTo: iso(r.date_to ?? null),
     dateFlexible: r.date_flexible === undefined ? true : Boolean(r.date_flexible),
     forSelf: r.for_self !== 0,
+    viaDoctor: r.doctor_case_id != null,
+    contraAcked: r.contra_ack_at != null,
     subjectName: r.subject_name ?? null,
     subjectBirthYear: r.subject_birth_year ?? null,
     subjectGender: r.subject_gender ?? null,
@@ -294,6 +298,9 @@ export function mapLabTest(r: any, hasChildren = false) {
     parentId: r.parent_id ?? null,
     hasChildren,
     durationMin: r.duration_min ?? null,
+    needsWeight: r.needs_weight !== 0,
+    contraUz: r.contra_uz ?? null,
+    contraRu: r.contra_ru ?? null,
   };
 }
 

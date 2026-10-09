@@ -686,26 +686,45 @@ REF=$(status "$API/public/reference")
 check "ma'lumotnoma autentifikatsiyasiz ochiladi (200)" "$([ "$REF" = 200 ] && echo 1)" "$REF"
 
 LIC="LIC-$(date +%s)"
+# Litsenziya fayli endi MAJBURIY — eng kichik haqiqiy PDF
+PDF64=$(printf '%%PDF-1.4\n%%sinov\n' | base64 -w0)
+LF=",\"licenseFile\":{\"name\":\"litsenziya.pdf\",\"dataBase64\":\"$PDF64\"}"
 PHONE="99890$(date +%H%M%S)"
 EMAIL="klinika-$(date +%s)@test.local"
 APP=$(curl -s "${JSON[@]}" -X POST "$API/public/clinic-application" \
-  -d "{\"name\":\"Sinov Klinikasi\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"$PHONE\",\"contactEmail\":\"$EMAIL\",\"operationIds\":[1]}" | jqv '.id')
+  -d "{\"name\":\"Sinov Klinikasi\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"$PHONE\",\"contactEmail\":\"$EMAIL\",\"operationIds\":[1]$LF}" | jqv '.id')
 check "ariza autentifikatsiyasiz qabul qilindi" "$([ -n "$APP" ] && echo 1)" "#$APP"
 
 # Email endi IXTIYORIY — kirish identifikatori telefon raqami
 code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
-  -d "{\"name\":\"Emailsiz\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"LIC-NOMAIL-$(date +%s)\",\"contactName\":\"Ali\",\"contactPhone\":\"99891$(date +%H%M%S)\",\"operationIds\":[1]}")
+  -d "{\"name\":\"Emailsiz\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"LIC-NOMAIL-$(date +%s)\",\"contactName\":\"Ali\",\"contactPhone\":\"99891$(date +%H%M%S)\",\"operationIds\":[1]$LF}")
 check "emailsiz ariza qabul qilinadi (201)" "$([ "$code" = 201 ] && echo 1)" "$code"
 
 # Bir xil litsenziya bilan takror ariza
 code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
-  -d "{\"name\":\"Takror\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"+998901112233\",\"contactEmail\":\"takror-$EMAIL\",\"operationIds\":[1]}")
+  -d "{\"name\":\"Takror\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"$LIC\",\"contactName\":\"Aziz\",\"contactPhone\":\"+998901112233\",\"contactEmail\":\"takror-$EMAIL\",\"operationIds\":[1]$LF}")
 check "takroriy litsenziya rad etiladi (409)" "$([ "$code" = 409 ] && echo 1)" "$code"
 
 # Hech qanday xizmatsiz ariza — uchalasi ham bo'sh
 code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
-  -d '{"name":"Yonalishsiz","cityId":1,"address":"Toshkent","licenseNo":"LIC-X","contactName":"A","contactPhone":"+998901112233","contactEmail":"x@test.local","operationIds":[],"labTestIds":[],"acceptsReferral":false}')
+  -d "{\"name\":\"Yonalishsiz\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"LIC-X\",\"contactName\":\"A\",\"contactPhone\":\"+998901112233\",\"contactEmail\":\"x@test.local\",\"operationIds\":[],\"labTestIds\":[],\"acceptsReferral\":false$LF}")
 check "xizmatsiz ariza rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+
+# ── Litsenziya fayli ──
+code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
+  -d "{\"name\":\"Faylsiz\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"LIC-NOFILE-$(date +%s)\",\"contactName\":\"Ali\",\"contactPhone\":\"99893$(date +%H%M%S)\",\"operationIds\":[1]}")
+check "litsenziya faylisiz ariza rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+FAKE64=$(printf '<html><script>alert(1)</script></html>' | base64 -w0)
+code=$(status "${JSON[@]}" -X POST "$API/public/clinic-application" \
+  -d "{\"name\":\"Soxta\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"LIC-FAKE-$(date +%s)\",\"contactName\":\"Ali\",\"contactPhone\":\"99894$(date +%H%M%S)\",\"operationIds\":[1],\"licenseFile\":{\"name\":\"litsenziya.pdf\",\"dataBase64\":\"$FAKE64\"}}")
+check ".pdf deb nomlangan HTML rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+
+LCT=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "${MOD[@]}" "$API/admin/applications/$APP/license")
+check "admin litsenziyani ocha oladi (200, PDF)" "$([ "$LCT" = "200 application/pdf" ] && echo 1)" "$LCT"
+code=$(status "$API/admin/applications/$APP/license")
+check "litsenziya sessiyasiz ochilmaydi" "$([ "$code" != 200 ] && echo 1)" "$code"
 
 #
 # SOF LABORATORIYA: operatsiyasiz, faqat tahlil + yo'llanma.
@@ -716,7 +735,7 @@ check "xizmatsiz ariza rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$cod
 LAB_IDS=$(curl -s "$API/catalog/lab-tests" | jqv '.filter(x=>x.parentId!==null).slice(0,3).map(x=>x.id).join(",")')
 LAB_PHONE="99892$(date +%H%M%S)"
 LAB_APP=$(curl -s "${JSON[@]}" -X POST "$API/public/clinic-application" \
-  -d "{\"name\":\"Sof Laboratoriya\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"LIC-LAB-$(date +%s)\",\"contactName\":\"Lola\",\"contactPhone\":\"$LAB_PHONE\",\"operationIds\":[],\"labTestIds\":[$LAB_IDS],\"acceptsReferral\":true}" | jqv '.id')
+  -d "{\"name\":\"Sof Laboratoriya\",\"cityId\":1,\"address\":\"Toshkent\",\"licenseNo\":\"LIC-LAB-$(date +%s)\",\"contactName\":\"Lola\",\"contactPhone\":\"$LAB_PHONE\",\"operationIds\":[],\"labTestIds\":[$LAB_IDS],\"acceptsReferral\":true$LF}" | jqv '.id')
 check "operatsiyasiz (faqat tahlil) ariza qabul qilindi" "$([ -n "$LAB_APP" ] && echo 1)" "#$LAB_APP"
 
 LAB_CLINIC=$(curl -s "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/applications/$LAB_APP/approve" | jqv '.clinicId')
@@ -724,6 +743,8 @@ check "laboratoriya arizasi tasdiqlandi" "$([ -n "$LAB_CLINIC" ] && echo 1)" "$L
 LAB_N=$(node -e "const D=require('better-sqlite3');const d=new D(process.argv[1],{readonly:true});console.log(d.prepare('SELECT COUNT(*) n FROM clinic_lab_tests WHERE clinic_id=?').get(+process.argv[2]).n, d.prepare('SELECT accepts_referral FROM clinics WHERE id=?').get(+process.argv[2]).accepts_referral)" "$ROOT/data/klinikatop.db" "$LAB_CLINIC")
 check "tahlillar klinikaga ko'chdi (3 ta)" "$([ "${LAB_N%% *}" = "3" ] && echo 1)" "$LAB_N"
 check "yo'llanma bayrog'i klinikaga ko'chdi" "$([ "${LAB_N##* }" = "1" ] && echo 1)" "$LAB_N"
+LAB_DOC=$(node -e "const D=require('better-sqlite3');const d=new D(process.argv[1],{readonly:true});console.log(d.prepare(\"SELECT COUNT(*) n FROM clinic_documents WHERE clinic_id=? AND kind='license'\").get(+process.argv[2]).n)" "$ROOT/data/klinikatop.db" "$LAB_CLINIC")
+check "arizadagi litsenziya klinika hujjatlariga ko'chdi" "$([ "$LAB_DOC" = "1" ] && echo 1)" "$LAB_DOC"
 
 # Ochiq marshrut faqat YOZUV uchun: GET ta'riflanmagan, shuning uchun
 # so'rov autentifikatsiyaga tushadi va 401 qaytadi. Muhimi — 200 EMAS:
@@ -993,11 +1014,6 @@ code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
   -d "{\"kind\":\"lab\",\"cityId\":1,\"labTestId\":$GROUP_ID,\"weightKg\":70,\"acceptTerms\":true,\"attachments\":[],\"aiSuggested\":false}")
 check "guruhni tanlab bo'lmaydi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
 
-# 200 ming so'mdan past byudjet rad etiladi
-code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
-  -d "{\"kind\":\"lab\",\"cityId\":1,\"labTestId\":$TEST_ID,\"weightKg\":70,\"budgetUzs\":150000,\"acceptTerms\":true,\"attachments\":[],\"aiSuggested\":false}")
-check "150 ming so'mlik byudjet rad etiladi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
-
 # Tekshiruvsiz tahlil so'rovi rad etiladi
 code=$(status "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
   -d '{"kind":"lab","cityId":1,"weightKg":70,"acceptTerms":true,"attachments":[],"aiSuggested":false}')
@@ -1013,7 +1029,9 @@ LAB=$(curl -s "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/requests" \
 check "tahlil so'rovi yaratildi" "$([ "$(echo "$LAB" | jqv '.kind')" = "lab" ] && echo 1)" "$(echo "$LAB" | jqv '.kind')"
 check "operatsiya bo'sh" "$([ -z "$(echo "$LAB" | jqv '.operationId')" ] && echo 1)" "$(echo "$LAB" | jqv '.operationId')"
 check "tekshiruv nomi keldi" "$([ -n "$(echo "$LAB" | jqv '.labTest.nameUz')" ] && echo 1)" "$(echo "$LAB" | jqv '.labTest.nameUz')"
-check "200 ming so'mlik byudjet qabul qilindi" "$([ "$(echo "$LAB" | jqv '.budgetUzs')" = "200000" ] && echo 1)" "$(echo "$LAB" | jqv '.budgetUzs')"
+# Tahlilda narxni klinika biladi — byudjet olinmaydi (services/requests.ts: resolveBudget).
+# Eski ilova hali byudjet yuborishi mumkin: u rad etilmaydi, jimgina tashlanadi.
+check "tahlil so'rovida byudjet saqlanmaydi" "$([ -z "$(echo "$LAB" | jqv '.budgetUzs')" ] && echo 1)" "$(echo "$LAB" | jqv '.budgetUzs')"
 check "so'rov klinikaga bordi" "$([ "$(echo "$LAB" | jqv '.broadcastCount')" -ge 1 ] && echo 1)" "$(echo "$LAB" | jqv '.broadcastCount')"
 
 # Vazn profilga yozildi — keyingi safar avtomatik to'ladi
@@ -1106,14 +1124,18 @@ echo "21. Haqiqiy hajmdagi fayl"
 # Telefon rasmi 2–6 MB; shuning uchun 3 MB bilan sinaymiz.
 #
 BIG=$(node -e "
-  const raw = require('crypto').randomBytes(3 * 1024 * 1024);
+  // Haqiqiy JPEG boshi — server turni faylning o'zidan aniqlaydi
+  const raw = Buffer.concat([Buffer.from('ffd8ffe000104a464946', 'hex'), require('crypto').randomBytes(3 * 1024 * 1024)]);
   process.stdout.write(JSON.stringify({ name: 'IMG_3mb.jpg', mimeType: 'image/jpeg', kind: 'xulosa', dataBase64: raw.toString('base64') }));
 ")
+FAKE=$(node -e "process.stdout.write(JSON.stringify({ name: 'x.jpg', mimeType: 'image/jpeg', kind: 'other', dataBase64: Buffer.from('<html><script>alert(1)</script></html>').toString('base64') }))")
+code=$(echo "$FAKE" | curl -s -o /dev/null -w '%{http_code}' "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/files" --data-binary @-)
+check "JPEG deb nomlangan HTML rad etiladi (400)" "$([ "$code" = "400" ] && echo 1)" "$code"
 BIG_RESP=$(echo "$BIG" | curl -s -w '\n%{http_code}' "${PATIENT[@]}" "${JSON[@]}" -X POST "$API/files" --data-binary @-)
 BIG_CODE=$(echo "$BIG_RESP" | tail -1)
 BIG_BYTES=$(echo "$BIG_RESP" | head -1 | jqv '.sizeBytes')
 check "3 MB rasm qabul qilindi (201)" "$([ "$BIG_CODE" = "201" ] && echo 1)" "$BIG_CODE"
-check "hajmi to'g'ri saqlandi" "$([ "$BIG_BYTES" = "3145728" ] && echo 1)" "$BIG_BYTES"
+check "hajmi to'g'ri saqlandi (3 MB + JPEG boshi)" "$([ "$BIG_BYTES" = "3145738" ] && echo 1)" "$BIG_BYTES"
 
 # 8 MB dan katta — rad etiladi, lekin TUSHUNARLI xabar bilan, 500 emas
 HUGE=$(node -e "
@@ -1217,6 +1239,169 @@ check "bemor tokeni admin panelini OCHMAYDI (403)" "$([ "$code" = "403" ] && ech
 curl -s -H "authorization: Bearer $PTOK" -X POST "$API/auth/phone/logout" > /dev/null
 code=$(status -H "authorization: Bearer $PTOK" "$API/me")
 check "chiqqandan keyin token o'lik (401)" "$([ "$code" = "401" ] && echo 1)" "$code"
+
+echo
+echo "Shifokor: /shifokor → ro'yxatdan o'tish → admin tasdig'i"
+DOC_TG=$(( PATIENT_ID + 3 ))
+DOCTOR=(-H "x-init-data: $(sign $DOC_TG)")
+DPDF=$(node -e "process.stdout.write(Buffer.from('%PDF-1.4\n%diplom\n').toString('base64'))")
+
+code=$(status "$API/doctor/me")
+check "imzosiz kirish rad etiladi (401)" "$([ "$code" = 401 ] && echo 1)" "$code"
+code=$(status "${CLINIC[@]}" "$API/doctor/me")
+check "klinika veb sessiyasi shifokor kabinetiga kirmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
+ME=$(curl -s "${DOCTOR[@]}" "$API/doctor/me")
+check "yangi foydalanuvchi: profil yo'q, telefon tasdiqlanmagan" "$([ "$(echo "$ME" | jqv '.phoneVerified')" = "false" ] && [ "$(echo "$ME" | jqv '.doctor===null')" = "true" ] && echo 1)" "$ME"
+
+REG='{"firstName":"Aziz","lastName":"Karimov","specialty":"Kardiolog","workplace":"1-shifoxona","documents":[{"kind":"bachelor","name":"diplom.pdf","dataBase64":"'$DPDF'"}]}'
+code=$(curl -s "${DOCTOR[@]}" "${JSON[@]}" -X POST "$API/doctor/register" -d "$REG" | jqv '.code')
+check "telefonsiz ro'yxatdan o'tish rad etiladi" "$([ "$code" = "phone_required" ] && echo 1)" "$code"
+
+node -e "
+  const D=require('better-sqlite3');const d=new D(process.argv[1]);
+  d.prepare('UPDATE users SET phone=? WHERE telegram_id=?').run('99893'+String(process.argv[2]).slice(-7), +process.argv[2]);
+" "$ROOT/data/klinikatop.db" "$DOC_TG"
+
+DOC=$(curl -s "${DOCTOR[@]}" "${JSON[@]}" -X POST "$API/doctor/register" -d "$REG")
+DOC_ID=$(echo "$DOC" | jqv '.id')
+check "ariza qabul qilindi (pending)" "$([ "$(echo "$DOC" | jqv '.status')" = "pending" ] && echo 1)" "$DOC"
+DOC_FILE=$(echo "$DOC" | jqv '.documents[0].id')
+
+code=$(status "${DOCTOR[@]}" "$API/doctor/documents/$DOC_FILE")
+check "shifokor o'z diplomini ochadi" "$([ "$code" = 200 ] && echo 1)" "$code"
+code=$(status "${STRANGER[@]}" "$API/doctor/documents/$DOC_FILE")
+check "begona odam diplomni ochmaydi (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
+
+code=$(status "${PATIENT[@]}" "$API/admin/doctors")
+check "bemor shifokorlar ro'yxatini ko'rmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+IN_LIST=$(curl -s "${MOD[@]}" "$API/admin/doctors?status=pending" | jqv ".doctors.some(d=>d.id==$DOC_ID)")
+check "admin navbatida ko'rinadi" "$([ "$IN_LIST" = "true" ] && echo 1)" "$IN_LIST"
+code=$(status "${MOD[@]}" "$API/admin/doctors/$DOC_ID/documents/$DOC_FILE")
+check "admin diplomni ochadi" "$([ "$code" = 200 ] && echo 1)" "$code"
+
+code=$(status "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/doctors/$DOC_ID/reject" -d '{"reason":""}')
+check "sababsiz rad etib bo'lmaydi (400)" "$([ "$code" = 400 ] && echo 1)" "$code"
+ST=$(curl -s "${MOD[@]}" "${JSON[@]}" -X POST "$API/admin/doctors/$DOC_ID/reject" -d '{"reason":"Diplom o‘qilmaydi"}' | jqv '.status')
+check "rad etildi" "$([ "$ST" = "rejected" ] && echo 1)" "$ST"
+
+# 1 MB dan katta diplom — umumiy JSON chegarasidan o'tishi kerak
+BIGF=$(mktemp)
+node -e "
+  const b=Buffer.concat([Buffer.from('%PDF-1.4\n'),Buffer.alloc(3*1024*1024,65)]);
+  process.stdout.write(JSON.stringify({kind:'master',name:'katta.pdf',dataBase64:b.toString('base64')}));
+" > "$BIGF"
+ST=$(curl -s "${DOCTOR[@]}" "${JSON[@]}" -X POST "$API/doctor/documents" --data-binary @"$BIGF" | jqv '.status')
+rm -f "$BIGF"
+check "3 MB lik yangi hujjat qabul qilindi → qayta ko'rib chiqish" "$([ "$ST" = "in_review" ] && echo 1)" "$ST"
+
+ST=$(curl -s "${MOD[@]}" -X POST "$API/admin/doctors/$DOC_ID/approve" | jqv '.status')
+check "admin tasdiqladi" "$([ "$ST" = "approved" ] && echo 1)" "$ST"
+ST=$(curl -s "${DOCTOR[@]}" "$API/doctor/me" | jqv '.doctor.status')
+check "shifokor tasdiqlanganini ko'radi" "$([ "$ST" = "approved" ] && echo 1)" "$ST"
+
+echo
+echo "Shifokor: bemor uchun so'rov → bemor roziligi"
+# Yangi bemor: PATIENT oldingi bo'limlarda daqiqalik yozish limitini ishlatib bo'lgan
+P2_TG=$(( PATIENT_ID + 5 ))
+P2=(-H "x-init-data: $(sign $P2_TG)")
+P_PHONE="99893$(( 1000000 + P2_TG % 8999999 ))"
+curl -s "${P2[@]}" "$API/me" > /dev/null
+node -e "
+  const D=require('better-sqlite3');const d=new D(process.argv[1]);
+  const city=d.prepare('SELECT id FROM cities LIMIT 1').get().id;
+  d.prepare(\"UPDATE users SET phone=?, last_name='Aliyev', city_id=?, birth_year=1985, gender='male', onboarded_at=datetime('now'), profile_completed_at=datetime('now') WHERE telegram_id=?\").run(process.argv[2], city, +process.argv[3]);
+" "$ROOT/data/klinikatop.db" "$P_PHONE" "$P2_TG"
+OP1=$(curl -s "$API/catalog/operations" | jqv '[0].id')
+CITY1=$(curl -s "$API/catalog/cities" | jqv '[0].id')
+
+code=$(status "${P2[@]}" "${JSON[@]}" -X POST "$API/doctor/cases" -d "{\"patientPhone\":\"$P_PHONE\",\"kind\":\"operation\",\"operationId\":$OP1,\"cityId\":$CITY1,\"note\":\"Og'riq 2 haftadan beri\"}")
+check "shifokor bo'lmagan odam so'rov yarata olmaydi (404/403)" "$([ "$code" = 404 ] || [ "$code" = 403 ] && echo 1)" "$code"
+
+CASE=$(curl -s "${DOCTOR[@]}" "${JSON[@]}" -X POST "$API/doctor/cases" -d "{\"patientPhone\":\"+$P_PHONE\",\"kind\":\"operation\",\"operationId\":$OP1,\"cityId\":$CITY1,\"note\":\"Og'riq 2 haftadan beri, UZI qilingan\"}")
+CASE_ID=$(echo "$CASE" | jqv '.id')
+check "shifokor so'rov yaratdi, bemor botda topildi" "$([ "$(echo "$CASE" | jqv '.patientLinked')" = "true" ] && echo 1)" "$CASE"
+TOKEN=$(echo "$CASE" | jqv '.inviteLink.split("inv_")[1]')
+
+code=$(status "${STRANGER[@]}" "$API/doctor-invites/$TOKEN")
+check "begona odam taklifnomani ochmaydi (404)" "$([ "$code" = 404 ] && echo 1)" "$code"
+INV=$(curl -s "${P2[@]}" "$API/doctor-invites/$TOKEN")
+check "bemor taklifnomani ko'radi" "$([ "$(echo "$INV" | jqv '.status')" = "waiting" ] && echo 1)" "$INV"
+code=$(curl -s "${P2[@]}" "${JSON[@]}" -X POST "$API/doctor-invites/$TOKEN/approve" -d '{"acceptTerms":false}' | jqv '.code')
+check "ofertasiz tasdiqlanmaydi" "$([ "$code" = "terms_not_accepted" ] && echo 1)" "$code"
+RID=$(curl -s "${P2[@]}" "${JSON[@]}" -X POST "$API/doctor-invites/$TOKEN/approve" -d '{"acceptTerms":true}' | jqv '.requestId')
+check "bemor tasdiqladi — so'rov yaratildi" "$([ -n "$RID" ] && echo 1)" "$RID"
+VIA=$(curl -s "${P2[@]}" "$API/requests/$RID" | jqv '.request.viaDoctor')
+check "so'rovda shifokor belgisi" "$([ "$VIA" = "true" ] && echo 1)" "$VIA"
+ST=$(curl -s "${DOCTOR[@]}" "$API/doctor/cases/$CASE_ID" | jqv '.status')
+check "shifokor tasdiqlanganini ko'radi" "$([ "$ST" = "approved" ] && echo 1)" "$ST"
+code=$(status "${STRANGER[@]}" "$API/doctor/cases/$CASE_ID")
+check "boshqa odam shifokor so'rovini ko'rmaydi" "$([ "$code" = 404 ] && echo 1)" "$code"
+N=$(curl -s "${DOCTOR[@]}" "$API/doctor/stats" | jqv '.approved')
+check "statistika" "$([ "$N" -ge 1 ] 2>/dev/null && echo 1)" "$N"
+
+echo
+echo "Shifokor tavsiyasi"
+OFFER_REC=$(node -e "
+  const D=require('better-sqlite3');const d=new D(process.argv[1]);
+  const c=d.prepare('SELECT id FROM clinics ORDER BY id LIMIT 1').get().id;
+  const day=new Date(Date.now()+5*864e5).toISOString().slice(0,10);
+  console.log(d.prepare(\"INSERT INTO offers (request_id, clinic_id, price_uzs, includes, proposed_dates) VALUES (?, ?, 9500000, '[\\\"Operatsiya\\\"]', ?)\").run(+process.argv[2], c, JSON.stringify([day])).lastInsertRowid);
+" "$ROOT/data/klinikatop.db" "$RID")
+code=$(status "${STRANGER[@]}" "${JSON[@]}" -X POST "$API/doctor/cases/$CASE_ID/recommend" -d "{\"offerId\":$OFFER_REC}")
+check "shifokor bo'lmagan odam tavsiya bera olmaydi" "$([ "$code" = 403 ] || [ "$code" = 404 ] && echo 1)" "$code"
+REC=$(curl -s "${DOCTOR[@]}" "${JSON[@]}" -X POST "$API/doctor/cases/$CASE_ID/recommend" -d "{\"offerId\":$OFFER_REC,\"comment\":\"Tajribali jarroh\"}" | jqv '.recommendation.offerId')
+check "shifokor taklifni tavsiya qildi" "$([ "$REC" = "$OFFER_REC" ] && echo 1)" "$REC"
+PREC=$(curl -s "${P2[@]}" "$API/requests/$RID" | jqv '.recommendation.doctorName')
+check "bemor so'rovida tavsiya ko'rinadi" "$([ -n "$PREC" ] && echo 1)" "$PREC"
+NREC=$(curl -s "${MOD[@]}" "$API/admin/doctors/stats" | jqv ".find(r=>r.recommendations>0)?.byClinic.length")
+check "admin statistikasida tavsiya klinika kesimida" "$([ "${NREC:-0}" -ge 1 ] 2>/dev/null && echo 1)" "$NREC"
+code=$(status "${P2[@]}" "$API/admin/doctors/stats")
+check "bemor admin statistikasini ko'rmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
+echo
+echo "Botda parol (saytga kirish)"
+WL=$(curl -s "${P2[@]}" "$API/me/web-login")
+check "holat: raqam bor, parol yo'q" "$([ "$(echo "$WL" | jqv '.phone')" = "$P_PHONE" ] && [ "$(echo "$WL" | jqv '.hasPassword')" = "false" ] && echo 1)" "$WL"
+code=$(curl -s "${P2[@]}" "${JSON[@]}" -X PUT "$API/me/web-login/password" -d '{"password":"12345678"}' | jqv '.code')
+check "faqat raqamli parol rad etiladi" "$([ "$code" = "weak_password" ] && echo 1)" "$code"
+HP=$(curl -s "${P2[@]}" "${JSON[@]}" -X PUT "$API/me/web-login/password" -d '{"password":"Botdan-parol-1"}' | jqv '.hasPassword')
+check "Telegram ichidan parol qo'yildi" "$([ "$HP" = "true" ] && echo 1)" "$HP"
+WTOK=$(curl -s "${JSON[@]}" -X POST "$API/auth/phone/login" -d "{\"phone\":\"+$P_PHONE\",\"password\":\"Botdan-parol-1\"}" | jqv '.token')
+check "saytdan raqam + parol bilan kirildi" "$([ -n "$WTOK" ] && echo 1)" "${WTOK:0:8}"
+code=$(status -H "authorization: Bearer $WTOK" "${JSON[@]}" -X PUT "$API/me/web-login/password" -d '{"password":"Boshqa-parol-2"}')
+check "brauzer sessiyasi parolni bu yo'l bilan almashtira olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+
+echo
+echo "So'rov turlari (admin)"
+code=$(status "${P2[@]}" "${JSON[@]}" -X PUT "$API/admin/request-kinds" -d '{"kinds":[]}')
+check "bemor turlarni o'zgartira olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+KR=$(curl -s "${MOD[@]}" "${JSON[@]}" -X PUT "$API/admin/request-kinds" -d '{"kinds":[{"kind":"lab","enabled":true},{"kind":"referral","enabled":false},{"kind":"operation","enabled":false}]}')
+check "admin saqladi: tahlil birinchi" "$([ "$(echo "$KR" | jqv '[0].kind')" = "lab" ] && echo 1)" "$KR"
+KINDS=$(curl -s "${P2[@]}" "$API/me" | jqv '.features.requestKinds.join(",")')
+check "bemorga faqat tahlil ko'rinadi" "$([ "$KINDS" = "lab" ] && echo 1)" "$KINDS"
+code=$(curl -s "${MOD[@]}" "${JSON[@]}" -X PUT "$API/admin/request-kinds" -d '{"kinds":[{"kind":"lab","enabled":false},{"kind":"referral","enabled":false},{"kind":"operation","enabled":false}]}' | jqv '.code')
+check "hammasini o'chirib bo'lmaydi" "$([ "$code" = "no_kind_enabled" ] && echo 1)" "$code"
+curl -s "${MOD[@]}" "${JSON[@]}" -X PUT "$API/admin/request-kinds" -d '{"kinds":[{"kind":"referral","enabled":true},{"kind":"operation","enabled":true},{"kind":"lab","enabled":true}]}' > /dev/null
+
+echo
+echo "Ilova bannerlari"
+BN=$(curl -s "$API/catalog/banners")
+BID=$(echo "$BN" | jqv '[0].id')
+check "bosh sahifa bannerlari ochiq ro'yxatda" "$([ -n "$BID" ] && echo 1)" "$BN"
+code=$(status "${P2[@]}" "${JSON[@]}" -X PUT "$API/admin/app-banners/$BID" -d '{"active":false}')
+check "bemor bannerni o'zgartira olmaydi (403)" "$([ "$code" = 403 ] && echo 1)" "$code"
+BIGB=$(mktemp)
+node -e "
+  const b=Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'),Buffer.alloc(1500*1024,7)]);
+  process.stdout.write(JSON.stringify({mimeType:'image/png',dataBase64:b.toString('base64')}));
+" > "$BIGB"
+IMG=$(curl -s "${MOD[@]}" "${JSON[@]}" -X PUT "$API/admin/app-banners/$BID" --data-binary @"$BIGB" | jqv '.imageUrl')
+rm -f "$BIGB"
+check "1.5 MB rasm admin orqali yuklandi" "$([ -n "$IMG" ] && echo 1)" "$IMG"
+code=$(status "http://localhost:${PORT:-8080}$IMG")
+check "rasm ochiq manzildan beriladi" "$([ "$code" = 200 ] && echo 1)" "$code"
+curl -s "${MOD[@]}" "${JSON[@]}" -X PUT "$API/admin/app-banners/$BID" -d '{"removeImage":true}' > /dev/null
 
 echo
 echo "──────────────────────────────────────────────────"

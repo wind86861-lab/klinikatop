@@ -2059,16 +2059,17 @@ async function main() {
     );
     db.prepare(`UPDATE clinics SET accepts_referral = 1 WHERE id = ?`).run(optedOut.id);
 
+    /*
+     * Yo'llanmada byudjet YO'Q. Kelgan qiymat rad etilmaydi,
+     * jimgina tashlanadi: bemorning telefonida ilovaning eski
+     * keshlangan versiyasi turishi mumkin va u hali byudjet
+     * so'rayveradi. Xato qaytarilsa bemor buni tuzata olmaydi.
+     */
+    const refWithBudget = requests.createRequest(refBody({ budgetUzs: 150_000 }) as any);
     check(
-      'yo‘llanmada byudjet 200 mingdan boshlanadi',
-      (() => {
-        try {
-          requests.createRequest(refBody({ budgetUzs: 150_000 }) as any);
-          return false;
-        } catch (e: any) {
-          return e.code === 'invalid_budget';
-        }
-      })(),
+      'yo‘llanmada byudjet saqlanmaydi',
+      refWithBudget.budgetUzs === null,
+      String(refWithBudget.budgetUzs),
     );
   }
 
@@ -2107,12 +2108,14 @@ async function main() {
     'test_is_group',
   );
 
-  // Byudjet 200 ming so'mdan past bo'lmaydi
-  throws(
-    'juda past byudjet rad etiladi',
-    () =>
-      requests.createRequest(labBody({ labTestId: mrt.id, weightKg: 70, budgetUzs: 150_000 }) as any),
-    'invalid_budget',
+  /* Tahlilda ham byudjet yo'q — yo'llanmadagi kabi tashlanadi */
+  const labWithBudget = requests.createRequest(
+    labBody({ labTestId: mrt.id, weightKg: 70, budgetUzs: 150_000 }) as any,
+  );
+  check(
+    'tahlilda byudjet saqlanmaydi',
+    labWithBudget.budgetUzs === null,
+    String(labWithBudget.budgetUzs),
   );
 
   // Klinika shu tekshiruvni qilishini belgilaydi
@@ -2135,11 +2138,10 @@ async function main() {
 
   check('so‘rov klinikaga bordi', labReq.broadcastCount >= 1, labReq.broadcastCount);
 
-  // Byudjet tahlilda yuz minglardan boshlanadi
   const cheap = requests.createRequest(
     labBody({ labTestId: mrt.id, weightKg: 72, budgetUzs: 200_000 }) as any,
   );
-  check('200 ming so‘mlik byudjet qabul qilindi', cheap.budgetUzs === 200_000);
+  check('tahlil so‘rovi byudjetsiz ketadi', cheap.budgetUzs === null, String(cheap.budgetUzs));
 
   /*
    * Belgilanmagan tekshiruv bo'yicha so'rov klinikaga BORMAYDI:
@@ -2324,7 +2326,12 @@ async function main() {
   const { stepInFlow } = require('../../../shared/types');
   check('operatsiya bosqichi tahlilda yo‘q', stepInFlow('operation', 'lab') === false);
   check('tekshiruv bosqichi faqat tahlilda', stepInFlow('test', 'lab') && !stepInFlow('test', 'operation'));
-  check('byudjet ikkalasida ham bor', stepInFlow('budget', 'lab') && stepInFlow('budget', 'operation'));
+  check(
+    'byudjet faqat operatsiyada',
+    stepInFlow('budget', 'operation') &&
+      !stepInFlow('budget', 'lab') &&
+      !stepInFlow('budget', 'referral'),
+  );
 
 
   /* ═════ 20. Sana oralig'i va moslashuvchanlik ═════ */
@@ -3612,8 +3619,11 @@ async function main() {
     check('yo‘q token hech kimni bermaydi', pa.resolvePatientSession('yoq-token') === null);
 
     // Muddati o'tgan sessiya ishlamasin
+    check('bazada token ochiq matnda emas, xesh bo‘lib saqlanadi',
+      !db.prepare(`SELECT 1 FROM patient_sessions WHERE token = ?`).get(session.token) &&
+        !!db.prepare(`SELECT 1 FROM patient_sessions WHERE token = ?`).get(pa.sessionKey(session.token)));
     db.prepare(`UPDATE patient_sessions SET expires_at = datetime('now','-1 hour') WHERE token = ?`)
-      .run(session.token);
+      .run(pa.sessionKey(session.token));
     check('muddati o‘tgan sessiya rad etiladi', pa.resolvePatientSession(session.token) === null);
 
     // Chiqish tokenni darhol o'chiradi
@@ -3690,6 +3700,1064 @@ async function main() {
       limited = err?.code === 'rate_limited';
     }
     check('bir raqamga kod so‘rash cheklangan', limited);
+  }
+
+  section('Operatsiya narx oralig‘i');
+  {
+    const pricing = require('../services/operationPricing');
+
+    /*
+     * Katalog sinxronizatsiyasi bo'limi importdan tashqaridagi
+     * operatsiyalarni nofaol qilib qo'yadi, bu bo'lim esa undan
+     * KEYIN ishlaydi. Shuning uchun qaytarib yoqiladi — aks holda
+     * `unknown_operation` chiqadi va sabab ko'rinmaydi.
+     */
+    db.prepare(`UPDATE operations SET active = 1 WHERE id = ?`).run(gallbladder.id);
+
+    const opBody = (extra: Record<string, unknown> = {}) => ({
+      patientId: patient.id,
+      operationId: gallbladder.id,
+      cityId: tashkent.id,
+      conditionText: 'Holatim: qorin o‘ng tomonida og‘riq, tekshiruvda tosh topildi.',
+      attachments: [],
+      acceptTerms: true,
+      /* Xizmat to'g'ridan-to'g'ri chaqiriladi — marshrutdagi zod
+         standart qiymatlari bu yerda qo'llanmaydi */
+      urgency: 'normal',
+      ...extra,
+    });
+
+    // ── Admin oraliqni belgilaydi ──
+    const saved = pricing.setOperationPriceRange(gallbladder.id, 5_000_000, 20_000_000);
+    check('oraliq saqlandi', saved.minPriceUzs === 5_000_000 && saved.maxPriceUzs === 20_000_000);
+
+    check(
+      'oraliq katalogda ko‘rinadi',
+      pricing
+        .listOperationsForPricing()
+        .some((o: any) => o.id === gallbladder.id && o.minPriceUzs === 5_000_000),
+    );
+
+    // min > max — bunday oraliqqa hech qanday byudjet to'g'ri kelmaydi
+    throws(
+      'teskari oraliq rad etiladi',
+      () => pricing.setOperationPriceRange(gallbladder.id, 30_000_000, 10_000_000),
+      'invalid_range',
+    );
+
+    // ── Bemorning byudjeti oraliqda bo'lishi kerak ──
+    throws(
+      'oraliqdan past byudjet rad etiladi',
+      () => requests.createRequest(opBody({ budgetUzs: 3_000_000 }) as any),
+      'budget_below_min',
+    );
+    throws(
+      'oraliqdan yuqori byudjet rad etiladi',
+      () => requests.createRequest(opBody({ budgetUzs: 25_000_000 }) as any),
+      'budget_above_max',
+    );
+
+    const inRange = requests.createRequest(opBody({ budgetUzs: 12_000_000 }) as any);
+    check('oraliq ichidagi byudjet qabul qilindi', inRange.budgetUzs === 12_000_000);
+
+    // Chegaralarning O'ZI ham ichida — `<` emas, `<=`
+    const atMin = requests.createRequest(opBody({ budgetUzs: 5_000_000 }) as any);
+    check('eng past chegara ichida hisoblanadi', atMin.budgetUzs === 5_000_000);
+    const atMax = requests.createRequest(opBody({ budgetUzs: 20_000_000 }) as any);
+    check('eng yuqori chegara ichida hisoblanadi', atMax.budgetUzs === 20_000_000);
+
+    // Byudjetsiz so'rov oraliqqa qaramaydi — byudjet ixtiyoriy bo'lib qolaveradi
+    const noBudget = requests.createRequest(opBody() as any);
+    check('byudjetsiz so‘rov o‘tadi', noBudget.budgetUzs === null);
+
+    /*
+     * ── Tahrirlash ham tekshiriladi ──
+     *
+     * Aks holda oraliq chetlab o'tilardi: to'g'ri byudjet bilan
+     * yuborib, keyin tahrirlab oraliqdan chiqarish mumkin bo'lardi.
+     */
+    throws(
+      'tahrirlashda ham oraliq tekshiriladi',
+      () => requests.updateRequest(inRange.id, patient.id, { budgetUzs: 100_000_000 }),
+      'budget_above_max',
+    );
+    const edited = requests.updateRequest(inRange.id, patient.id, { budgetUzs: 15_000_000 });
+    check('oraliq ichida tahrirlash ishlaydi', edited.budgetUzs === 15_000_000);
+
+    // ── Faqat bitta chegara ──
+    pricing.setOperationPriceRange(gallbladder.id, 5_000_000, null);
+    throws(
+      'faqat pastki chegara ham ishlaydi',
+      () => requests.createRequest(opBody({ budgetUzs: 1_000_000 }) as any),
+      'budget_below_min',
+    );
+    const highOk = requests.createRequest(opBody({ budgetUzs: 500_000_000 }) as any);
+    check('yuqori chegara yo‘q — katta byudjet o‘tadi', highOk.budgetUzs === 500_000_000);
+
+    // ── Chegara olib tashlanadi ──
+    pricing.setOperationPriceRange(gallbladder.id, null, null);
+    const free = requests.createRequest(opBody({ budgetUzs: 1_000_000 }) as any);
+    check('chegarasiz operatsiyada byudjet erkin', free.budgetUzs === 1_000_000);
+  }
+
+  {
+    section('Sayt media (klinikatop.uz)');
+    const media = await import('../services/siteMedia');
+
+    // ── YouTube havolasi tanib olinadi ──
+    const id = 'dQw4w9WgXcQ';
+    check('youtu.be havolasi', media.parseYoutubeId(`https://youtu.be/${id}`) === id);
+    check('watch?v= havolasi', media.parseYoutubeId(`https://www.youtube.com/watch?v=${id}&t=10`) === id);
+    check('shorts havolasi', media.parseYoutubeId(`https://youtube.com/shorts/${id}`) === id);
+    check('faqat ID', media.parseYoutubeId(id) === id);
+    check('begona sayt rad etiladi', media.parseYoutubeId(`https://evil.example/watch?v=${id}`) === null);
+    check('buzuq ID rad etiladi', media.parseYoutubeId('https://youtu.be/abc') === null);
+
+    // ── Faqat ro'yxatdagi joylar ──
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    ).toString('base64');
+    throws(
+      "ro'yxatda yo'q kalit rad etiladi",
+      () => media.setSiteImage('../../etc', { mimeType: 'image/png', dataBase64: png, altUz: '', altRu: '' }),
+      'not_found',
+    );
+    throws(
+      'video joyiga rasm yuklab bo‘lmaydi',
+      () => media.setSiteImage('video-home', { mimeType: 'image/png', dataBase64: png, altUz: '', altRu: '' }),
+      'wrong_kind',
+    );
+    throws(
+      'SVG qabul qilinmaydi (ichida skript bo‘lishi mumkin)',
+      () => media.setSiteImage('hero-app', { mimeType: 'image/svg+xml', dataBase64: png, altUz: '', altRu: '' }),
+      'unsupported_type',
+    );
+
+    // ── Yuklash, ochiq ro'yxat, almashtirish, o'chirish ──
+    const first = media.setSiteImage('hero-app', { mimeType: 'image/png', dataBase64: png, altUz: 'Ilova', altRu: 'Приложение' });
+    check('rasm yuklandi va manzil berildi', Boolean(first.url?.startsWith('/api/public/media/hero-app-')));
+    check('ochiq ro‘yxatda chiqadi', media.publicSiteMedia()['hero-app']?.url === first.url);
+    const firstName = first.url!.split('/').pop()!;
+    check('faylni o‘qish mumkin', media.readSiteMediaFile(firstName).mimeType === 'image/png');
+
+    const second = media.setSiteImage('hero-app', { mimeType: 'image/png', dataBase64: png, altUz: '', altRu: '' });
+    check('almashtirilganda manzil yangilanadi (kesh)', second.url !== first.url);
+    throws('eski fayl endi berilmaydi', () => media.readSiteMediaFile(firstName), 'not_found');
+    throws('yo‘l bo‘ylab chiqish rad etiladi', () => media.readSiteMediaFile('../klinikatop.db'), 'not_found');
+
+    const video = media.setSiteVideo('video-home', { url: `https://youtu.be/${id}`, altUz: '', altRu: '' });
+    check('video saqlandi', video.youtubeId === id);
+
+    media.clearSiteMedia('hero-app');
+    media.clearSiteMedia('video-home');
+    check('o‘chirilgach ochiq ro‘yxat bo‘sh', Object.keys(media.publicSiteMedia()).length === 0);
+    throws('o‘chirilgan fayl berilmaydi', () => media.readSiteMediaFile(second.url!.split('/').pop()!), 'not_found');
+  }
+
+  {
+    section('Klinika arizasi: litsenziya fayli');
+    const apps = await import('../services/clinicApplications');
+    const lic = await import('../services/applicationFiles');
+    const pdf = Buffer.from('%PDF-1.4\n%sinov\n').toString('base64');
+    const cityId = (db.prepare('SELECT id FROM cities LIMIT 1').get() as { id: number }).id;
+    const opId = (db.prepare('SELECT id FROM operations LIMIT 1').get() as { id: number }).id;
+    const stamp = Date.now();
+    const base = (n: string, file: { name: string; dataBase64: string }) => ({
+      name: `Litsenziya sinovi ${n}`,
+      cityId,
+      address: 'Toshkent',
+      about: '',
+      licenseNo: `LIC-FILE-${n}-${stamp}`,
+      contactName: 'Aziz',
+      contactPhone: `+99890${String(stamp).slice(-7)}`.slice(0, 13) + n.length,
+      contactEmail: null,
+      operationIds: [opId],
+      labTestIds: [],
+      acceptsReferral: false,
+      licenseFile: file,
+      ip: null,
+    });
+
+    throws(
+      '.pdf deb nomlangan HTML rad etiladi',
+      () => apps.submitApplication(base('html', { name: 'x.pdf', dataBase64: Buffer.from('<html><script>1</script></html>').toString('base64') })),
+      'unsupported_type',
+    );
+    throws('bo‘sh fayl rad etiladi', () => apps.submitApplication(base('empty', { name: 'x.pdf', dataBase64: '' })), 'empty_file');
+    throws(
+      '8 MB dan katta fayl rad etiladi',
+      () => apps.submitApplication(base('big', { name: 'x.pdf', dataBase64: Buffer.concat([Buffer.from('%PDF-'), Buffer.alloc(lic.MAX_LICENSE_BYTES)]).toString('base64') })),
+      'file_too_large',
+    );
+
+    const created = apps.submitApplication(base('ok', { name: '../../etc/passwd.pdf', dataBase64: pdf }));
+    const app = apps.getApplication(created.id);
+    check('ariza fayl bilan saqlandi', app.licenseFile?.mime === 'application/pdf');
+    check('fayl nomidan yo‘l belgilari olib tashlandi', app.licenseFile?.name === 'passwd.pdf', app.licenseFile?.name);
+    check('admin faylni o‘qiy oladi', apps.getApplicationLicense(created.id).buffer.toString('latin1').startsWith('%PDF-'));
+
+    const approved = apps.approveApplication(created.id, moderator.id);
+    const doc = db
+      .prepare(`SELECT d.kind, f.mime_type FROM clinic_documents d JOIN files f ON f.id = d.file_id WHERE d.clinic_id = ?`)
+      .get(approved.clinicId) as { kind: string; mime_type: string } | undefined;
+    check('tasdiqlanganda litsenziya klinika hujjatlariga ko‘chdi', doc?.kind === 'license' && doc.mime_type === 'application/pdf');
+
+    const spam = apps.submitApplication(base('del', { name: 'l.pdf', dataBase64: pdf }));
+    apps.deleteApplication(spam.id);
+    throws('o‘chirilgan arizaning fayli qolmaydi', () => apps.getApplicationLicense(spam.id), 'not_found');
+  }
+
+  {
+    section('Admin: so‘rovlar va ular qaysi klinikalarga ketgani');
+    const ar = await import('../services/adminRequests');
+
+    const all = ar.listAdminRequests('all');
+    check('so‘rovlar ro‘yxati bo‘sh emas', all.length > 0);
+    const sent = all.find((r) => r.sent > 0);
+    check('klinikaga yetgan so‘rov bor', Boolean(sent));
+    if (sent) {
+      const d = ar.getAdminRequest(sent.id);
+      check('tafsilotda klinikalar soni ro‘yxat bilan bir xil', d.clinics.length === sent.sent);
+      check('klinikaga yetgan so‘rovda diagnostika yo‘q', d.diagnosis === null);
+      check('ko‘rganlar soni to‘g‘ri', d.clinics.filter((c) => c.viewedAt).length === sent.viewed);
+    }
+    check(
+      '"yetmagan" filtri faqat hech kimga ketmaganlarni beradi',
+      ar.listAdminRequests('unreached').every((r) => r.sent === 0),
+    );
+    check(
+      '"taklifsiz" filtri: yetgan, lekin taklif yo‘q',
+      ar.listAdminRequests('no_offers').every((r) => r.sent > 0 && r.offers === 0),
+    );
+    check(
+      '"faol" filtri faqat ochiq so‘rovlar',
+      ar.listAdminRequests('active').every((r) => r.status === 'NEW' || r.status === 'COLLECTING'),
+    );
+
+    const closed = db.prepare(`SELECT id FROM requests WHERE status IN ('CANCELLED','COMPLETED') LIMIT 1`).get() as
+      | { id: number }
+      | undefined;
+    if (closed) throws('yopilgan so‘rovni qayta yuborib bo‘lmaydi', () => ar.rebroadcastRequest(closed.id), 'request_closed');
+
+    const open = ar.listAdminRequests('active').find((r) => r.sent > 0);
+    if (open) {
+      const before = db.prepare(`SELECT COUNT(*) n FROM notifications`).get() as { n: number };
+      const again = ar.rebroadcastRequest(open.id);
+      const after = db.prepare(`SELECT COUNT(*) n FROM notifications`).get() as { n: number };
+      check(
+        'qayta yuborishda oldin xabar olgan klinikaga takror xabar ketmaydi',
+        again.added > 0 || after.n === before.n,
+        { added: again.added, before: before.n, after: after.n },
+      );
+    }
+    throws('mavjud bo‘lmagan so‘rov', () => ar.getAdminRequest(99_999_999), 'not_found');
+  }
+
+  {
+    section('Bemor paroli: ro‘yxatdan o‘tish, kirish, tiklash');
+    const pa = await import('../services/patientAuth');
+    const phone = '99893' + String(Date.now()).slice(-7);
+    const codeFor = (code: string) =>
+      db
+        .prepare(`INSERT INTO phone_login_codes (phone, code_hash, expires_at, ip) VALUES (?, ?, datetime('now','+5 minutes'), 'test')`)
+        .run(phone, nodeCrypto.createHash('sha256').update(`${phone}:${code}`).digest('hex'));
+
+    // 1. Ro'yxatdan o'tish: kod bilan sessiya → parol
+    codeFor('111111');
+    const reg = pa.verifyLoginCode(phone, '111111', null, null);
+    check('kod bilan yangi hisob ochildi', reg.isNew === true);
+    throws('qisqa parol rad etiladi', () => pa.setPatientPassword(reg.token, 'abc12'), 'weak_password');
+    throws('faqat raqamli parol rad etiladi', () => pa.setPatientPassword(reg.token, '12345678'), 'weak_password');
+    pa.setPatientPassword(reg.token, 'yaxshi-parol1');
+    check('parol o‘rnatildi', Boolean((db.prepare('SELECT password_hash FROM users WHERE phone = ?').get(phone) as any)?.password_hash));
+    throws(
+      'bir kod-sessiyadan ikkinchi marta parol almashtirib bo‘lmaydi',
+      () => pa.setPatientPassword(reg.token, 'boshqa-parol2'),
+      'forbidden',
+    );
+
+    // 2. Qayta ro'yxatdan o'tish rad etiladi, tiklash ruxsat etiladi
+    await (async () => {
+      let code = '';
+      try {
+        await pa.requestLoginCode(phone, null, 'register');
+      } catch (e: any) {
+        code = e.code;
+      }
+      check('ro‘yxatdan o‘tgan raqam qayta ro‘yxatdan o‘tolmaydi', code === 'already_registered', code);
+      code = '';
+      try {
+        await pa.requestLoginCode('998' + '77' + String(Date.now()).slice(-7), null, 'reset');
+      } catch (e: any) {
+        code = e.code;
+      }
+      check('hisobsiz raqamda parol tiklanmaydi', code === 'no_account', code);
+    })();
+
+    // 3. Parol bilan kirish — SMS'siz
+    const login = pa.loginWithPassword(`+${phone}`, 'yaxshi-parol1', null, null);
+    check('telefon + parol bilan kirildi', Boolean(login.token) && login.isNew === false);
+    throws('parol bilan ochilgan sessiya parolni o‘zgartira olmaydi', () => pa.setPatientPassword(login.token, 'yangi-parol3'), 'forbidden');
+    throws('noto‘g‘ri parol', () => pa.loginWithPassword(phone, 'xato-parol', null, null), 'unauthorized');
+    throws('mavjud bo‘lmagan raqam — xuddi shu xato', () => pa.loginWithPassword('998770000000', 'xato-parol', null, null), 'unauthorized');
+
+    // 4. Bloklash: 5 xato → 15 daqiqa, to'g'ri parol ham o'tmaydi
+    for (let i = 0; i < 5; i++) {
+      try {
+        pa.loginWithPassword(phone, 'xato-parol', null, null);
+      } catch {
+        /* kutilgan */
+      }
+    }
+    throws('5 xatodan keyin hisob vaqtincha yopiladi', () => pa.loginWithPassword(phone, 'yaxshi-parol1', null, null), 'rate_limited');
+
+    // 5. Tiklash: yangi kod-sessiya → yangi parol → boshqa sessiyalar yopiladi
+    codeFor('222222');
+    const reset = pa.verifyLoginCode(phone, '222222', null, null);
+    pa.setPatientPassword(reset.token, 'yangi-parol-2026');
+    check('tiklashda eski sessiyalar yopildi', pa.resolvePatientSession(login.token) === null);
+    check('tiklagan sessiya ishlayveradi', pa.resolvePatientSession(reset.token) !== null);
+    check('tiklash bloklashni ham ochadi', Boolean(pa.loginWithPassword(phone, 'yangi-parol-2026', null, null).token));
+  }
+
+  {
+    section('Yo‘llanma: faqat o‘zi yoqqan klinikaga');
+    const { MIGRATIONS } = await import('../db/migrations');
+    const optIn = MIGRATIONS.find((m) => m.id === '042_referral_opt_in')!;
+
+    // Arizasida yo'llanmani tanlamagan, lekin sukut bilan 1 bo'lib qolgan klinika
+    const silent = db
+      .prepare(
+        `SELECT c.id FROM clinics c
+          WHERE NOT EXISTS (SELECT 1 FROM clinic_applications a WHERE a.clinic_id = c.id AND a.accepts_referral = 1)
+          LIMIT 1`,
+      )
+      .get() as { id: number };
+    db.prepare(`UPDATE clinics SET accepts_referral = 1 WHERE id = ?`).run(silent.id);
+
+    // Arizasida o'zi tanlagan klinika
+    const chose = db.prepare(`SELECT clinic_id AS id FROM clinic_applications WHERE clinic_id IS NOT NULL LIMIT 1`).get() as
+      | { id: number }
+      | undefined;
+    if (chose) {
+      db.prepare(`UPDATE clinic_applications SET accepts_referral = 1 WHERE clinic_id = ?`).run(chose.id);
+      db.prepare(`UPDATE clinics SET accepts_referral = 1 WHERE id = ?`).run(chose.id);
+    }
+
+    optIn.up(db);
+    const flag = (id: number) => (db.prepare('SELECT accepts_referral f FROM clinics WHERE id = ?').get(id) as { f: number }).f;
+    check('rozilik bermagan klinikada yo‘llanma o‘chdi', flag(silent.id) === 0);
+    if (chose) check('arizada tanlagan klinikada yo‘llanma qoldi', flag(chose.id) === 1);
+
+    const { mapClinic } = await import('../lib/mappers');
+    check(
+      'sukut qiymati "yoqilgan" deb ko‘rsatilmaydi',
+      mapClinic({ ...(db.prepare('SELECT * FROM clinics WHERE id = ?').get(silent.id) as object), accepts_referral: 0 } as any)
+        .acceptsReferral === false,
+    );
+  }
+
+  {
+    section('Admin: klinika ma‘lumoti');
+    const { getAdminClinicDetail } = await import('../services/adminClinicDetail');
+    const busy = db
+      .prepare(`SELECT clinic_id AS id, COUNT(*) n FROM request_broadcasts GROUP BY clinic_id ORDER BY n DESC LIMIT 1`)
+      .get() as { id: number; n: number };
+    const d = getAdminClinicDetail(busy.id);
+    check('kelgan so‘rovlar soni to‘g‘ri', d.activity.received === busy.n, `${d.activity.received} / ${busy.n}`);
+    check('ochganlar kelganlardan ko‘p emas', d.activity.viewed <= d.activity.received);
+    check('oxirgi so‘rovlar 15 tadan oshmaydi', d.recentRequests.length <= 15 && d.recentRequests.length > 0);
+    check('xizmatlar ro‘yxati 30 tadan oshmaydi', d.services.operations.length <= 30);
+    throws('mavjud bo‘lmagan klinika', () => getAdminClinicDetail(99_999_999), 'not_found');
+  }
+
+  {
+    section('Sayt media: video faqat YouTube orqali');
+    const media = await import('../services/siteMedia');
+    const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.alloc(64)]).toString('base64');
+    throws(
+      'mp4 fon video joyi yo‘q (video — YouTube havolasi)',
+      () => media.setSiteImage('hero-loop', { mimeType: 'video/mp4', dataBase64: mp4, altUz: '', altRu: '' }),
+      'not_found',
+    );
+    throws(
+      'rasm joyiga video yuklab bo‘lmaydi',
+      () => media.setSiteImage('hero-app', { mimeType: 'video/mp4', dataBase64: mp4, altUz: '', altRu: '' }),
+      'unsupported_type',
+    );
+    const yt = media.setSiteVideo('video-home', { url: 'https://youtu.be/dQw4w9WgXcQ', altUz: '', altRu: '' });
+    check('bosh sahifa videosi YouTube havolasi bilan saqlandi', yt.youtubeId === 'dQw4w9WgXcQ');
+    media.clearSiteMedia('video-home');
+  }
+
+  {
+    section('Sayt: matnlar, hamkorlar va sahifani serverda to‘ldirish');
+    const sc = await import('../services/siteContent');
+    const { config: cfg } = await import('../lib/config');
+
+    // Build'ga bog'liq bo'lmasin — kichik soxta shablon
+    const root = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'kt-site-'));
+    fs.mkdirSync(path.join(root, 'site-content'));
+    fs.writeFileSync(
+      path.join(root, 'site-content', 'defaults.json'),
+      JSON.stringify({
+        uz: { 'home.hero.title': 'Bitta so‘rov', 'nav.login': 'Kirish', 'auth.eyebrow': 'Kirish va ro‘yxatdan o‘tish', 'x.zero': '0' },
+        ru: {},
+      }),
+    );
+    fs.writeFileSync(
+      path.join(root, 'index.html'),
+      '<html><head><title>Bitta so‘rov</title></head><body><h1> Bitta so‘rov </h1><a aria-label="Kirish">Kirish</a>' +
+        '<span>Kirish va ro‘yxatdan o‘tish</span><b>0</b><div class="marquee__track" data-partners></div></body></html>',
+    );
+    (cfg as any).site.root = root;
+    sc.invalidateSite();
+
+    let html = sc.renderSitePage('/');
+    check('o‘zgartirilmagan sahifa asl holida', html.includes('<h1> Bitta so‘rov </h1>'));
+    check('media ro‘yxati sahifa ichida', html.includes('window.__KT_MEDIA__='));
+
+    sc.setSiteText('uz', 'nav.login', 'Kabinetga <kirish> "tez"');
+    html = sc.renderSitePage('/');
+    check('matn tugunida almashdi va escape qilindi', html.includes('>Kabinetga &lt;kirish&gt; &quot;tez&quot;<'));
+    check('atributda ham almashdi', html.includes('aria-label="Kabinetga &lt;kirish&gt; &quot;tez&quot;"'));
+    check('uzunroq matn ichidagi "Kirish" buzilmadi', html.includes('<span>Kirish va ro‘yxatdan o‘tish</span>'));
+
+    sc.setSiteText('uz', 'home.hero.title', 'Bir so‘rov — ko‘p taklif');
+    html = sc.renderSitePage('/');
+    check('sarlavha (bo‘shliq bilan o‘ralgan) almashdi', html.includes('<h1> Bir so‘rov — ko‘p taklif </h1>'));
+    check('<title> ham almashdi', html.includes('<title>Bir so‘rov — ko‘p taklif</title>'));
+
+    check('juda qisqa qiymatlar tahrirlanmaydi', !sc.listSiteTexts('uz').some((e) => e.default === '0'));
+    throws('bo‘sh matn saqlanmaydi', () => sc.setSiteText('uz', 'nav.login', '   '), 'empty_text');
+    sc.setSiteText('uz', 'nav.login', null);
+    html = sc.renderSitePage('/');
+    check('asl matnga qaytarildi', html.includes('aria-label="Kirish"') && !html.includes('Kabinetga'));
+
+    // Hamkorlar — cheklanmagan son, tartib bilan
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    ).toString('base64');
+    const a = sc.addPartner({ name: 'Alfa <Klinika>', url: 'alfa.uz', mimeType: 'image/png', dataBase64: png });
+    const b = sc.addPartner({ name: 'Beta', url: null, mimeType: 'image/png', dataBase64: png });
+    check('havola https bilan to‘ldirildi', a.url === 'https://alfa.uz/');
+    throws('noto‘g‘ri havola rad etiladi', () => sc.addPartner({ name: 'X', url: 'javascript:alert(1)', mimeType: 'image/png', dataBase64: png }), 'bad_url');
+    throws('logo turi tekshiriladi', () => sc.addPartner({ name: 'X', url: null, mimeType: 'text/html', dataBase64: png }), 'unsupported_type');
+    html = sc.renderSitePage('/');
+    check('hamkorlar sahifaga qo‘yildi (lenta uchun ikki marta)', (html.match(/class="partner"/g) ?? []).length === 4);
+    check('hamkor nomi escape qilindi', html.includes('alt="Alfa &lt;Klinika&gt;"'));
+    sc.reorderPartners([b.id, a.id]);
+    check('tartib o‘zgardi', sc.listPartners()[0].id === b.id);
+    sc.deletePartner(a.id);
+    sc.deletePartner(b.id);
+    html = sc.renderSitePage('/');
+    check('hamkorlar o‘chirilgach lenta bo‘sh', html.includes('data-partners></div>'));
+    throws('noma‘lum sahifa', () => sc.renderSitePage('/yoq-sahifa/'), 'not_found');
+
+    db.prepare(`DELETE FROM site_texts`).run();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+
+  {
+    section('Sayt: logoni admin almashtiradi');
+    const media = await import('../services/siteMedia');
+    const sc = await import('../services/siteContent');
+    const { config: cfg } = await import('../lib/config');
+    const b64 = (x: string) => Buffer.from(x).toString('base64');
+    const clean = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10z" fill="#0fb39e"/></svg>';
+
+    throws('skriptli SVG rad etiladi', () => media.setSiteImage('logo', { mimeType: 'image/svg+xml', dataBase64: b64(clean.replace('<path', '<script>alert(1)</script><path')), altUz: '', altRu: '' }), 'unsafe_svg');
+    throws('hodisa atributli SVG rad etiladi', () => media.setSiteImage('logo', { mimeType: 'image/svg+xml', dataBase64: b64(clean.replace('<path', '<path onload="x()"')), altUz: '', altRu: '' }), 'unsafe_svg');
+    throws('tashqi havolali SVG rad etiladi', () => media.setSiteImage('logo', { mimeType: 'image/svg+xml', dataBase64: b64(clean.replace('<path', '<image href="https://evil.example/a.png"/><path')), altUz: '', altRu: '' }), 'unsafe_svg');
+    throws('oddiy rasm joyiga SVG yuklab bo‘lmaydi', () => media.setSiteImage('hero-app', { mimeType: 'image/svg+xml', dataBase64: b64(clean), altUz: '', altRu: '' }), 'unsupported_type');
+
+    const logo = media.setSiteImage('logo', { mimeType: 'image/svg+xml', dataBase64: b64(clean), altUz: '', altRu: '' });
+    check('toza SVG logo qabul qilindi', Boolean(logo.url?.endsWith('.svg')));
+    check('SVG to‘g‘ri turda beriladi', media.siteMediaFilePath(logo.url!.split('/').pop()!).mimeType === 'image/svg+xml');
+
+    const root = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'kt-logo-'));
+    fs.mkdirSync(path.join(root, 'site-content'));
+    fs.writeFileSync(path.join(root, 'site-content', 'defaults.json'), JSON.stringify({ uz: {}, ru: {} }));
+    fs.writeFileSync(
+      path.join(root, 'index.html'),
+      '<html><head><link rel="icon" href="/favicon.svg" type="image/svg+xml"></head><body>' +
+        '<img src="/logo.svg" alt=""><img src="/logo.svg" alt=""><img src="/logo-light.svg" alt=""><div data-partners></div></body></html>',
+    );
+    const prevRoot = (cfg as any).site.root;
+    (cfg as any).site.root = root;
+    sc.invalidateSite();
+    const html = sc.renderSitePage('/');
+    check('hamma logo almashdi', !html.includes('/logo.svg"') && html.split(logo.url!).length - 1 >= 3);
+    check('to‘q fon logosi bo‘lmasa asosiysi ishlatildi', !html.includes('/logo-light.svg'));
+    check('favicon ham almashdi', html.includes(`<link rel="icon" href="${logo.url}" type="image/svg+xml">`));
+
+    media.clearSiteMedia('logo');
+    sc.invalidateSite();
+    check('logo o‘chirilgach standart logo qaytdi', sc.renderSitePage('/').includes('src="/logo.svg"'));
+    (cfg as any).site.root = prevRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+
+  {
+    section('Shifokor: ro‘yxatdan o‘tish va admin tasdig‘i');
+    const rd = await import('../services/referringDoctors');
+    const pdf = Buffer.from('%PDF-1.4\n%diplom\n').toString('base64');
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64');
+    const mkUser = (tgId: number, phone: string | null, roles = ['patient']) =>
+      Number(
+        db
+          .prepare(`INSERT INTO users (telegram_id, first_name, roles, phone) VALUES (?, 'Doktor', ?, ?)`)
+          .run(tgId, toJson(roles), phone).lastInsertRowid,
+      );
+    const form = (extra: Record<string, unknown> = {}) => ({
+      firstName: '  Aziz ',
+      lastName: 'Karimov',
+      specialty: 'Kardiolog',
+      workplace: '1-shahar kasalxonasi',
+      bio: 'Tajriba 10 yil',
+      documents: [{ kind: 'bachelor' as const, name: 'diplom.pdf', dataBase64: pdf }],
+      ...extra,
+    });
+
+    const noPhone = mkUser(7_100_001, null);
+    throws('telefon tasdiqlanmagan — rad etiladi', () => rd.registerDoctor(noPhone, form()), 'phone_required');
+
+    const webAcc = mkUser(-7_100_002, '998901110002', ['clinic_admin']);
+    throws('klinika hisobi shifokor bo‘la olmaydi', () => rd.registerDoctor(webAcc, form()), 'role_taken');
+
+    const uid = mkUser(7_100_003, '998901110003');
+    throws('bakalavr diplomisiz — rad etiladi', () => rd.registerDoctor(uid, form({ documents: [] })), 'bachelor_required');
+    throws(
+      'faqat magistr diplomi — yetmaydi',
+      () => rd.registerDoctor(uid, form({ documents: [{ kind: 'master', name: 'm.pdf', dataBase64: pdf }] })),
+      'bachelor_required',
+    );
+    throws(
+      '.pdf deb nomlangan HTML diplom rad etiladi',
+      () => rd.registerDoctor(uid, form({ documents: [{ kind: 'bachelor', name: 'd.pdf', dataBase64: Buffer.from('<html></html>xxxxxxxx').toString('base64') }] })),
+      'unsupported_type',
+    );
+    check('xato ariza hech narsa yaratmadi', rd.getMyDoctor(uid) === null);
+
+    const doc = rd.registerDoctor(uid, form());
+    check('ariza yaratildi — pending', doc.status === 'pending' && doc.documents.length === 1);
+    check('ism tozalandi', doc.firstName === 'Aziz');
+    const roles = JSON.parse((db.prepare('SELECT roles FROM users WHERE id = ?').get(uid) as any).roles);
+    check('bemor roli saqlanib, doctor qo‘shildi', roles.includes('patient') && roles.includes('doctor'), roles);
+
+    const again = rd.registerDoctor(uid, form({ specialty: 'Kardiojarroh', documents: [] }));
+    check('qayta yuborish yangi ariza ochmaydi, profilni yangilaydi', again.id === doc.id && again.specialty === 'Kardiojarroh');
+    check('qayta yuborish holatni o‘zgartirmaydi', again.status === 'pending');
+    check(
+      'bitta foydalanuvchi — bitta profil',
+      (db.prepare('SELECT COUNT(*) AS n FROM referring_doctors WHERE user_id = ?').get(uid) as any).n === 1,
+    );
+
+    throws('tasdiqlanmagan shifokor tavsiya bera olmaydi', () => rd.assertApprovedDoctor(uid), 'forbidden');
+    check('shifokor o‘z diplomini o‘qiy oladi', rd.readMyDoctorDocument(uid, doc.documents[0].id).buffer.toString('latin1').startsWith('%PDF-'));
+    const stranger = mkUser(7_100_004, '998901110004');
+    throws('begona odam diplomni o‘qiy olmaydi', () => rd.readMyDoctorDocument(stranger, doc.documents[0].id), 'not_found');
+    throws('oxirgi bakalavr diplomini o‘chirib bo‘lmaydi', () => rd.deleteDoctorDocument(uid, doc.documents[0].id), 'bachelor_required');
+
+    const list = rd.listDoctorsForAdmin('pending');
+    check('admin ro‘yxatida bor, telefon bilan', list.doctors.some((d) => d.id === doc.id && d.phone === '998901110003'));
+    check('kutilayotganlar soni', list.counts.pending >= 1 && rd.pendingDoctorCount() >= 1);
+
+    throws('sababsiz rad etib bo‘lmaydi', () => rd.rejectDoctor(doc.id, moderator.id, ' '), 'reason_required');
+    const rejected = rd.rejectDoctor(doc.id, moderator.id, 'Diplom <o‘qilmaydi>');
+    check('rad etildi, sabab saqlandi', rejected.status === 'rejected' && rejected.rejectReason === 'Diplom <o‘qilmaydi>');
+    const note = db
+      .prepare(`SELECT params FROM notifications WHERE user_id = ? AND type = 'doctor_review' ORDER BY id DESC`)
+      .get(uid) as any;
+    check('shifokorga xabar ketdi', note && JSON.parse(note.params).approved === 0);
+    throws('ko‘rib chiqilgan arizani qayta hal qilib bo‘lmaydi', () => rd.approveDoctor(doc.id, moderator.id), 'not_pending');
+
+    const edited = rd.registerDoctor(uid, form({ bio: 'Yangi bio', documents: [] }));
+    check('bio tahriri holatni o‘zgartirmaydi', edited.status === 'rejected');
+
+    const withMaster = rd.addDoctorDocument(uid, { kind: 'master', name: 'magistr.png', dataBase64: png });
+    check('yangi fayl → qayta ko‘rib chiqish (in_review)', withMaster.status === 'in_review');
+    check('oldingi rad sababi saqlandi', withMaster.rejectReason === 'Diplom <o‘qilmaydi>');
+    const masterId = withMaster.documents.find((d) => d.kind === 'master')!.id;
+    const removed = rd.deleteDoctorDocument(uid, masterId);
+    check('fayl o‘chirish holatga tegmaydi', removed.status === 'in_review' && removed.documents.length === 1);
+    check('admin diplomni o‘qiy oladi', rd.readDoctorDocumentForAdmin(doc.id, doc.documents[0].id).mime === 'application/pdf');
+
+    const approved = rd.approveDoctor(doc.id, moderator.id);
+    check('tasdiqlandi', approved.status === 'approved' && approved.reviewedAt !== null);
+    check('tasdiqlangan shifokor tavsiya bera oladi', rd.assertApprovedDoctor(uid).id === doc.id);
+    const after = rd.addDoctorDocument(uid, { kind: 'master', name: 'm2.pdf', dataBase64: pdf });
+    check('tasdiqlangan shifokor hujjat yuklasa holat o‘zgarmaydi', after.status === 'approved');
+    check(
+      'qaror jurnalga yozildi',
+      (db.prepare(`SELECT COUNT(*) AS n FROM moderation_log WHERE entity = 'doctor' AND entity_id = ?`).get(doc.id) as any).n === 2,
+    );
+
+    for (let i = after.documents.length; i < rd.MAX_DOCTOR_DOCS; i++) {
+      rd.addDoctorDocument(uid, { kind: 'master', name: `m${i}.pdf`, dataBase64: pdf });
+    }
+    throws('hujjatlar soni cheklangan', () => rd.addDoctorDocument(uid, { kind: 'master', name: 'x.pdf', dataBase64: pdf }), 'too_many_files');
+  }
+
+  {
+    section('Shifokor: bemor uchun so‘rov va bemor roziligi');
+    const rd = await import('../services/referringDoctors');
+    const dc = await import('../services/doctorCases');
+    const pdf = Buffer.from('%PDF-1.4\n%diplom\n').toString('base64');
+    const cityId = (db.prepare('SELECT id FROM cities LIMIT 1').get() as { id: number }).id;
+    const opId = (db.prepare(`SELECT id FROM operations WHERE active = 1 LIMIT 1`).get() as { id: number }).id;
+    const mk = (tg: number, phone: string | null, complete = true) =>
+      Number(
+        db
+          .prepare(
+            `INSERT INTO users (telegram_id, first_name, last_name, roles, phone, city_id, birth_year, gender, onboarded_at, profile_completed_at)
+             VALUES (?, 'Bemor', 'Aliyev', '["patient"]', ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+          )
+          .run(tg, phone, complete ? cityId : null, complete ? 1980 : null, complete ? 'male' : null).lastInsertRowid,
+      );
+
+    const docUser = mk(7_200_001, '998901200001');
+    const doc = rd.registerDoctor(docUser, {
+      firstName: 'Nodir', lastName: 'Rahimov', specialty: 'Terapevt', workplace: 'Poliklinika',
+      documents: [{ kind: 'bachelor', name: 'd.pdf', dataBase64: pdf }],
+    });
+    const base = { kind: 'operation' as const, operationId: opId, cityId, note: 'Qorin og‘rig‘i, UZI da tosh bor' };
+    throws('tasdiqlanmagan shifokor so‘rov yarata olmaydi', () => dc.createDoctorCase(docUser, { ...base, patientPhone: '901200002' }), 'forbidden');
+    rd.approveDoctor(doc.id, moderator.id);
+
+    throws('noto‘g‘ri raqam rad etiladi', () => dc.createDoctorCase(docUser, { ...base, patientPhone: '12345' }), 'invalid_phone');
+    throws('o‘z raqamiga yuborib bo‘lmaydi', () => dc.createDoctorCase(docUser, { ...base, patientPhone: '+998 90 120 00 01' }), 'own_phone');
+    throws('operatsiyada izoh majburiy', () => dc.createDoctorCase(docUser, { ...base, note: 'qisqa', patientPhone: '901200002' }), 'note_required');
+    throws('yo‘llanmada ro‘yxat majburiy', () => dc.createDoctorCase(docUser, { kind: 'referral', cityId, referralItems: [' '], patientPhone: '901200002' }), 'referral_empty');
+
+    // 1) Bemor botda BOR — xabar darhol boradi
+    const patient = mk(7_200_002, '998901200002');
+    const c1 = dc.createDoctorCase(docUser, { ...base, patientPhone: '90 120 00 02' });
+    check('so‘rov yaratildi — kutilmoqda, bemor topildi', c1.status === 'waiting' && c1.patientLinked);
+    check('telefon normallashtirildi', c1.patientPhone === '998901200002');
+    check('havola bot orqali', /^https:\/\/t\.me\/\w+\?start=inv_[\w-]+$/.test(c1.inviteLink), c1.inviteLink);
+    check('bemor ismi rozilikdan oldin ko‘rinmaydi', c1.patientName === null);
+    const push = db.prepare(`SELECT params, link FROM notifications WHERE user_id = ? AND type = 'doctor_case'`).get(patient) as any;
+    check('bemorga taklifnoma ketdi', push && push.link.startsWith('/invite/'));
+    check('taklifnomada tashxis yo‘q', push && !push.params.includes('UZI'));
+    check(
+      'rozilikkacha klinikalar hech narsa ko‘rmaydi',
+      (db.prepare('SELECT COUNT(*) AS n FROM requests WHERE doctor_case_id = ?').get(c1.id) as any).n === 0,
+    );
+    throws('bir raqamga bir kunda ikkinchi so‘rov yo‘q', () => dc.createDoctorCase(docUser, { ...base, patientPhone: '901200002' }), 'rate_limited');
+
+    const token1 = c1.inviteLink.split('inv_')[1];
+    const stranger = mk(7_200_003, '998901200003');
+    throws('begona odam taklifnomani ochmaydi', () => dc.getInvite(stranger, token1), 'not_found');
+    const inv = dc.getInvite(patient, token1);
+    check('bemor taklifnomani ko‘radi', inv.doctor.name === 'Nodir Rahimov' && inv.status === 'waiting');
+    throws('ofertasiz tasdiqlab bo‘lmaydi', () => dc.approveInvite(patient, token1, { acceptTerms: false }), 'terms_not_accepted');
+    const ok = dc.approveInvite(patient, token1, { acceptTerms: true });
+    const req = db.prepare('SELECT * FROM requests WHERE id = ?').get(ok.requestId) as any;
+    check('tasdiqlandi — haqiqiy so‘rov yaratildi', req && req.patient_id === patient && req.doctor_case_id === c1.id);
+    check('shifokor izohi holat tavsifi bo‘ldi', req.condition_text === base.note);
+    const reqMod = await import('../services/requests');
+    check('klinika uchun belgi: shifokor orqali', reqMod.getRequest(ok.requestId).viaDoctor === true);
+    const after = dc.getDoctorCase(docUser, c1.id);
+    check('shifokor holatni ko‘radi (approved, ism ochildi)', after.status === 'approved' && after.patientName === 'Bemor Aliyev');
+    check(
+      'shifokorga xabar ketdi',
+      (db.prepare(`SELECT params FROM notifications WHERE type = 'doctor_case_update' ORDER BY id DESC`).get() as any)?.params.includes('approved'),
+    );
+    throws('ikkinchi marta tasdiqlab bo‘lmaydi', () => dc.approveInvite(patient, token1, { acceptTerms: true }), 'invite_decided');
+
+    // 2) Bemor botda YO'Q — havola orqali keladi
+    const c2 = dc.createDoctorCase(docUser, { kind: 'referral', cityId, referralItems: ['Qon umumiy tahlili', 'Glyukoza'], patientPhone: '901200004' });
+    check('bemor topilmadi — havola kerak', !c2.patientLinked);
+    const token2 = c2.inviteLink.split('inv_')[1];
+    const late = mk(7_200_004, null);
+    check('raqamsiz — kontakt so‘raladi', dc.claimInvite(late, token2) === 'no_phone');
+    const wrong = mk(7_200_005, '998901200005');
+    check('boshqa raqamli odam — mos emas', dc.claimInvite(wrong, token2) === 'mismatch');
+    db.prepare('UPDATE users SET phone = ? WHERE id = ?').run('+998901200004', late);
+    check('kontakt ulashgach — bog‘landi', dc.claimInvite(late, token2) === 'ok');
+    dc.declineInvite(late, token2, false);
+    check('rad etildi', dc.getDoctorCase(docUser, c2.id).status === 'declined');
+
+    // 3) Havolasiz: raqam keyin ulashilsa ham topiladi
+    const c3 = dc.createDoctorCase(docUser, { ...base, patientPhone: '901200006' });
+    const newbie = mk(7_200_006, '998901200006');
+    check('kontakt kelganda raqam bo‘yicha topildi', dc.bindCasesByPhone(newbie) === 1 && dc.getDoctorCase(docUser, c3.id).patientLinked);
+
+    // 4) Muddat va eslatma
+    db.prepare(`UPDATE doctor_cases SET notified_at = datetime('now', '-25 hours') WHERE id = ?`).run(c3.id);
+    const r1 = dc.processDoctorCases();
+    check('24 soatda bir marta eslatildi', r1.reminded >= 1 && dc.processDoctorCases().reminded === 0);
+    db.prepare(`UPDATE doctor_cases SET expires_at = datetime('now', '-1 minute') WHERE id = ?`).run(c3.id);
+    throws('muddati o‘tgan taklifnomani tasdiqlab bo‘lmaydi', () => dc.approveInvite(newbie, c3.inviteLink.split('inv_')[1], { acceptTerms: true }), 'invite_expired');
+    dc.processDoctorCases();
+    check('muddati tugadi', dc.getDoctorCase(docUser, c3.id).status === 'expired');
+
+    const st = dc.doctorStats(docUser);
+    check('statistika', st.cases === 3 && st.approved === 1 && st.declined === 1 && st.waiting === 0, st);
+    throws('boshqa shifokor so‘rovni ko‘rmaydi', () => dc.getDoctorCase(patient, c1.id), 'not_found');
+
+    // 5) "Bu men emasman" ko'paysa shifokor to'xtatiladi
+    for (let i = 0; i < dc.NOT_ME_LIMIT; i++) {
+      const ph = `99890130000${i}`;
+      const u = mk(7_200_100 + i, ph);
+      const c = dc.createDoctorCase(docUser, { ...base, patientPhone: ph });
+      dc.declineInvite(u, c.inviteLink.split('inv_')[1], true);
+    }
+    check('3 ta “Bu men emasman” — shifokor to‘xtatildi', rd.getMyDoctor(docUser)?.status === 'rejected');
+    throws('to‘xtatilgan shifokor so‘rov yarata olmaydi', () => dc.createDoctorCase(docUser, { ...base, patientPhone: '901399999' }), 'forbidden');
+  }
+
+  {
+    section('So‘rov turlari: admin yoqadi/o‘chiradi va tartiblaydi');
+    const rk = await import('../services/requestKinds');
+    const rq = await import('../services/requests');
+    check('standart: uchalasi, yo‘llanma birinchi', rk.enabledRequestKinds().join(',') === 'referral,operation,lab');
+
+    throws('hammasini o‘chirib bo‘lmaydi', () =>
+      rk.setRequestKinds([{ kind: 'lab', enabled: false }, { kind: 'operation', enabled: false }, { kind: 'referral', enabled: false }], null), 'no_kind_enabled');
+    throws('tur tushib qolsa rad etiladi', () =>
+      rk.setRequestKinds([{ kind: 'lab', enabled: true }, { kind: 'lab', enabled: true }, { kind: 'referral', enabled: false }], null), 'invalid_kinds');
+
+    const after = rk.setRequestKinds(
+      [{ kind: 'lab', enabled: true }, { kind: 'referral', enabled: false }, { kind: 'operation', enabled: false }],
+      null,
+    );
+    check('tahlil birinchi, qolganlari o‘chiq', after[0].kind === 'lab' && after[0].enabled && !after[1].enabled && !after[2].enabled);
+    check('bemorga faqat tahlil', rk.enabledRequestKinds().join(',') === 'lab');
+
+    const cityId = (db.prepare('SELECT id FROM cities LIMIT 1').get() as { id: number }).id;
+    const opId = (db.prepare('SELECT id FROM operations WHERE active = 1 LIMIT 1').get() as { id: number }).id;
+    const pid = Number(
+      db.prepare(
+        `INSERT INTO users (telegram_id, first_name, last_name, roles, city_id, birth_year, gender, onboarded_at, profile_completed_at)
+         VALUES (7300001, 'Tur', 'Sinov', '["patient"]', ?, 1990, 'male', datetime('now'), datetime('now'))`,
+      ).run(cityId).lastInsertRowid,
+    );
+    throws(
+      'o‘chirilgan turdagi so‘rov serverda rad etiladi',
+      () =>
+        rq.createRequest({
+          patientId: pid, kind: 'operation', operationId: opId, cityId, budgetUzs: null,
+          conditionText: 'Uzoq vaqtdan beri og‘riq bor', note: null, urgency: 'normal', attachments: [],
+          otherRegionsOk: false, dateFrom: null, dateTo: null, dateFlexible: true, aiSuggested: false, acceptTerms: true,
+        }),
+      'kind_disabled',
+    );
+
+    // Bazada buzuq qiymat — ekran yiqilmaydi
+    db.prepare(`UPDATE platform_settings SET value = 'buzuq' WHERE key = ?`).run(rk.SETTING_REQUEST_KINDS);
+    check('buzuq sozlama — standartga qaytadi', rk.enabledRequestKinds().length === 3);
+    db.prepare(`DELETE FROM platform_settings WHERE key = ?`).run(rk.SETTING_REQUEST_KINDS);
+  }
+
+  {
+    section('Ilova bannerlari');
+    const ab = await import('../services/appBanners');
+    const seeded = ab.listBanners();
+    check('migratsiya bitta banner yaratdi: MRT/MSKT → tekshiruv tanlash', seeded.length === 1 && seeded[0].link === '/new?kind=lab' && seeded[0].imageUrl === null && seeded[0].active);
+    check('bemorga faol banner ko‘rinadi', ab.activeBanners().length === 1);
+
+    throws('javascript: havola rad etiladi', () => ab.updateBanner(seeded[0].id, { link: 'javascript:alert(1)' }), 'bad_link');
+    throws('http (shifrlanmagan) havola rad etiladi', () => ab.updateBanner(seeded[0].id, { link: 'http://x.uz' }), 'bad_link');
+    throws('//boshqa-sayt havola rad etiladi', () => ab.updateBanner(seeded[0].id, { link: '//evil.com' }), 'bad_link');
+    throws('rasm o‘rniga SVG rad etiladi', () => ab.updateBanner(seeded[0].id, { mimeType: 'image/svg+xml', dataBase64: 'PHN2Zy8+' }), 'unsupported_type');
+
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64');
+    const withImg = ab.updateBanner(seeded[0].id, { mimeType: 'image/png', dataBase64: png, subUz: 'Yangi izoh' });
+    check('rasm yuklandi', !!withImg.imageUrl && withImg.subUz === 'Yangi izoh');
+    const name = withImg.imageUrl!.split('/').pop()!;
+    check('rasm fayli beriladi', ab.bannerFilePath(name).mimeType === 'image/png');
+    throws('yo‘l bilan chiqib ketib bo‘lmaydi', () => ab.bannerFilePath('../klinikatop.db'), 'not_found');
+
+    const replaced = ab.updateBanner(seeded[0].id, { mimeType: 'image/png', dataBase64: png });
+    throws('almashtirilgan eski rasm endi berilmaydi', () => ab.bannerFilePath(name), 'not_found');
+    check('rasm olib tashlandi — matnli ko‘rinishga qaytdi', ab.updateBanner(seeded[0].id, { removeImage: true }).imageUrl === null);
+    throws('olib tashlangan rasm ham berilmaydi', () => ab.bannerFilePath(replaced.imageUrl!.split('/').pop()!), 'not_found');
+
+    const second = ab.createBanner({ titleUz: 'Ikkinchi', link: '/new', active: false });
+    check('nofaol banner bemorga ko‘rinmaydi', ab.activeBanners().every((b) => b.id !== second.id));
+    check('ru sarlavha bo‘sh bo‘lsa uz olinadi', second.titleRu === 'Ikkinchi');
+    const order = ab.reorderBanners([second.id, seeded[0].id]);
+    check('tartib o‘zgardi', order[0].id === second.id);
+    ab.deleteBanner(second.id);
+    check('o‘chirildi', ab.listBanners().length === 1);
+  }
+
+  {
+    section('Ilova bannerlari: video');
+    const ab = await import('../services/appBanners');
+    const b = ab.createBanner({ titleUz: 'Video banner', link: '/new?kind=lab' });
+    const mp4 = Buffer.from('000000186674797069736f6d0000020069736f6d69736f32', 'hex').toString('base64');
+
+    const yt = ab.updateBanner(b.id, { videoLink: 'https://youtu.be/dQw4w9WgXcQ?si=abc' });
+    check('YouTube havolasi tanildi', yt.video?.kind === 'youtube' && (yt.video as any).id === 'dQw4w9WgXcQ');
+    check('shorts havolasi ham', (ab.updateBanner(b.id, { videoLink: 'https://www.youtube.com/shorts/dQw4w9WgXcQ' }).video as any)?.id === 'dQw4w9WgXcQ');
+    const link = ab.updateBanner(b.id, { videoLink: 'https://cdn.example.uz/promo.mp4' });
+    check('to‘g‘ridan-to‘g‘ri .mp4 havola', link.video?.kind === 'link');
+    throws('Instagram sahifasi — video fayl emas', () => ab.updateBanner(b.id, { videoLink: 'https://instagram.com/p/xyz' }), 'bad_video_link');
+    throws('http .mp4 rad etiladi', () => ab.updateBanner(b.id, { videoLink: 'http://x.uz/a.mp4' }), 'bad_video_link');
+    throws('noto‘g‘ri video turi', () => ab.updateBanner(b.id, { videoMimeType: 'video/quicktime', videoBase64: mp4 }), 'unsupported_type');
+
+    const file = ab.updateBanner(b.id, { videoMimeType: 'video/mp4', videoBase64: mp4 });
+    check('video fayl yuklandi — havola o‘rnini oldi', file.video?.kind === 'file');
+    const vname = (file.video as any).src.split('/').pop();
+    check('video to‘g‘ri turda beriladi', ab.bannerFilePath(vname).mimeType === 'video/mp4');
+    const back = ab.updateBanner(b.id, { videoLink: 'dQw4w9WgXcQ' });
+    check('havola qo‘yilganda eski video fayl o‘chdi', back.video?.kind === 'youtube');
+    throws('eski video endi berilmaydi', () => ab.bannerFilePath(vname), 'not_found');
+
+    check('matnni media ustida ko‘rsatish', ab.updateBanner(b.id, { overlay: true }).overlay === true);
+    check('videoni olib tashlash', ab.updateBanner(b.id, { removeVideo: true }).video === null);
+    ab.deleteBanner(b.id);
+  }
+
+  {
+    section('Shifokor tavsiyasi va botdan tezkor qabul');
+    const rd = await import('../services/referringDoctors');
+    const dc = await import('../services/doctorCases');
+    const rec = await import('../services/doctorRecommendations');
+    const pdf = Buffer.from('%PDF-1.4\n%diplom\n').toString('base64');
+    const cityId = (db.prepare('SELECT id FROM cities LIMIT 1').get() as { id: number }).id;
+    const opId = (db.prepare('SELECT id FROM operations WHERE active = 1 LIMIT 1').get() as { id: number }).id;
+    const [clinicA, clinicB] = (db.prepare('SELECT id FROM clinics ORDER BY id LIMIT 2').all() as { id: number }[]).map((r) => r.id);
+    const mk = (tg: number, phone: string) =>
+      Number(
+        db
+          .prepare(
+            `INSERT INTO users (telegram_id, first_name, last_name, roles, phone, city_id, birth_year, gender, onboarded_at, profile_completed_at)
+             VALUES (?, 'Malika', 'Tosheva', '["patient"]', ?, ?, 1988, 'female', datetime('now'), datetime('now'))`,
+          )
+          .run(tg, phone, cityId).lastInsertRowid,
+      );
+    const docUser = mk(7_400_001, '998901400001');
+    const d = rd.registerDoctor(docUser, {
+      firstName: 'Jasur', lastName: 'Aliyev', specialty: 'Urolog', workplace: 'Shahar shifoxonasi',
+      documents: [{ kind: 'bachelor', name: 'd.pdf', dataBase64: pdf }],
+    });
+    rd.approveDoctor(d.id, moderator.id);
+    const patientTg = 7_400_002;
+    const patient = mk(patientTg, '998901400002');
+    const c = dc.createDoctorCase(docUser, { kind: 'operation', operationId: opId, cityId, note: 'Buyrakda tosh, 8 mm', patientPhone: '901400002' });
+    const { requestId } = dc.approveInvite(patient, c.inviteLink.split('inv_')[1], { acceptTerms: true });
+
+    const addOffer = (clinicId: number, price: number, dates: string[]) =>
+      Number(
+        db
+          .prepare(`INSERT INTO offers (request_id, clinic_id, price_uzs, includes, proposed_dates) VALUES (?, ?, ?, '["Operatsiya"]', ?)`)
+          .run(requestId, clinicId, price, JSON.stringify(dates)).lastInsertRowid,
+      );
+    const oA = addOffer(clinicA, 10_000_000, [futureDate(3), futureDate(4)]);
+    const oB = addOffer(clinicB, 12_000_000, [futureDate(5)]);
+
+    throws('boshqa shifokor tavsiya bera olmaydi', () => rec.recommendOffer(patient, c.id, oA, null), 'forbidden');
+    const r1 = rec.recommendOffer(docUser, c.id, oA, 'Tajribali jarroh, <b>yaqin</b>');
+    check('tavsiya saqlandi', r1.recommendation?.offerId === oA && r1.recommendation.comment === 'Tajribali jarroh, <b>yaqin</b>');
+    const pr = rec.recommendationForRequest(requestId);
+    check('bemor so‘rovida 🩺 tavsiya ko‘rinadi', pr?.offerId === oA && pr.doctorName === 'Jasur Aliyev');
+    check(
+      'bemorga ichki bildirishnoma',
+      !!db.prepare(`SELECT 1 FROM notifications WHERE user_id = ? AND type = 'doctor_recommendation'`).get(patient),
+    );
+    const txt = rec._testing.recText(rec._testing.context(db.prepare('SELECT id FROM doctor_recommendations WHERE offer_id = ?').get(oA)!.id as number)!);
+    check('bot xabarida izoh HTML-ekranlangan', txt.includes('&lt;b&gt;yaqin&lt;/b&gt;') && !txt.includes('<b>yaqin'));
+    const rows = rec._testing.dateRows(rec._testing.context((db.prepare('SELECT id FROM doctor_recommendations WHERE offer_id = ?').get(oA) as any).id)!);
+    check('botda kun tugmalari + "Barcha takliflar"', rows[0].length === 2 && !!rows[rows.length - 1][0].web_app);
+    throws('bir xil taklifni qayta tavsiya qilib bo‘lmaydi', () => rec.recommendOffer(docUser, c.id, oA, null), 'already_recommended');
+
+    const r2 = rec.recommendOffer(docUser, c.id, oB, 'Fikrimni o‘zgartirdim');
+    check('tavsiya almashdi — bitta faol', r2.recommendation?.offerId === oB &&
+      (db.prepare('SELECT COUNT(*) AS n FROM doctor_recommendations WHERE case_id = ? AND superseded_at IS NULL').get(c.id) as any).n === 1);
+    const oldRec = (db.prepare('SELECT id FROM doctor_recommendations WHERE offer_id = ?').get(oA) as any).id;
+    const newRec = (db.prepare('SELECT id FROM doctor_recommendations WHERE offer_id = ?').get(oB) as any).id;
+    const ymd = futureDate(5).replace(/-/g, '');
+
+    await rec.handleRecommendationCallback({ id: 'x', from: { id: 999_999 }, data: `ry:${newRec}:${ymd}` });
+    check('begona Telegram hisobi qabul qila olmaydi', (db.prepare('SELECT status FROM requests WHERE id = ?').get(requestId) as any).status !== 'CHOSEN');
+    await rec.handleRecommendationCallback({ id: 'x', from: { id: patientTg }, data: `ry:${oldRec}:${futureDate(3).replace(/-/g, '')}` });
+    check('eskirgan tavsiya bo‘yicha qabul bo‘lmaydi', (db.prepare('SELECT status FROM requests WHERE id = ?').get(requestId) as any).status !== 'CHOSEN');
+    await rec.handleRecommendationCallback({ id: 'x', from: { id: patientTg }, data: `ry:${newRec}:20991231` });
+    check('taklifda yo‘q kun bilan qabul bo‘lmaydi', (db.prepare('SELECT status FROM requests WHERE id = ?').get(requestId) as any).status !== 'CHOSEN');
+    check('noma‘lum tugma — boshqa ishlovchiga', (await rec.handleRecommendationCallback({ id: 'x', from: { id: patientTg }, data: 'boshqa' })) === false);
+
+    await rec.handleRecommendationCallback({ id: 'x', from: { id: patientTg }, data: `rd:${newRec}:${ymd}` });
+    check('kun tanlandi — hali qabul emas (tasdiq kutiladi)', (db.prepare('SELECT status FROM requests WHERE id = ?').get(requestId) as any).status !== 'CHOSEN');
+    await rec.handleRecommendationCallback({ id: 'x', from: { id: patientTg }, data: `ry:${newRec}:${ymd}` });
+    const deal = db.prepare('SELECT * FROM deals WHERE request_id = ?').get(requestId) as any;
+    check('botdan tasdiq — bitim ochildi', deal?.offer_id === oB && deal.scheduled_at.startsWith(futureDate(5)));
+    const docNote = db.prepare(`SELECT params FROM notifications WHERE type = 'doctor_case_update' ORDER BY id DESC`).get() as any;
+    check('shifokorga: bemor tavsiyani qabul qildi', JSON.parse(docNote.params).status === 'chosen' && JSON.parse(docNote.params).recommended === 1);
+    throws('tanlovdan keyin tavsiyani o‘zgartirib bo‘lmaydi', () => rec.recommendOffer(docUser, c.id, oA, null), 'already_chosen');
+
+    const st = dc.doctorStats(docUser);
+    check('statistika: 1 faol tavsiya, klinika B, 12 mln', st.recommendations === 1 && st.byClinic[0].clinicId === clinicB && st.recommendedSumUzs === 12_000_000);
+    check('statistika: qabul qilingan tavsiya va summa', st.acceptedRecommendations === 1 && st.acceptedSumUzs === 12_000_000 && st.deals === 1);
+    const adminRow = dc.adminDoctorStats().find((r) => r.doctorId === d.id);
+    check('admin statistikasida shifokor bor', adminRow?.recommendations === 1 && adminRow.byClinic.length === 1);
+  }
+
+  {
+    section('Botda parol: saytga kirish uchun');
+    const pa = await import('../services/patientAuth');
+    const uid = Number(db.prepare(`INSERT INTO users (telegram_id, first_name, roles, phone) VALUES (7500001, 'Parol', '["patient"]', '+998 90 150-00-01')`).run().lastInsertRowid);
+    check('holat: raqam normallashgan, parol yo‘q', (() => { const s = pa.webLoginStatus(uid); return s.phone === '998901500001' && !s.hasPassword; })());
+    throws('qisqa parol rad etiladi', () => pa.setPasswordFromTelegram(uid, 'qisqa1'), 'weak_password');
+    throws('faqat raqam rad etiladi', () => pa.setPasswordFromTelegram(uid, '12345678'), 'weak_password');
+    const st = pa.setPasswordFromTelegram(uid, 'Kuchli-parol-1');
+    check('parol qo‘yildi', st.hasPassword && !!st.passwordSetAt);
+    check('bazadagi raqam ham normallashdi', (db.prepare('SELECT phone FROM users WHERE id = ?').get(uid) as any).phone === '998901500001');
+    const ses = pa.loginWithPassword('+998 90 150 00 01', 'Kuchli-parol-1', null, null);
+    check('saytdan raqam + parol bilan kirildi', !!ses.token);
+    pa.setPasswordFromTelegram(uid, 'Yangi-parol-22');
+    check('parol o‘zgargach brauzer sessiyalari yopildi', pa.resolvePatientSession(ses.token) === null);
+    throws('eski parol endi ishlamaydi', () => pa.loginWithPassword('901500001', 'Kuchli-parol-1', null, null), 'unauthorized');
+    check('yangi parol ishlaydi', !!pa.loginWithPassword('901500001', 'Yangi-parol-22', null, null).token);
+
+    const noPhone = Number(db.prepare(`INSERT INTO users (telegram_id, first_name, roles) VALUES (7500002, 'Raqamsiz', '["patient"]')`).run().lastInsertRowid);
+    throws('raqamsiz — avval kontakt', () => pa.setPasswordFromTelegram(noPhone, 'Kuchli-parol-1'), 'phone_required');
+    const twin = Number(db.prepare(`INSERT INTO users (telegram_id, first_name, roles, phone) VALUES (7500003, 'Egizak', '["patient"]', '+998901500001')`).run().lastInsertRowid);
+    throws('raqam boshqa hisobda band', () => pa.setPasswordFromTelegram(twin, 'Kuchli-parol-1'), 'phone_taken');
+    const web = Number(db.prepare(`INSERT INTO users (telegram_id, first_name, roles, phone) VALUES (-7500004, 'Veb', '["patient"]', '998901500004')`).run().lastInsertRowid);
+    throws('Telegram bo‘lmagan hisob bu yo‘ldan foydalana olmaydi', () => pa.setPasswordFromTelegram(web, 'Kuchli-parol-1'), 'forbidden');
+  }
+
+  {
+    section('Kapsula endoskopiyasi: vaznsiz, qarshi ko‘rsatmalar bilan');
+    const lo = await import('../services/labOrgans');
+    const rq = await import('../services/requests');
+    const top = db.prepare(`SELECT slug FROM lab_tests WHERE parent_id IS NULL AND active = 1 ORDER BY position, id`).all().map((r: any) => r.slug);
+    check('katalogda 3-o‘rinda (MRT, MSKT dan keyin)', top[0] === 'mrt' && top[1] === 'mskt' && top[2] === 'kapsula-endoskopiya', top.slice(0, 4));
+    const cap = db.prepare(`SELECT id FROM lab_tests WHERE slug = 'kapsula-endoskopiya'`).get() as { id: number };
+    const capTest = lo.getLabTest(cap.id);
+    check('vazn so‘ralmaydi, qarshi ko‘rsatmalar bor', capTest.needsWeight === false && !!capTest.contraUz && capTest.contraUz.includes('Oshqozon-ichak'));
+    check('tanlanadigan tekshiruv (bolasiz guruh)', lo.selectableLabTestIds().has(cap.id));
+    const apiOrder = lo.listLabTests().filter((x) => x.parentId === null).map((x) => x.slug);
+    check('bemorga beriladigan ro‘yxatda ham 3-o‘rinda', apiOrder[2] === 'kapsula-endoskopiya', apiOrder.slice(0, 4));
+    const all = lo.listLabTests();
+    const mrtIdx = all.findIndex((x) => x.slug === 'mrt');
+    check('guruh ichidagilar guruhidan keyin turadi', all[mrtIdx + 1]?.parentId === all[mrtIdx].id);
+    check('sehrgarda "Qarshi ko‘rsatmalar" qadami bor', !!db.prepare(`SELECT 1 FROM request_steps WHERE key = 'contra' AND locked = 1`).get());
+
+    const cityId = (db.prepare('SELECT id FROM cities LIMIT 1').get() as { id: number }).id;
+    const pid = Number(
+      db.prepare(
+        `INSERT INTO users (telegram_id, first_name, last_name, roles, city_id, birth_year, gender, onboarded_at, profile_completed_at)
+         VALUES (7600001, 'Kapsula', 'Sinov', '["patient"]', ?, 1975, 'male', datetime('now'), datetime('now'))`,
+      ).run(cityId).lastInsertRowid,
+    );
+    const base = {
+      patientId: pid, kind: 'lab' as const, labTestId: cap.id, cityId, budgetUzs: 50_000_000, conditionText: '', note: null,
+      urgency: 'normal' as const, attachments: [], otherRegionsOk: false, dateFrom: null, dateTo: null, dateFlexible: true,
+      aiSuggested: false, acceptTerms: true,
+    };
+    throws('qarshi ko‘rsatmalar tasdiqlanmasa — so‘rov ketmaydi', () => rq.createRequest(base), 'contraindications_required');
+    const r = rq.createRequest({ ...base, contraindicationsAck: true });
+    check('vaznsiz so‘rov qabul qilindi', r.weightKg === null && r.kind === 'lab');
+    check('bemor narx bera olmaydi (byudjet e’tiborga olinmadi)', r.budgetUzs === null);
+    check('klinika uchun belgi: qarshi ko‘rsatma yo‘qligi tasdiqlangan', r.contraAcked === true);
+
+    const mriLeaf = db.prepare(`SELECT t.id FROM lab_tests t JOIN lab_tests p ON p.id = t.parent_id WHERE p.slug = 'mrt' LIMIT 1`).get() as { id: number };
+    throws('MRT da vazn hali ham majburiy', () => rq.createRequest({ ...base, labTestId: mriLeaf.id }), 'invalid_weight');
+
+    // Klinika MRT/MSKT qatorida yoqqan bo'lsa — so'rov unga boradi
+    const clinicId = (db.prepare(`SELECT id FROM clinics WHERE verification = 'approved' LIMIT 1`).get() as { id: number } | undefined)?.id;
+    if (clinicId) {
+      const ownCity = (db.prepare('SELECT city_id FROM clinics WHERE id = ?').get(clinicId) as any).city_id;
+      db.prepare(`INSERT OR IGNORE INTO clinic_lab_tests (clinic_id, test_id) VALUES (?, ?)`).run(clinicId, cap.id);
+      const r2 = rq.createRequest({ ...base, cityId: ownCity, contraindicationsAck: true });
+      check('kapsulani yoqqan klinikaga so‘rov bordi',
+        !!db.prepare('SELECT 1 FROM request_broadcasts WHERE request_id = ? AND clinic_id = ?').get(r2.id, clinicId));
+    }
+
+    // Admin qisman tahriri o'rin va holatni buzmasin
+    const before = db.prepare(`SELECT position, active FROM lab_tests WHERE id = ?`).get(cap.id) as any;
+    lo.updateLabTest(cap.id, { nameUz: 'Kapsula endoskopiyasi' });
+    const after = db.prepare(`SELECT position, active FROM lab_tests WHERE id = ?`).get(cap.id) as any;
+    check('faqat nom tahriri — o‘rin va holat o‘zgarmadi', after.position === before.position && after.active === before.active);
+    const off = lo.updateLabTest(cap.id, { contraUz: '  ' });
+    check('qarshi ko‘rsatmalar o‘chirilsa qadam chiqmaydi', off.contraUz === null);
+    lo.updateLabTest(cap.id, { contraUz: capTest.contraUz });
+  }
+
+  /* ── Admin: Telegram orqali tasdiqlash kodi ── */
+  section('Admin 2FA — Telegram kodi');
+  {
+    const webAuth = require('../services/webAuth');
+    const { config } = require('../lib/config');
+    const realFetch = globalThis.fetch;
+    const realToken = config.telegram.botToken;
+    const sent: Array<{ chat_id: number; text: string }> = [];
+    let tgOk = true;
+    // Telegram API o'rniga — xabarni ushlab qolamiz
+    (globalThis as any).fetch = async (_url: string, init: any) => {
+      sent.push(JSON.parse(init.body));
+      return new Response('{}', { status: tgOk ? 200 : 500 });
+    };
+    config.telegram.botToken = 'test-token';
+    const flush = () => new Promise((r) => setTimeout(r, 20));
+    const lastCode = () => /<code>(\d{6})<\/code>/.exec(sent[sent.length - 1]?.text ?? '')?.[1] ?? '';
+    try {
+      const acc = webAuth.createAccount({ phone: '998900000555', fullName: 'Telegram Admin', level: 'full', clinicId: null });
+      webAuth.completeSetup(acc.setupToken, 'tg-admin-paroli-2026');
+
+      // Telegram bog'lanmagan — avvalgidek kodsiz (yagona adminni qulflamaslik uchun)
+      const free = webAuth.login('998900000555', 'tg-admin-paroli-2026', '9.9.9.9', 'test', 'admin');
+      check('Telegram bog‘lanmagan admin — kod so‘ralmaydi', free.mfaRequired === false && sent.length === 0);
+
+      db.prepare(`INSERT INTO users (telegram_id, first_name, roles, phone) VALUES (?, 'TG Admin', ?, ?)`)
+        .run(777000555, JSON.stringify(['patient']), '+998900000555');
+
+      const s1 = webAuth.login('998900000555', 'tg-admin-paroli-2026', '9.9.9.9', 'Chrome', 'admin');
+      await flush();
+      check('bog‘langan admin — kod talab qilinadi', s1.mfaRequired === true && s1.mfaMethod === 'telegram');
+      check('kod adminning o‘z Telegram’iga ketdi', sent.length === 1 && sent[0].chat_id === 777000555);
+      check('xabarda IP va qurilma bor', /9\.9\.9\.9/.test(sent[0].text) && /Chrome/.test(sent[0].text));
+      check('kodsiz sessiya to‘liq emas', webAuth.resolveSession(s1.token).mfaPassed === false);
+      const good = lastCode();
+      const bad = good === '000000' ? '111111' : '000000';
+      throws('noto‘g‘ri kod rad etiladi', () => webAuth.passMfa(s1.token, bad));
+      webAuth.passMfa(s1.token, good);
+      check('to‘g‘ri kod — sessiya to‘liq', webAuth.resolveSession(s1.token).mfaPassed === true);
+      throws('bir kod ikki marta ishlamaydi', () => webAuth.passMfa(s1.token, good));
+
+      // 5 xato — sessiya yopiladi
+      const s2 = webAuth.login('998900000555', 'tg-admin-paroli-2026', null, null, 'admin');
+      await flush();
+      const c2 = lastCode();
+      const wrong = c2 === '000000' ? '111111' : '000000';
+      for (let i = 0; i < 5; i++) { try { webAuth.passMfa(s2.token, wrong); } catch { /* kutilgan */ } }
+      check('5 xatodan keyin sessiya yopildi', webAuth.resolveSession(s2.token) === null);
+      throws('yopilgan sessiyada to‘g‘ri kod ham ishlamaydi', () => webAuth.passMfa(s2.token, c2));
+
+      // Muddati o'tgan kod
+      const s3 = webAuth.login('998900000555', 'tg-admin-paroli-2026', null, null, 'admin');
+      await flush();
+      const key = require('node:crypto').createHash('sha256').update(s3.token).digest('hex');
+      webAuth._adminTelegram2faTesting.tgChallenges.get(key).expiresAt = Date.now() - 1;
+      throws('eskirgan kod rad etiladi', () => webAuth.passMfa(s3.token, lastCode()));
+      check('eskirgan koddan keyin sessiya yopildi', webAuth.resolveSession(s3.token) === null);
+
+      // Telegram ishlamasa — sessiya yopiladi (kirish ochilib qolmaydi)
+      tgOk = false;
+      const s4 = webAuth.login('998900000555', 'tg-admin-paroli-2026', null, null, 'admin');
+      await flush();
+      check('Telegram yubora olmasa sessiya yopildi', webAuth.resolveSession(s4.token) === null);
+      tgOk = true;
+
+      // Klinika eshigiga ta'sir qilmaydi
+      check('klinika kirishida Telegram kodi yo‘q', !sent.some((m) => /admin paneliga/.test(m.text) && m.chat_id !== 777000555));
+
+      // Favqulodda o'chirish
+      config.telegram.adminTelegram2fa = false;
+      const s5 = webAuth.login('998900000555', 'tg-admin-paroli-2026', null, null, 'admin');
+      check('ADMIN_TELEGRAM_2FA=off — kodsiz', s5.mfaRequired === false);
+      config.telegram.adminTelegram2fa = true;
+    } finally {
+      (globalThis as any).fetch = realFetch;
+      config.telegram.botToken = realToken;
+    }
   }
 
   console.log(`\n${'─'.repeat(50)}`);

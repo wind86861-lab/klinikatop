@@ -20,11 +20,19 @@ export const config = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
     webappUrl: process.env.WEBAPP_URL ?? 'http://localhost:5173',
+    /** Taklifnoma havolasi uchun: t.me/<bot>?start=inv_... */
+    botUsername: process.env.TELEGRAM_BOT_USERNAME ?? 'klinikatop_bot',
     /**
      * Webhook siri — Telegram har so'rovda sarlavhada qaytaradi.
      * Marshrut ochiq internetda turgani uchun yagona himoya shu.
      */
     webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET ?? '',
+    /**
+     * Admin paneliga kirishda Telegram orqali tasdiqlash kodi (TOTP
+     * yoqilmagan administratorlar uchun). Favqulodda o'chirish:
+     * `ADMIN_TELEGRAM_2FA=off` — masalan bot ishlamay qolsa.
+     */
+    adminTelegram2fa: process.env.ADMIN_TELEGRAM_2FA !== 'off',
   },
 
   /**
@@ -44,6 +52,19 @@ export const config = {
 
   db: {
     path: process.env.DATABASE_PATH ?? path.resolve(__dirname, '../../../data/klinikatop.db'),
+  },
+
+  /**
+   * Ochiq sayt shablonlari (build chiqargan HTML) — server ularni
+   * admin o'zgartirgan matn, rasm va hamkorlar bilan to'ldirib beradi.
+   * Prodda `/opt/klinikatop/webapp` (ish papkasi), lokalda `webapp/dist`.
+   */
+  site: {
+    root:
+      process.env.SITE_ROOT ??
+      (process.env.NODE_ENV === 'production'
+        ? path.resolve(process.cwd(), 'webapp')
+        : path.resolve(__dirname, '../../../webapp/dist')),
   },
 
   ai: {

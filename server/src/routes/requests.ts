@@ -1,3 +1,4 @@
+import { recommendationForRequest } from '../services/doctorRecommendations';
 import { Router } from 'express';
 import { z } from 'zod';
 import { forbidden } from '../lib/errors';
@@ -29,6 +30,8 @@ const createSchema = z.object({
   /* Yo'llanmada qo'lda yozilgan analizlar; tozalash xizmatda */
   referralItems: z.array(z.string().max(200)).max(60).optional(),
   weightKg: z.number().int().min(2).max(400).nullable().optional(),
+  /** Qarshi ko'rsatmalar yo'qligi tasdiqlandi (ular bor tekshiruvda majburiy) */
+  contraindicationsAck: z.boolean().optional(),
   cityId: z.number().int().positive(),
   /*
    * Holat tavsifi — OPERATSIYA so'rovida majburiy ("bilmayman"
@@ -88,6 +91,7 @@ requestsRouter.get('/', (req, res) => {
 requestsRouter.post('/', (req, res) => {
   const body = createSchema.parse(req.body);
   const request = createRequest({
+    contraindicationsAck: body.contraindicationsAck,
     patientId: req.user!.id,
     kind: body.kind,
     operationId: body.operationId ?? null,
@@ -126,6 +130,8 @@ requestsRouter.get('/:id', (req, res) => {
     request,
     offers: listRequestOffers(request.id),
     stats: statsForRequest(request),
+    // Shifokor yo'naltirgan so'rovda — qaysi taklifni tavsiya qilgani (🩺 belgi)
+    recommendation: recommendationForRequest(request.id),
   });
 });
 

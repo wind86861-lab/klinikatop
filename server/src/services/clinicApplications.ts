@@ -22,6 +22,8 @@
 import { db } from '../db';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { createAccount } from './webAuth';
+import { saveFile } from './files';
+import { readLicense, removeLicense, storeLicense, type LicenseUpload } from './applicationFiles';
 import { mapClinic } from '../lib/mappers';
 import type { Clinic } from '../../../shared/types';
 
@@ -51,6 +53,8 @@ export interface ClinicApplication {
    * yetkaziladi.
    */
   connectCode: string | null;
+  /** Litsenziya fayli — faqat ma'lumoti; faylning o'zi admin yo'li orqali */
+  licenseFile: { name: string; mime: string; size: number } | null;
   createdAt: string;
   reviewedAt: string | null;
 }
@@ -75,6 +79,9 @@ function map(row: any): ClinicApplication {
     note: row.note ?? null,
     clinicId: row.clinic_id ?? null,
     connectCode: row.connect_code ?? null,
+    licenseFile: row.license_file
+      ? { name: row.license_file_name ?? '', mime: row.license_file_mime ?? '', size: row.license_file_size ?? 0 }
+      : null,
     createdAt: iso(row.created_at)!,
     reviewedAt: iso(row.reviewed_at),
   };
@@ -92,6 +99,8 @@ export interface ApplicationInput {
   operationIds: number[];
   labTestIds: number[];
   acceptsReferral: boolean;
+  /** Litsenziya fayli — MAJBURIY: moderator raqamni hujjat bilan solishtiradi */
+  licenseFile: LicenseUpload;
   ip: string | null;
 }
 
@@ -152,12 +161,18 @@ export function submitApplication(input: ApplicationInput): { id: number; status
     }
   }
 
-  const info = db
+  // Fayl HAMMA tekshiruvdan keyin yoziladi — rad etilgan arizadan diskda axlat qolmasin
+  const file = storeLicense(input.licenseFile);
+
+  let info;
+  try {
+    info = db
     .prepare(
       `INSERT INTO clinic_applications
          (name, city_id, address, about, license_no, contact_name, contact_phone,
-          contact_email, operation_ids, lab_test_ids, accepts_referral, submitted_ip)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          contact_email, operation_ids, lab_test_ids, accepts_referral, submitted_ip,
+          license_file, license_file_name, license_file_mime, license_file_size)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name.trim().slice(0, 200),
@@ -172,7 +187,15 @@ export function submitApplication(input: ApplicationInput): { id: number; status
       JSON.stringify(input.labTestIds.slice(0, 120)),
       input.acceptsReferral ? 1 : 0,
       input.ip,
+      file.storage,
+      file.name,
+      file.mime,
+      file.size,
     );
+  } catch (err) {
+    removeLicense(file.storage);
+    throw err;
+  }
 
   return { id: Number(info.lastInsertRowid), status: 'pending' };
 }
@@ -239,13 +262,37 @@ export function approveApplication(id: number, moderatorId: number): ClinicAppli
      * qo'ng'iroq qilib tekshirgan. Klinika shu raqam bilan kiradi va
      * shu raqam Telegram bilan bog'lanish nuqtasi bo'ladi.
      */
-    const { setupToken } = createAccount({
+    const { user, setupToken } = createAccount({
       phone: app.contactPhone,
       email: app.contactEmail,
       fullName: app.contactName,
       level: 'clinic_admin',
       clinicId,
     });
+
+    /*
+     * Arizadagi litsenziya klinika HUJJATLARIGA ko'chadi — kabinetda
+     * "Litsenziya" allaqachon yuklangan bo'lib turadi va klinika uni
+     * qayta yuklamaydi. Holati `pending`: ariza tasdig'i "ariza haqiqiy"
+     * degani, hujjat tekshiruvi — verifikatsiya bosqichi.
+     */
+    const raw = db
+      .prepare(`SELECT license_file, license_file_name, license_file_mime FROM clinic_applications WHERE id = ?`)
+      .get(id) as { license_file: string | null; license_file_name: string | null; license_file_mime: string | null };
+    if (raw.license_file) {
+      const person = db.prepare(`SELECT id FROM users WHERE telegram_id = ?`).get(-user.id) as { id: number };
+      const stored = saveFile({
+        ownerId: person.id,
+        name: raw.license_file_name || 'litsenziya',
+        mimeType: raw.license_file_mime || 'application/pdf',
+        kind: 'other',
+        label: 'Litsenziya',
+        dataBase64: readLicense(raw.license_file).toString('base64'),
+      });
+      db.prepare(
+        `INSERT INTO clinic_documents (clinic_id, kind, label, file_id) VALUES (?, 'license', ?, ?)`,
+      ).run(clinicId, `Litsenziya № ${app.licenseNo}`.slice(0, 120), stored.id);
+    }
 
     db.prepare(
       `UPDATE clinic_applications
@@ -285,5 +332,22 @@ export function deleteApplication(id: number): void {
   if (app.status === 'approved') {
     throw conflict('approved_application', 'Tasdiqlangan arizani o‘chirib bo‘lmaydi');
   }
+  const raw = db.prepare(`SELECT license_file FROM clinic_applications WHERE id = ?`).get(id) as {
+    license_file: string | null;
+  };
   db.prepare(`DELETE FROM clinic_applications WHERE id = ?`).run(id);
+  removeLicense(raw.license_file);
+}
+
+/** Admin uchun: arizadagi litsenziya faylining o'zi */
+export function getApplicationLicense(id: number): { buffer: Buffer; name: string; mime: string } {
+  const row = db
+    .prepare(`SELECT license_file, license_file_name, license_file_mime FROM clinic_applications WHERE id = ?`)
+    .get(id) as { license_file: string | null; license_file_name: string | null; license_file_mime: string | null } | undefined;
+  if (!row?.license_file) throw notFound('Bu arizada litsenziya fayli yo‘q');
+  return {
+    buffer: readLicense(row.license_file),
+    name: row.license_file_name || 'litsenziya',
+    mime: row.license_file_mime || 'application/octet-stream',
+  };
 }

@@ -17,7 +17,7 @@ import { useState } from 'react';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { Async, useResource } from '@/screens/clinic/shell';
-import { Button, Chip, Field, Input, Sheet } from '@/ui';
+import { Button, Chip, Field, Input, Sheet, Textarea } from '@/ui';
 import type { LabTest } from '@shared/types';
 import { PageHeader, Toolbar, Empty } from './ui';
 
@@ -29,6 +29,11 @@ interface Draft {
   /** Qaysi guruhga kiradi (MRT, MSKT); null — o'zi guruh */
   parentId: number | null;
   durationMin: string;
+  /** Bemordan vazn so'raladimi */
+  needsWeight: boolean;
+  /** Qarshi ko'rsatmalar — bo'lsa sehrgarda alohida qadam, bemor tasdiqlaydi */
+  contraUz: string;
+  contraRu: string;
 }
 
 const EMPTY: Draft = {
@@ -38,6 +43,9 @@ const EMPTY: Draft = {
   icon: '',
   parentId: null,
   durationMin: '',
+  needsWeight: true,
+  contraUz: '',
+  contraRu: '',
 };
 
 export function LabTests() {
@@ -59,6 +67,9 @@ export function LabTests() {
             icon: t.icon,
             parentId: t.parentId,
             durationMin: t.durationMin == null ? '' : String(t.durationMin),
+            needsWeight: t.needsWeight,
+            contraUz: t.contraUz ?? '',
+            contraRu: t.contraRu ?? '',
           }
         : { ...EMPTY, parentId },
     );
@@ -78,6 +89,9 @@ export function LabTests() {
         icon: draft.icon.trim(),
         parentId: draft.parentId,
         durationMin: num(draft.durationMin),
+        needsWeight: draft.needsWeight,
+        contraUz: draft.contraUz.trim() || null,
+        contraRu: draft.contraRu.trim() || null,
       };
       if (draft.id) await api.updateLabTest(draft.id, body);
       else await api.createLabTest(body);
@@ -236,6 +250,40 @@ export function LabTests() {
                 value={draft.durationMin}
                 placeholder="15"
                 onChange={(e) => setDraft({ ...draft, durationMin: e.target.value })}
+              />
+            </Field>
+
+            <Field
+              label="Bemordan vazn so‘raladimi"
+              hint="Ko‘p tekshiruvda doza vaznga bog‘liq. Kapsula endoskopiyasida kerak emas — yosh yetarli."
+            >
+              <div className="row" style={{ gap: 8 }}>
+                <Chip active={draft.needsWeight} onClick={() => setDraft({ ...draft, needsWeight: true })}>
+                  Ha, so‘ralsin
+                </Chip>
+                <Chip active={!draft.needsWeight} onClick={() => setDraft({ ...draft, needsWeight: false })}>
+                  Yo‘q
+                </Chip>
+              </div>
+            </Field>
+
+            <Field
+              label="Qarshi ko‘rsatmalar (uz)"
+              hint="To‘ldirilsa, bemorga alohida qadam chiqadi: «menda bunday holat yo‘q» deb tasdiqlamaguncha so‘rov ketmaydi. Har bandni yangi qatordan."
+            >
+              <Textarea
+                rows={5}
+                maxLength={2000}
+                value={draft.contraUz}
+                onChange={(e) => setDraft({ ...draft, contraUz: e.target.value })}
+              />
+            </Field>
+            <Field label="Qarshi ko‘rsatmalar (ru)" hint="Bo‘sh qoldirilsa o‘zbekchasi ko‘rsatiladi">
+              <Textarea
+                rows={5}
+                maxLength={2000}
+                value={draft.contraRu}
+                onChange={(e) => setDraft({ ...draft, contraRu: e.target.value })}
               />
             </Field>
 

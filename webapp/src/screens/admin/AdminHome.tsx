@@ -50,6 +50,11 @@ import { AiKeys } from './AiKeys';
 import { Empty, Kpi, PageHeader } from './ui';
 import { Security } from '../web/Security';
 import { LabTests } from './LabTests';
+import { OperationPrices } from './OperationPrices';
+import { SiteEditor } from './SiteEditor';
+import { AdminRequests } from './Requests';
+import { AdminDoctors } from './Doctors';
+import { AppBanners } from './AppBanners';
 import { AdminClinics, PlatformSettingsScreen } from './BusinessTerms';
 import type { AdminMetrics, ChatMessage, Clinic, ClinicDocument, Deal, DealDetail } from '@shared/types';
 
@@ -71,6 +76,8 @@ export function AdminHome() {
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
   const [pending, setPending] = useState<Clinic[] | null>(null);
   const [disputes, setDisputes] = useState<Deal[] | null>(null);
+  /** Ko'rib chiqilishi kerak bo'lgan shifokor arizalari — menyudagi raqam */
+  const [doctorQueue, setDoctorQueue] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const [rejecting, setRejecting] = useState<Clinic | null>(null);
@@ -83,6 +90,11 @@ export function AdminHome() {
       setMetrics(m);
       setPending(v);
       setDisputes(d);
+      // Raqam ikkilamchi — olinmasa panel baribir ochilsin
+      api
+        .adminDoctors('pending')
+        .then((r) => setDoctorQueue(r.counts.pending + r.counts.in_review))
+        .catch(() => undefined);
     } catch (err: any) {
       setError(err?.message ?? t('common.error'));
     }
@@ -156,12 +168,24 @@ export function AdminHome() {
       badge: disputes?.length,
       render: () => <DisputeList disputes={disputes} onOpen={openDispute} />,
     },
+    {
+      id: 'doctors',
+      label: 'Shifokorlar',
+      group: 'Navbat',
+      icon: <IconStethoscope size={17} />,
+      badge: doctorQueue,
+      render: () => <AdminDoctors onChanged={load} />,
+    },
+    { id: 'requests', label: 'So‘rovlar', group: 'Boshqaruv', icon: <IconInbox size={17} />, render: () => <AdminRequests /> },
     { id: 'clinics', label: t('admin.tabClinics'), group: 'Boshqaruv', icon: <IconClinic size={17} />, render: () => <AdminClinics /> },
     { id: 'metrics', label: t('admin.metrics'), group: 'Boshqaruv', icon: <IconChart size={17} />, render: () => <MetricsPanel metrics={metrics} /> },
     { id: 'catalog', label: 'Katalog', group: 'Boshqaruv', icon: <IconStethoscope size={17} />, render: () => <CatalogSync /> },
     { id: 'lab-tests', label: 'Tahlil katalogi', group: 'Boshqaruv', icon: <IconStethoscope size={17} />, render: () => <LabTests /> },
+    { id: 'op-prices', label: 'Operatsiya narxlari', group: 'Boshqaruv', icon: <IconWallet size={17} />, render: () => <OperationPrices /> },
     { id: 'commission', label: 'Komissiya to‘lovlari', group: 'Pul', icon: <IconWallet size={17} />, render: () => <CommissionPayments /> },
     { id: 'steps', label: 'So‘rov bosqichlari', group: 'Sozlash', icon: <IconSparkle size={17} />, render: () => <RequestStepsScreen /> },
+    { id: 'banners', label: 'Ilova bannerlari', group: 'Sozlash', icon: <IconSparkle size={17} />, render: () => <AppBanners /> },
+    { id: 'site', label: 'Sayt', group: 'Sozlash', icon: <IconSparkle size={17} />, render: () => <SiteEditor /> },
     { id: 'bot', label: 'Bot matnlari', group: 'Sozlash', icon: <IconChat size={17} />, render: () => <BotFaceScreen /> },
     ...(user?.roles.includes('admin')
       ? [

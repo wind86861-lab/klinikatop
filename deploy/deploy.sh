@@ -29,6 +29,8 @@ else
 fi
 
 echo "▸ Lokal tekshiruv"
+# better-sqlite3 Node 18 uchun qurilgan — boshqa versiyada testlar segfault bilan yiqiladi
+node -v | grep -q '^v18\.' || { echo "✗ Node 18 kerak (nvm use 18), hozir: $(node -v)"; exit 1; }
 npx tsc --noEmit -p server/tsconfig.json
 npx tsc --noEmit -p webapp/tsconfig.json
 npx tsx server/src/test/run.ts | tail -1
@@ -51,8 +53,13 @@ rsync -az --delete -e "$SSH_CMD" server/dist/  "$SERVER:$APP/dist/"
 # to'qnashuv bo'lmaydi, joy esa kam ketadi. Eskilarini quyida
 # tozalaymiz.
 #
-rsync -az --delete --exclude 'assets/' -e "$SSH_CMD" webapp/dist/ "$SERVER:$APP/webapp/"
+#
+# `_site/` — ochiq sayt asset'lari (Astro). Ular ham hash bilan
+# nomlangan, shuning uchun xuddi `assets/` kabi to'planadi.
+#
+rsync -az --delete --exclude 'assets/' --exclude '_site/' -e "$SSH_CMD" webapp/dist/ "$SERVER:$APP/webapp/"
 rsync -az                              -e "$SSH_CMD" webapp/dist/assets/ "$SERVER:$APP/webapp/assets/"
+rsync -az                              -e "$SSH_CMD" webapp/dist/_site/  "$SERVER:$APP/webapp/_site/"
 rsync -az          -e "$SSH_CMD" package.json package-lock.json "$SERVER:$APP/"
 rsync -az          -e "$SSH_CMD" server/package.json "$SERVER:$APP/server/"
 
@@ -76,10 +83,18 @@ npm ci --omit=dev --workspace=server --silent
 # HOZIRGI `index.html` ishlatayotgan fayllar yoshidan qat'i nazar
 # saqlanadi: deploy o'zi yuborgan faylni o'chirib qo'ymasin.
 #
-KEEP=$(grep -oE 'assets/[A-Za-z0-9._-]+' /opt/klinikatop/webapp/index.html | sed 's|assets/||' | sort -u)
+# Ilova qobig'i endi `app.html` ("/" — ochiq sayt)
+KEEP=$(grep -ohE 'assets/[A-Za-z0-9._-]+' /opt/klinikatop/webapp/app.html | sed 's|assets/||' | sort -u)
 find /opt/klinikatop/webapp/assets -maxdepth 1 -type f -mtime +14 | while read -r f; do
   base=$(basename "$f")
   echo "$KEEP" | grep -qx "$base" || rm -f "$f"
+done
+
+# Sayt asset'lari — hozirgi sahifalar ishlatayotganlari saqlanadi
+KEEP_SITE=$(find /opt/klinikatop/webapp -name 'index.html' -not -path '*/assets/*' -exec grep -ohE '_site/[A-Za-z0-9._-]+' {} + | sed 's|_site/||' | sort -u)
+find /opt/klinikatop/webapp/_site -maxdepth 1 -type f -mtime +14 2>/dev/null | while read -r f; do
+  base=$(basename "$f")
+  echo "$KEEP_SITE" | grep -qx "$base" || rm -f "$f"
 done
 
 chown -R klinikatop:klinikatop /opt/klinikatop/dist /opt/klinikatop/webapp

@@ -32,7 +32,7 @@ import {
   SkeletonList,
 } from '@/ui';
 import { requestTitle } from '@shared/types';
-import type { OfferWithClinic, PriceStats, RequestWithMeta } from '@shared/types';
+import type { OfferWithClinic, PatientRecommendation, PriceStats, RequestWithMeta } from '@shared/types';
 
 type Sort = 'price' | 'rating' | 'experience';
 
@@ -45,6 +45,7 @@ export function RequestDetail() {
   const [request, setRequest] = useState<RequestWithMeta | null>(null);
   const [offers, setOffers] = useState<OfferWithClinic[]>([]);
   const [stats, setStats] = useState<PriceStats | null>(null);
+  const [recommendation, setRecommendation] = useState<PatientRecommendation | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [sort, setSort] = useState<Sort>('price');
@@ -64,6 +65,7 @@ export function RequestDetail() {
       setRequest(data.request);
       setOffers(data.offers);
       setStats(data.stats);
+      setRecommendation(data.recommendation ?? null);
     } catch (err: any) {
       setError(err?.message ?? t('common.error'));
     }
@@ -119,8 +121,10 @@ export function RequestDetail() {
     if (sort === 'price') list.sort((a, b) => a.priceUzs - b.priceUzs);
     else if (sort === 'rating') list.sort((a, b) => b.clinic.ratingAvg - a.clinic.ratingAvg);
     else list.sort((a, b) => b.operationDealsCount - a.operationDealsCount);
+    // Shifokor tavsiya qilgani doim tepada — saralashdan qat'i nazar
+    if (recommendation) list.sort((a, b) => Number(b.id === recommendation.offerId) - Number(a.id === recommendation.offerId));
     return list;
-  }, [offers, sort]);
+  }, [offers, sort, recommendation]);
 
   /*
    * Operatsiya kuni — TANLOV BILAN BIRGA belgilanadi.
@@ -297,6 +301,7 @@ export function RequestDetail() {
                     selected={compareIds.includes(offer.id)}
                     onToggleSelect={() => toggleCompare(offer.id)}
                     onChoose={closed ? undefined : () => setChoosing(offer)}
+                    recommendation={recommendation?.offerId === offer.id ? recommendation : null}
                   />
                 </m.div>
               ))}

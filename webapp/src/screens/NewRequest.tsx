@@ -7,9 +7,9 @@
  * Holat bitta joyda (`draft`) turadi; har qadam faqat o'z bo'lagini o'zgartiradi.
  * Orqaga qaytish hech narsani yo'qotmaydi.
  */
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
-import { useNavigate } from '@/lib/router';
+import { useNavigate, useSearchParams } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
 import { formatDate, groupDigits, money } from '@/lib/format';
@@ -49,6 +49,7 @@ import {
   type Operation,
   type PriceStats,
   type RequestKind,
+  type RequestKindSetting,
   type StoredFile,
   type Urgency,
   type WizardStep,
@@ -85,6 +86,11 @@ export interface Draft {
   labTest: LabTest | null;
   /** Tahlil so'rovida: bemor vazni (kg) */
   weightKg: number | null;
+  /**
+   * Qarshi ko'rsatmalar: `true` — "menda yo'q", `false` — "bor yoki
+   * bilmayman" (so'rov ketmaydi), `null` — hali javob yo'q.
+   */
+  contraAck: boolean | null;
 }
 
 /*
@@ -97,7 +103,7 @@ export interface Draft {
  * javob bermasa bemor ilovasiz qolmasligi kerak — shunda shu ishlatiladi.
  */
 const FALLBACK_STEPS: WizardStep[] = [
-  'who', 'type', 'referral', 'operation', 'condition', 'documents', 'test', 'weight',
+  'who', 'type', 'referral', 'operation', 'condition', 'documents', 'test', 'contra', 'weight',
   'region', 'budget', 'date', 'note', 'review',
 ].map((key) => ({
   key,
@@ -122,10 +128,37 @@ export function NewRequest() {
   const [submitting, setSubmitting] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  /*
+   * Turlar tartibi va qaysilari FAOL — admin belgilaydi. Nofaol tur
+   * kartada ko'rinib turadi, lekin tanlanmaydi. Eski server bu maydonni
+   * bermasa uchalasi faol (avvalgi xatti-harakat).
+   */
+  const kindSettings: RequestKindSetting[] = session?.features.requestKindSettings?.length
+    ? session.features.requestKindSettings
+    : [
+        { kind: 'referral', enabled: true },
+        { kind: 'operation', enabled: true },
+        { kind: 'lab', enabled: true },
+      ];
+  const kinds: RequestKind[] = kindSettings.filter((k) => k.enabled).map((k) => k.kind);
+
+  /*
+   * Banner yoki havoladan `?kind=lab` bilan kelinsa — tur oldindan
+   * tanlanadi va sehrgar tur tanlash qadamidan KEYINGI qadamdan
+   * boshlanadi (MRT/MSKT bannerida — "Qanday tekshiruv kerak?").
+   * Faqat FAOL tur qabul qilinadi; orqaga qaytsa hamma qadamlar joyida.
+   */
+  const [params] = useSearchParams();
+  const presetRaw = params.get('kind') as RequestKind | null;
+  const preset = presetRaw && kinds.includes(presetRaw) ? presetRaw : null;
+  const [stepsReady, setStepsReady] = useState(false);
+  const jumped = useRef(false);
+
   const [draft, setDraft] = useState<Draft>({
-    kind: 'operation',
+    kind: preset ?? kinds[0],
     labTest: null,
     weightKg: null,
+    contraAck: null,
     operation: null,
     aiSuggested: false,
     conditionText: '',
@@ -164,7 +197,8 @@ export function NewRequest() {
       })
       .catch(() => {
         /* zaxira ro'yxat bilan davom etamiz */
-      });
+      })
+      .finally(() => alive && setStepsReady(true));
     return () => {
       alive = false;
     };
@@ -194,6 +228,9 @@ export function NewRequest() {
     () =>
       allSteps.filter((s) => {
         if (!(s.flows ?? REQUEST_KINDS).includes(draft.kind)) return false;
+        // Tekshiruvga qarab: vazn har birida kerak emas, qarshi ko'rsatmalar — faqat borida
+        if (s.key === 'weight' && draft.labTest && !draft.labTest.needsWeight) return false;
+        if (s.key === 'contra' && !draft.labTest?.contraUz) return false;
         // Tayyor bosqichda qamrov yo'q — u oqim bo'yicha ajratilgan
         if (s.kind === 'builtin') return true;
         /*
@@ -211,6 +248,20 @@ export function NewRequest() {
       }),
     [allSteps, draft.kind, draft.labTest],
   );
+
+  // Sessiya yangilanib tur yopilgan bo'lsa — birinchi ochiq turga o'tamiz
+  useEffect(() => {
+    if (!kinds.includes(draft.kind)) setDraft((d) => ({ ...d, kind: kinds[0] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kinds.join(',')]);
+
+  // Oldindan tanlangan tur: bir marta, bosqichlar ro'yxati kelgach
+  useEffect(() => {
+    if (!preset || !stepsReady || jumped.current) return;
+    jumped.current = true;
+    const typeAt = steps.findIndex((st) => st.key === 'type');
+    if (typeAt >= 0 && typeAt + 1 < steps.length) setIndex(typeAt + 1);
+  }, [preset, stepsReady, steps]);
 
   const current = steps[Math.min(index, steps.length - 1)];
   const step = current?.key ?? 'review';
@@ -249,6 +300,9 @@ export function NewRequest() {
         return draft.operation !== null;
       case 'weight':
         return draft.weightKg !== null && draft.weightKg >= 2 && draft.weightKg <= 400;
+      case 'contra':
+        // Faqat "menda bunday holat yo'q" bilan davom etiladi
+        return draft.contraAck === true;
       case 'test':
         return draft.labTest !== null;
       case 'condition':
@@ -290,7 +344,11 @@ export function NewRequest() {
       draft.kind === 'referral'
         ? draft.files.length > 0 || draft.referralItems.length > 0
         : draft.kind === 'lab'
-          ? Boolean(draft.labTest && draft.weightKg)
+          ? Boolean(
+              draft.labTest &&
+                (!draft.labTest.needsWeight || draft.weightKg) &&
+                (!draft.labTest.contraUz || draft.contraAck === true),
+            )
           : Boolean(draft.operation);
     if (!ready || !draft.cityId || !termsAccepted) return;
 
@@ -301,7 +359,8 @@ export function NewRequest() {
         operationId: draft.kind === 'operation' ? (draft.operation?.id ?? null) : null,
         labTestId: draft.kind === 'lab' ? (draft.labTest?.id ?? null) : null,
         referralItems: draft.kind === 'referral' ? draft.referralItems : undefined,
-        weightKg: draft.kind === 'lab' ? draft.weightKg : null,
+        weightKg: draft.kind === 'lab' && draft.labTest?.needsWeight ? draft.weightKg : null,
+        contraindicationsAck: draft.kind === 'lab' && draft.labTest?.contraUz ? draft.contraAck === true : undefined,
         cityId: draft.cityId,
         conditionText: draft.conditionText.trim(),
         budgetUzs: draft.budgetUzs,
@@ -374,6 +433,7 @@ export function NewRequest() {
 
           {step === 'type' && (
             <TypeStep
+              kinds={kindSettings}
               draft={draft}
               onPick={(kind) => {
                 /*
@@ -399,6 +459,12 @@ export function NewRequest() {
                   labTest: kind === 'lab' ? draft.labTest : null,
                   weightKg: kind === 'lab' ? draft.weightKg : null,
                   /*
+                   * Byudjet faqat operatsiyada. Server buni baribir
+                   * tashlab yuboradi, lekin ekranda qolib ketsa
+                   * bemor uni yuborilgan deb o'ylardi.
+                   */
+                  budgetUzs: kind === 'operation' ? draft.budgetUzs : null,
+                  /*
                    * Fayllar ikki oqimda ham bor, lekin MA'NOSI boshqa:
                    * operatsiyada — qo'shimcha hujjat, yo'llanmada —
                    * so'rovning o'zi. Aralashib ketmasin.
@@ -416,11 +482,13 @@ export function NewRequest() {
           {step === 'referral' && <ReferralStep draft={draft} patch={patch} />}
 
           {step === 'weight' && <WeightStep draft={draft} patch={patch} />}
+          {step === 'contra' && <ContraStep draft={draft} patch={patch} />}
           {step === 'test' && (
             <TestStep
               draft={draft}
               onPick={(labTest) => {
-                patch({ labTest });
+                // Boshqa tekshiruv — oldingi tasdiq unga tegishli emas
+                patch({ labTest, contraAck: labTest.id === draft.labTest?.id ? draft.contraAck : null });
                 setDirection(1);
                 setIndex(nextAfter('test'));
                 haptic.press();
@@ -490,22 +558,28 @@ export function NewRequest() {
  * Ikkita katta karta, uchinchisi yo'q: bemor "operatsiya kerak"
  * yoki "tekshiruvdan o'tishim kerak" deb keladi va oralig'i yo'q.
  */
-function TypeStep({ draft, onPick }: { draft: Draft; onPick: (kind: RequestKind) => void }) {
+function TypeStep({
+  kinds,
+  draft,
+  onPick,
+}: {
+  kinds: RequestKindSetting[];
+  draft: Draft;
+  onPick: (kind: RequestKind) => void;
+}) {
   const { t } = useApp();
 
   /*
-   * Tartib ATAYLAB shunday: yo'llanma birinchi.
-   *
-   * U eng qisqa yo'l — qog'ozi bor odam katalogda hech narsa
-   * qidirmaydi, uch tegishda so'rov yuboradi. Ro'yxatning pastida
-   * tursa, ko'pchilik uni umuman ko'rmasdan katalogga kirib
-   * ketardi va o'sha yerda qiynalardi.
+   * Tartibni va qaysi turlar ochiqligini admin belgilaydi. Standart
+   * tartibda yo'llanma birinchi: u eng qisqa yo'l — qog'ozi bor odam
+   * katalogda hech narsa qidirmaydi, uch tegishda so'rov yuboradi.
    */
-  const cards: { kind: RequestKind; icon: string; title: string; sub: string }[] = [
-    { kind: 'referral', icon: '📄', title: t('wz.type.referral'), sub: t('wz.type.referralSub') },
-    { kind: 'operation', icon: '🩺', title: t('wz.type.operation'), sub: t('wz.type.operationSub') },
-    { kind: 'lab', icon: '🔬', title: t('wz.type.lab'), sub: t('wz.type.labSub') },
-  ];
+  const all: Record<RequestKind, { icon: string; title: string; sub: string }> = {
+    referral: { icon: '📄', title: t('wz.type.referral'), sub: t('wz.type.referralSub') },
+    operation: { icon: '🩺', title: t('wz.type.operation'), sub: t('wz.type.operationSub') },
+    lab: { icon: '🔬', title: t('wz.type.lab'), sub: t('wz.type.labSub') },
+  };
+  const cards = kinds.map(({ kind, enabled }) => ({ kind, enabled, ...all[kind] }));
 
   return (
     <>
@@ -515,14 +589,17 @@ function TypeStep({ draft, onPick }: { draft: Draft; onPick: (kind: RequestKind)
           <Card
             key={c.kind}
             variant={draft.kind === c.kind ? 'default' : 'flat'}
-            className={`kindcard ${draft.kind === c.kind ? 'is-active' : ''}`}
-            onClick={() => onPick(c.kind)}
+            className={`kindcard ${draft.kind === c.kind ? 'is-active' : ''} ${c.enabled ? '' : 'is-disabled'}`}
+            // Nofaol tur ko'rinadi, lekin tanlanmaydi — admin yoqqanda ochiladi
+            onClick={c.enabled ? () => onPick(c.kind) : undefined}
+            aria-disabled={!c.enabled}
           >
             <span className="kindcard__icon">{c.icon}</span>
-            <span className="stack" style={{ gap: 2 }}>
+            <span className="stack" style={{ gap: 2, flex: 1, minWidth: 0 }}>
               <strong>{c.title}</strong>
               <span className="tiny">{c.sub}</span>
             </span>
+            {!c.enabled && <span className="kindcard__soon">{t('wz.type.inactive')}</span>}
           </Card>
         ))}
       </div>
@@ -727,6 +804,56 @@ function TestStep({ draft, onPick }: { draft: Draft; onPick: (test: LabTest) => 
 
 /* ─────────────────────────  Qadam sarlavhasi  ───────────────────────── */
 
+/**
+ * Qarshi ko'rsatmalar — tekshiruvda ular bo'lsa (kapsula endoskopiyasi).
+ *
+ * Bemor ro'yxatni o'qib, ikkitadan birini tanlaydi. "Bor yoki bilmayman"
+ * — so'rov KETMAYDI: bunday bemorga tekshiruvni o'tkazib bo'lmaydi va
+ * klinika uni baribir rad etardi. Shifokor bilan maslahatlashish aytiladi.
+ */
+function ContraStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {
+  const { t, lang } = useApp();
+  const text = (lang === 'ru' ? draft.labTest?.contraRu : draft.labTest?.contraUz) || draft.labTest?.contraUz || '';
+  const pick = (ack: boolean) => {
+    patch({ contraAck: ack });
+    haptic.select();
+  };
+
+  return (
+    <>
+      <StepHead title={t('wz.contra.title')} sub={t('wz.contra.sub')} />
+      <Card variant="flat" className="contra">
+        <p className="contra__text">{text}</p>
+      </Card>
+      <div className="stack" style={{ gap: 'var(--s-3)' }}>
+        <Card
+          variant={draft.contraAck === true ? 'default' : 'flat'}
+          className={`kindcard ${draft.contraAck === true ? 'is-active' : ''}`}
+          onClick={() => pick(true)}
+        >
+          <span className="kindcard__icon">✅</span>
+          <span className="stack" style={{ gap: 2 }}>
+            <strong>{t('wz.contra.none')}</strong>
+            <span className="tiny">{t('wz.contra.noneSub')}</span>
+          </span>
+        </Card>
+        <Card
+          variant={draft.contraAck === false ? 'default' : 'flat'}
+          className={`kindcard ${draft.contraAck === false ? 'is-active is-danger' : ''}`}
+          onClick={() => pick(false)}
+        >
+          <span className="kindcard__icon">⚠️</span>
+          <span className="stack" style={{ gap: 2 }}>
+            <strong>{t('wz.contra.has')}</strong>
+            <span className="tiny">{t('wz.contra.hasSub')}</span>
+          </span>
+        </Card>
+      </div>
+      {draft.contraAck === false && <Notice tone="danger">{t('wz.contra.blocked')}</Notice>}
+    </>
+  );
+}
+
 function StepHead({ title, sub }: { title: string; sub?: string }) {
   return (
     <div className="wz-head">
@@ -850,36 +977,58 @@ function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
   }, [draft.operation, draft.cityId]);
 
   /*
-   * Oraliq TURGA bog'liq.
+   * Slayderning chegarasi.
    *
-   * Operatsiya millionlar bilan o'lchanadi, tahlil esa yuz minglar
-   * bilan: qon tahlili 200 ming so'm bo'lishi mumkin. Bitta oraliq
-   * ikkalasiga to'g'ri kelmaydi — tahlil so'rovida slayder eng
-   * chapida ham juda katta raqamni ko'rsatardi va bemor byudjetni
-   * to'g'ri qo'ya olmasdi.
+   * Byudjet faqat operatsiya so'rovida so'raladi (`STEP_FLOWS`), ya'ni
+   * bu yerda tahlil o'lchovi kerak emas.
+   *
+   * Ustuvorlik: ADMIN belgilagan oraliq eng kuchli. Uni server ham
+   * tekshiradi, shuning uchun slayder o'sha chegaradan chiqmasligi
+   * kerak — aks holda bemor qiymatni qo'yib, "yuborilmadi" xatosini
+   * oladi va sababini tushunmaydi.
+   *
+   * Admin narx qo'ymagan bo'lsa — ilgarigi xatti-harakat: haqiqiy
+   * bitimlar statistikasiga qarab oraliq hisoblanadi.
    */
-  /*
-   * Yo'llanma ham tahlil bilan bir xil o'lchovda: qog'ozda odatda
-   * aynan tahlillar ro'yxati yozilgan bo'ladi.
-   */
-  const isLab = draft.kind !== 'operation';
-  const floor = isLab ? 200_000 : 500_000;
+  const adminMin = draft.operation?.minPriceUzs ?? null;
+  const adminMax = draft.operation?.maxPriceUzs ?? null;
 
   const range = useMemo(() => {
-    if (!stats?.min || !stats.max) {
-      return isLab
-        ? { min: 200_000, max: 20_000_000, step: 50_000 }
-        : { min: 1_000_000, max: 100_000_000, step: 500_000 };
+    /* Admin ikkala chegarani ham bergan — slayder aynan shu oraliq */
+    if (adminMin != null && adminMax != null) {
+      const rawStep = Math.round((adminMax - adminMin) / 100 / 50_000) * 50_000;
+      return { min: adminMin, max: adminMax, step: Math.max(100_000, rawStep) };
     }
-    const min = Math.max(floor, Math.floor(stats.min * 0.5));
-    const max = Math.ceil(stats.max * 1.4);
-    const rawStep = Math.round((max - min) / 100 / 50_000) * 50_000;
-    return { min, max, step: Math.max(isLab ? 50_000 : 100_000, rawStep) };
-  }, [stats, isLab, floor]);
+
+    const base = !stats?.min || !stats.max
+      ? { min: 1_000_000, max: 100_000_000, step: 500_000 }
+      : (() => {
+          const min = Math.max(500_000, Math.floor(stats.min * 0.5));
+          const max = Math.ceil(stats.max * 1.4);
+          const rawStep = Math.round((max - min) / 100 / 50_000) * 50_000;
+          return { min, max, step: Math.max(100_000, rawStep) };
+        })();
+
+    /* Bitta chegara berilgan bo'lsa — hisoblangan oraliqni qirqamiz */
+    return {
+      ...base,
+      min: adminMin != null ? Math.max(base.min, adminMin) : base.min,
+      max: adminMax != null ? Math.min(base.max, adminMax) : base.max,
+    };
+  }, [stats, adminMin, adminMax]);
 
   const belowRange = draft.budgetUzs != null && stats?.p25 != null && draft.budgetUzs < stats.p25;
-  /* Tegilmagan slayder shu yerda turadi — bu taklif, tanlov emas */
-  const suggested = stats?.median ?? Math.round((range.min + range.max) / 2);
+  /*
+   * Tegilmagan slayder shu yerda turadi — bu taklif, tanlov emas.
+   *
+   * Oraliqqa QIRQILADI: bozordagi o'rtacha narx admin qo'ygan
+   * chegaradan tashqarida bo'lishi mumkin va o'shanda slayder
+   * ko'rsatgan joy bilan haqiqiy qiymat mos kelmay qolardi.
+   */
+  const suggested = Math.min(
+    range.max,
+    Math.max(range.min, stats?.median ?? Math.round((range.min + range.max) / 2)),
+  );
 
   return (
     <>
@@ -921,6 +1070,21 @@ function BudgetStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>)
         `budgetUzs` null bo'lib boradi. Ya'ni ko'rsatish ixtiyoriy
         bo'lib qolaveradi, faqat endi u ko'rinib turadi.
       */}
+      {/*
+        Chegara slayderdan OLDIN aytiladi.
+        Bemor qiymatni qo'yib bo'lgandan keyin "bu oraliqda emas"
+        deyilsa, u nega surib bo'lmaganini tushunmaydi.
+      */}
+      {(adminMin != null || adminMax != null) && (
+        <Notice tone="info">
+          {adminMin != null && adminMax != null
+            ? t('budget.rangeSet', { min: money(adminMin, lang), max: money(adminMax, lang) })
+            : adminMin != null
+              ? t('budget.rangeMin', { min: money(adminMin, lang) })
+              : t('budget.rangeMax', { max: money(adminMax!, lang) })}
+        </Notice>
+      )}
+
       <Card className="stack">
         <div style={{ textAlign: 'center' }}>
           {draft.budgetUzs == null ? (
@@ -1220,11 +1384,16 @@ function ReviewStep({
               }
               onEdit={() => onEdit('test')}
             />
-            <ReviewRow
-              label={t('wz.review.weight')}
-              value={draft.weightKg ? `${draft.weightKg} kg` : empty}
-              onEdit={() => onEdit('weight')}
-            />
+            {draft.labTest?.needsWeight !== false && (
+              <ReviewRow
+                label={t('wz.review.weight')}
+                value={draft.weightKg ? `${draft.weightKg} kg` : empty}
+                onEdit={() => onEdit('weight')}
+              />
+            )}
+            {draft.labTest?.contraUz && (
+              <ReviewRow label={t('wz.contra.review')} value={t('wz.contra.reviewOk')} onEdit={() => onEdit('contra')} />
+            )}
           </>
         ) : (
           <>

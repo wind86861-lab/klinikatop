@@ -1,3 +1,6 @@
+import { forbidden } from '../lib/errors';
+import { enabledRequestKinds, getRequestKinds } from '../services/requestKinds';
+import { setPasswordFromTelegram, webLoginStatus } from '../services/patientAuth';
 import { Router } from 'express';
 import { z } from 'zod';
 import { getNotificationPrefs, setNotificationPrefs } from '../services/clinicCabinet';
@@ -35,6 +38,13 @@ meRouter.get('/', (req, res) => {
       commissionPercent: config.rules.commissionPercent,
       requestTtlHours: config.rules.requestTtlHours,
       maxActiveRequests: config.rules.maxActiveRequestsPerPatient,
+      // Faol so'rov turlari, tartib bilan (shifokor formasi shundan oladi)
+      requestKinds: enabledRequestKinds(),
+      /*
+       * HAMMA turlar, admin tartibida, faol/nofaol belgisi bilan. Nofaol
+       * tur bemorga ko'rinadi, lekin tanlab bo'lmaydi ("Hozircha faol emas").
+       */
+      requestKindSettings: getRequestKinds(),
     },
   });
 });
@@ -171,4 +181,27 @@ meRouter.patch('/medical', (req, res) => {
     .parse(req.body);
 
   res.json(saveMedicalProfile(req.user!.id, body));
+});
+
+/*
+ * Saytdan (klinikatop.uz/kirish/) kirish uchun parol — Telegram ichidan.
+ *
+ * FAQAT Telegram imzosi bilan: brauzer sessiyasi (u o'g'irlangan
+ * bo'lishi mumkin) bu yo'l bilan parolni almashtira olmaydi — u uchun
+ * saytdagi "Parolni tiklash" (raqamga kod) bor.
+ */
+const telegramOnly = (req: any) => {
+  if (req.web || !(req.header('x-init-data') ?? '').trim()) {
+    throw forbidden('Parol Telegram ilovasi orqali qo‘yiladi: botda /parol');
+  }
+};
+
+meRouter.get('/web-login', (req, res) => {
+  res.json(webLoginStatus(req.user!.id));
+});
+
+meRouter.put('/web-login/password', (req, res) => {
+  telegramOnly(req);
+  const body = z.object({ password: z.string().min(1).max(200) }).parse(req.body);
+  res.json(setPasswordFromTelegram(req.user!.id, body.password));
 });

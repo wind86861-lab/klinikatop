@@ -22,6 +22,8 @@ import crypto from 'node:crypto';
 import { db, toJson } from '../db';
 import { badRequest, forbidden, unauthorized } from '../lib/errors';
 import { mapUser } from '../lib/mappers';
+import { config } from '../lib/config';
+import { sendTelegramMessage } from '../lib/telegram';
 import type { Role, User } from '../../../shared/types';
 
 export type WebLevel = 'full' | 'clinic_admin' | 'clinic_operator';
@@ -116,12 +118,12 @@ function mapWebUser(row: any): WebUser {
 
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
 
-function hashPassword(password: string, salt: string): string {
+export function hashPassword(password: string, salt: string): string {
   return crypto.scryptSync(password, salt, SCRYPT.keylen, SCRYPT).toString('hex');
 }
 
 /** Parolni tekshirish. Uzunlik farq qilsa ham vaqt bo'yicha xavfsiz. */
-function passwordMatches(password: string, salt: string, expected: string): boolean {
+export function passwordMatches(password: string, salt: string, expected: string): boolean {
   const actual = Buffer.from(hashPassword(password, salt), 'hex');
   const wanted = Buffer.from(expected, 'hex');
   return actual.length === wanted.length && crypto.timingSafeEqual(actual, wanted);
@@ -250,7 +252,100 @@ export interface LoginResult {
   user: WebUser;
   /** 2FA yoqilgan bo'lsa sessiya hali to'liq emas */
   mfaRequired: boolean;
+  /** Kod qayerdan olinadi: autentifikatsiya ilovasi yoki Telegram */
+  mfaMethod?: MfaMethod;
 }
+
+export type MfaMethod = 'totp' | 'telegram';
+
+/* ─────────────  Admin: Telegram orqali tasdiqlash kodi  ───────────── */
+
+/*
+ * Parol yetarli emas: admin paneliga kirishda 6 xonali kod adminning
+ * O'Z Telegram'iga (bot orqali) yuboriladi. Parol o'g'irlansa ham
+ * telefon qo'lda bo'lmasa kirib bo'lmaydi, kirish urinishi esa darhol
+ * egasiga ko'rinadi.
+ *
+ * Kodlar xotirada — sessiya tokeni xeshiga bog'langan. Server qayta
+ * ishga tushsa kod yo'qoladi va odam shunchaki qaytadan kiradi.
+ * TOTP yoqilgan hisobda Telegram ishlatilmaydi — ilova kuchliroq.
+ */
+const TG_CODE_TTL_MS = 5 * 60_000;
+const TG_CODE_MAX_ATTEMPTS = 5;
+const tgChallenges = new Map<string, { hash: string; expiresAt: number; attempts: number }>();
+
+function tgCodeHash(sessionKey: string, code: string): string {
+  return crypto.createHash('sha256').update(`${sessionKey}:${code}`).digest('hex');
+}
+
+/** Admin hisobining telefoni bilan bog'langan haqiqiy Telegram foydalanuvchisi */
+function adminTelegramId(phone: string | null): number | null {
+  if (!phone) return null;
+  const u = db
+    // users.phone ba'zan "+998…", ba'zan "998…" ko'rinishida saqlangan
+    .prepare(`SELECT telegram_id FROM users WHERE telegram_id > 0 AND phone IN (?, ?) ORDER BY id LIMIT 1`)
+    .get(phone.replace(/^\+/, ''), '+' + phone.replace(/^\+/, '')) as { telegram_id: number } | undefined;
+  return u?.telegram_id ?? null;
+}
+
+const escHtml = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function startTelegramChallenge(sessionKey: string, telegramId: number, ip: string | null, userAgent: string | null): void {
+  const now = Date.now();
+  for (const [k, v] of tgChallenges) if (v.expiresAt < now) tgChallenges.delete(k);
+
+  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+  tgChallenges.set(sessionKey, { hash: tgCodeHash(sessionKey, code), expiresAt: now + TG_CODE_TTL_MS, attempts: 0 });
+
+  const when = new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
+  const text =
+    `🔐 <b>KlinikaTop admin paneliga kirish kodi</b>\n\n` +
+    `<code>${code}</code>\n\n` +
+    `IP: ${escHtml(ip ?? 'noma’lum')}\n` +
+    `Qurilma: ${escHtml((userAgent ?? 'noma’lum').slice(0, 120))}\n` +
+    `Vaqt: ${when} (Toshkent)\n` +
+    `Kod 5 daqiqa amal qiladi.\n\n` +
+    `⚠️ Agar kirayotgan siz bo‘lmasangiz — kodni hech kimga bermang va parolni darhol almashtiring.`;
+
+  // Yuborib bo'lmasa sessiya yopiladi: kod kelmaydi, kirish ham ochilmaydi
+  void sendTelegramMessage(telegramId, text).then((sent) => {
+    if (!sent) {
+      tgChallenges.delete(sessionKey);
+      db.prepare(`DELETE FROM admin_sessions WHERE token = ?`).run(sessionKey);
+      console.warn('[admin-2fa] Telegram kodi yuborilmadi — sessiya yopildi');
+    }
+  });
+}
+
+/** true — Telegram kodi tekshirildi (to'g'ri). Kutilmayotgan bo'lsa null. */
+function checkTelegramCode(sessionKey: string, code: string): true | null {
+  const ch = tgChallenges.get(sessionKey);
+  if (!ch) return null;
+
+  const closeSession = () => {
+    tgChallenges.delete(sessionKey);
+    db.prepare(`DELETE FROM admin_sessions WHERE token = ?`).run(sessionKey);
+  };
+
+  if (Date.now() > ch.expiresAt) {
+    closeSession();
+    throw unauthorized('Kod eskirgan. Qaytadan kiring — yangi kod yuboriladi.');
+  }
+  const got = Buffer.from(tgCodeHash(sessionKey, String(code).trim()));
+  const want = Buffer.from(ch.hash);
+  if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) {
+    ch.attempts += 1;
+    if (ch.attempts >= TG_CODE_MAX_ATTEMPTS) {
+      closeSession();
+      throw unauthorized('Kod 5 marta noto‘g‘ri kiritildi. Qaytadan kiring.');
+    }
+    throw unauthorized(`Kod noto‘g‘ri. Yana ${TG_CODE_MAX_ATTEMPTS - ch.attempts} ta urinish qoldi.`);
+  }
+  tgChallenges.delete(sessionKey);
+  return true;
+}
+
+export const _adminTelegram2faTesting = { tgChallenges, tgCodeHash };
 
 export function login(
   phoneOrEmail: string,
@@ -338,7 +433,21 @@ export function login(
     .slice(0, 19)
     .replace('T', ' ');
 
-  const mfaRequired = row.totp_enabled === 1;
+  /*
+   * TOTP yoqilgan — ilova kodi. Aks holda admin paneli uchun Telegram
+   * kodi (agar hisob telefoni Telegram foydalanuvchisiga bog'langan
+   * bo'lsa). Bog'lanmagan admin hisobi avvalgidek kiradi — uni
+   * qulflab qo'yish yagona administratorni tashqarida qoldirishi mumkin.
+   */
+  const tgId =
+    row.totp_enabled !== 1 && scope === 'admin' && config.telegram.adminTelegram2fa && config.telegram.botToken
+      ? adminTelegramId(row.phone)
+      : null;
+  if (row.totp_enabled !== 1 && scope === 'admin' && !tgId) {
+    console.warn(`[admin-2fa] admin #${row.id}: Telegram bog'lanmagan yoki o'chirilgan — kod so'ralmadi`);
+  }
+  const mfaMethod: MfaMethod | undefined = row.totp_enabled === 1 ? 'totp' : tgId ? 'telegram' : undefined;
+  const mfaRequired = mfaMethod !== undefined;
 
   db.prepare(
     `INSERT INTO admin_sessions (token, admin_id, ip, user_agent, expires_at, mfa_passed, ttl_hours, scope)
@@ -353,6 +462,8 @@ export function login(
     ttlHours,
     scope,
   );
+
+  if (mfaMethod === 'telegram' && tgId) startTelegramChallenge(tokenHash(token), tgId, ip, userAgent);
 
   /*
    * Admin panelga kirish IZ QOLDIRADI.
@@ -375,7 +486,7 @@ export function login(
     );
   }
 
-  return { token, user: mapWebUser(row), mfaRequired };
+  return { token, user: mapWebUser(row), mfaRequired, mfaMethod };
 }
 
 /**
@@ -696,6 +807,12 @@ export function confirmTotp(userId: number, code: string): void {
 export function passMfa(token: string, code: string): void {
   const session = resolveSession(token);
   if (!session) throw unauthorized('Sessiya topilmadi');
+
+  // Telegram kodi kutilayotgan sessiya — o'shani tekshiramiz
+  if (checkTelegramCode(tokenHash(token), code)) {
+    db.prepare(`UPDATE admin_sessions SET mfa_passed = 1 WHERE token = ?`).run(tokenHash(token));
+    return;
+  }
 
   const row = db.prepare(`SELECT totp_secret FROM admin_users WHERE id = ?`).get(session.user.id) as any;
   if (!row?.totp_secret || !verifyTotp(row.totp_secret, code)) throw unauthorized('Kod noto‘g‘ri');

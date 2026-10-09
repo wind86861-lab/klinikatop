@@ -1,0 +1,41 @@
+---
+/**
+ * Hero — antigravity.google tuzilishida: kichik logo, ikki qatorli
+ * sarlavha, bitta qisqa matn, ikki tugma. Ortiqcha hech narsa yo'q —
+ * ko'zni zarrachalar maydoni va sarlavha ushlab turadi.
+ */
+import Icon from './Icon.astro';
+import { site } from '../site';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+}
+const { t } = Astro.props;
+const h = t.home.hero;
+---
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero__fx" aria-hidden="true">
+    <canvas class="fx-canvas" data-fx="light"></canvas>
+  </div>
+
+  <div class="wrap hero__in">
+    <div class="hero__lockup" data-reveal>
+      <img src="/logo.svg" alt="" width="34" height="39" />
+      <span>Klinika<b>Top</b></span>
+    </div>
+
+    <h1 id="hero-title" class="h-display hero__title" data-split>{h.title}</h1>
+
+    <p class="lead hero__lead" data-reveal style="--d:4">{h.lead}</p>
+
+    <div class="hero__ctas" data-reveal style="--d:5">
+      <a class="btn btn--dark" href={site.appPath} data-bot>
+        <Icon name="telegram" size={20} />
+        {h.primary}
+      </a>
+      <a class="btn btn--soft" href="#qanday">{h.secondary}</a>
+    </div>
+  </div>
+</section>

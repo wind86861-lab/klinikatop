@@ -42,12 +42,13 @@
 
       Endi u `print` sifatida yuklanadi (brauzer kutmaydi), kelgach
       `all` ga o'tadi. Tizim shrifti bilan matn darhol ko'rinadi.
+      O'tkazishni `/theme-boot.js` qiladi: CSP inline `onload` ni taqiqlaydi.
     -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
+      id="font-css"
       rel="stylesheet"
       media="print"
-      onload="this.media='all'"
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
     />
 
@@ -112,37 +113,8 @@
       keyin qorong'iga sakrardi. Mantiq `lib/theme.ts` dagi bilan bir
       xil bo'lishi SHART — u yerda o'zgarsa, bu yerda ham o'zgarsin.
     -->
-    <script>
-      (function () {
-        try {
-          var saved = localStorage.getItem('klinikatop.theme') || 'light';
-          var actual = saved;
-          if (saved === 'auto') {
-            /*
-              Ko'prik `defer` bilan yuklanadi, ya'ni SHU YERDA u hali
-              yo'q — va shunday bo'lishi kerak, aks holda u yana
-              render'ni to'sardi. Shuning uchun bu yerda tizim
-              sozlamasiga tayanamiz; Telegram aytgan aniq rangni esa
-              `main.tsx` ko'prik yuklangach qo'yadi.
-
-              Farq faqat "auto" tanlagan va Telegram mavzusi tizim
-              mavzusidan BOSHQA bo'lgan odamda sezilishi mumkin —
-              bir lahzalik. Bir yarim soniya oq ekrandan arzonroq.
-            */
-            var tg = window.Telegram && window.Telegram.WebApp;
-            if (tg && !tg.initData) tg = null;
-            actual = tg && tg.colorScheme
-              ? (tg.colorScheme === 'dark' ? 'dark' : 'light')
-              : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-          }
-          document.documentElement.setAttribute('data-theme', actual);
-          var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', actual === 'dark' ? '#0c1817' : '#eaf0ee');
-        } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'light');
-        }
-      })();
-    </script>
+    <!-- CSP: inline skript taqiqlangan, shuning uchun alohida fayl (sinxron — bo'yashdan oldin) -->
+    <script src="/theme-boot.js"></script>
   </head>
   <body>
     <div id="root">

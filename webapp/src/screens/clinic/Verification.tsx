@@ -638,7 +638,8 @@ export function ClinicReferral() {
   const [next, setNext] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const on = next ?? res.data?.clinic.acceptsReferral ?? true;
+  // Sukut — O'CHIQ: yo'llanma faqat klinika o'zi yoqsa keladi
+  const on = next ?? res.data?.clinic.acceptsReferral ?? false;
   const dirty = next !== null && next !== res.data?.clinic.acceptsReferral;
 
   const save = async () => {

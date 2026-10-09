@@ -1,0 +1,196 @@
+---
+/**
+ * Bemor kirishi va ro'yxatdan o'tishi — Telegramsiz.
+ *
+ * Bitta sahifa, uch qadam: telefon → kod → profil. Hisob KOD
+ * tasdiqlanganda yaratiladi (server: `verifyLoginCode`), ya'ni
+ * raqam terib chiqib ketgan odam bazada bo'sh yozuv qoldirmaydi.
+ * Profil to'la bo'lsa uchinchi qadam o'tkazib yuboriladi — bu
+ * sahifa oddiy "kirish" bo'lib ham ishlaydi.
+ *
+ * Mantiq: `scripts/auth.ts`. Sahifa statik, lekin JS'siz ishlamaydi —
+ * bu kutilgan: kod yuborish baribir server bilan gaplashishni talab qiladi.
+ */
+import Layout from '../layouts/Layout.astro';
+import Header from './Header.astro';
+import Icon from './Icon.astro';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+}
+const { t } = Astro.props;
+const a = t.auth;
+const thisYear = new Date().getFullYear();
+---
+
+<Layout t={t} title={a.meta.title} description={a.meta.description} path={t.paths.auth} altPath={t.alt.auth}>
+  <Header t={t} page="auth" />
+
+  <main id="main" class="auth">
+    <div class="hero__fx auth__fx" aria-hidden="true">
+      <canvas class="fx-canvas" data-fx="light"></canvas>
+    </div>
+
+    <div class="wrap auth__grid">
+      <section class="auth__pitch">
+        {/* Tiklash rejimida (?tiklash=1) matnni skript almashtiradi */}
+        <span class="eyebrow" data-reveal data-reset-text={a.reset.eyebrow}>{a.eyebrow}</span>
+        <h1 class="h-section" data-reset-text={a.reset.title}>{a.title}</h1>
+        <p class="lead" data-reveal style="--d:3" data-reset-text={a.reset.lead}>{a.lead}</p>
+        <ul class="auth__points" role="list">
+          {
+            a.points.map((p, i) => (
+              <li data-reveal style={`--d:${4 + i}`}>
+                <Icon name="check" size={18} />
+                {p}
+              </li>
+            ))
+          }
+        </ul>
+      </section>
+
+      <section class="auth__card" data-reveal style="--d:2" data-auth data-lang={t.lang} data-login={t.paths.login} aria-live="polite">
+        <ol class="auth__steps" role="list" aria-hidden="true">
+          {a.steps.map((s, i) => <li data-step-dot={i}><span>{i + 1}</span>{s}</li>)}
+        </ol>
+
+        <!-- 1. Telefon -->
+        <form class="auth__step is-active" data-step="phone" novalidate>
+          <h2 class="auth__title">{a.phone.title}</h2>
+          <p class="auth__sub">{a.phone.sub}</p>
+          <label class="auth__field">
+            <span>{a.phone.label}</span>
+            <input
+              name="phone"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              placeholder="+998 90 123 45 67"
+              value="+998 "
+              required
+            />
+          </label>
+          <button class="btn btn--dark auth__submit" type="submit">
+            {a.phone.submit} <Icon name="arrow" size={18} />
+          </button>
+          <p class="auth__fine">{a.terms}</p>
+        </form>
+
+        <!-- 2. Kod -->
+        <form class="auth__step" data-step="code" novalidate>
+          <h2 class="auth__title">{a.code.title}</h2>
+          <p class="auth__sub" data-code-sub data-sms={a.code.subSms} data-tg={a.code.subTg}></p>
+          <label class="auth__field">
+            <span>{a.code.label}</span>
+            <input
+              class="auth__otp"
+              name="code"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              placeholder="••••••"
+              required
+            />
+          </label>
+          <button class="btn btn--dark auth__submit" type="submit">{a.code.submit}</button>
+          <div class="auth__row">
+            <button class="auth__link" type="button" data-resend data-label={a.code.resend} data-wait={a.code.resendIn}></button>
+            <button class="auth__link" type="button" data-back>{a.code.change}</button>
+          </div>
+        </form>
+
+        <!-- 3. Parol -->
+        <form class="auth__step" data-step="password" novalidate>
+          <h2 class="auth__title" data-reset-text={a.reset.passwordTitle}>{a.password.title}</h2>
+          <p class="auth__sub">{a.password.sub}</p>
+          <label class="auth__field">
+            <span>{a.password.label}</span>
+            <input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" required />
+          </label>
+          <label class="auth__field">
+            <span>{a.password.repeat}</span>
+            <input name="password2" type="password" autocomplete="new-password" minlength="8" maxlength="200" required />
+          </label>
+          <label class="auth__check">
+            <input type="checkbox" data-show-password />
+            <span>{a.password.show}</span>
+          </label>
+          <p class="auth__fine" style="text-align:left">{a.password.hint}</p>
+          <button class="btn btn--dark auth__submit" type="submit" data-mismatch={a.password.mismatch}>{a.password.submit}</button>
+        </form>
+
+        <!-- 4. Profil -->
+        <form class="auth__step" data-step="profile" novalidate>
+          <h2 class="auth__title">{a.profile.title}</h2>
+          <p class="auth__sub">{a.profile.sub}</p>
+          <div class="auth__two">
+            <label class="auth__field">
+              <span>{a.profile.firstName}</span>
+              <input name="firstName" autocomplete="given-name" maxlength="80" required />
+            </label>
+            <label class="auth__field">
+              <span>{a.profile.lastName}</span>
+              <input name="lastName" autocomplete="family-name" maxlength="80" required />
+            </label>
+          </div>
+          <label class="auth__field">
+            <span>{a.profile.city}</span>
+            <select name="cityId" required data-cities>
+              <option value="">{a.profile.cityPick}</option>
+            </select>
+          </label>
+          <div class="auth__two">
+            <label class="auth__field">
+              <span>{a.profile.birthYear}</span>
+              <input
+                name="birthYear"
+                type="number"
+                inputmode="numeric"
+                min={thisYear - 110}
+                max={thisYear - 1}
+                placeholder="1990"
+                required
+              />
+            </label>
+            <fieldset class="auth__field auth__gender">
+              <legend>{a.profile.gender}</legend>
+              <div>
+                <label><input type="radio" name="gender" value="male" required /><span>{a.profile.male}</span></label>
+                <label><input type="radio" name="gender" value="female" /><span>{a.profile.female}</span></label>
+              </div>
+            </fieldset>
+          </div>
+          <button class="btn btn--dark auth__submit" type="submit">{a.profile.submit}</button>
+        </form>
+
+        <!-- SMS ishlamasa -->
+        <div class="auth__step" data-step="nosms">
+          <h2 class="auth__title">{a.noSms.title}</h2>
+          <p class="auth__sub">{a.noSms.text}</p>
+          <a class="btn btn--dark auth__submit" href="/app" data-bot>
+            <Icon name="telegram" size={20} /> {a.noSms.cta}
+          </a>
+          <button class="auth__link" type="button" data-back>{a.code.change}</button>
+        </div>
+
+        <!-- Tayyor -->
+        <div class="auth__step auth__done" data-step="done">
+          <span class="success__icon"><Icon name="check" /></span>
+          <p class="auth__title">{a.done}</p>
+        </div>
+
+        <p class="auth__error" role="alert" data-error data-fallback={a.error} hidden></p>
+
+        <div class="auth__alt">
+          <span class="auth__switch">{a.haveAccount} <a href={t.paths.login}>{a.loginLink}</a></span>
+          <a href="/app" data-bot><Icon name="telegram" size={18} /> {a.telegramAlt}</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    import '../scripts/auth';
+  </script>
+</Layout>

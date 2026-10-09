@@ -66,6 +66,8 @@ export function CabinetLogin({ scope = 'clinic' }: { scope?: LoginScope }) {
   const [code, setCode] = useState('');
   /** Parol to'g'ri kelgan, lekin 2FA kutilyapti */
   const [pending, setPending] = useState<string | null>(null);
+  /** Kod qayerdan keladi: Telegram (bot) yoki autentifikatsiya ilovasi */
+  const [mfaMethod, setMfaMethod] = useState<'totp' | 'telegram'>('totp');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,7 +93,11 @@ export function CabinetLogin({ scope = 'clinic' }: { scope?: LoginScope }) {
     setError(null);
     try {
       const res = await post('/login', { login: login.trim(), password, scope });
-      if (res.mfaRequired) setPending(res.token);
+      if (res.mfaRequired) {
+        setMfaMethod(res.mfaMethod === 'telegram' ? 'telegram' : 'totp');
+        setCode('');
+        setPending(res.token);
+      }
       else {
         setWebToken(res.token);
         enter();
@@ -112,6 +118,11 @@ export function CabinetLogin({ scope = 'clinic' }: { scope?: LoginScope }) {
       setWebToken(pending);
       enter();
     } catch (err: any) {
+      // Kod eskirgan yoki urinishlar tugagan — sessiya yopildi, parolga qaytamiz
+      if (/eskirgan|5 marta/.test(err?.message ?? '')) {
+        setPending(null);
+        setCode('');
+      }
       setError(err.message);
     } finally {
       setBusy(false);
@@ -183,7 +194,11 @@ export function CabinetLogin({ scope = 'clinic' }: { scope?: LoginScope }) {
         ) : (
           <>
             <h1 className="wa__title">Tasdiqlash kodi</h1>
-            <p className="wa__sub">Autentifikatsiya ilovangizdagi 6 xonali kodni kiriting</p>
+            <p className="wa__sub">
+              {mfaMethod === 'telegram'
+                ? 'Kod Telegram’ingizga — KlinikaTop botiga yuborildi. 6 xonali kodni kiriting (5 daqiqa amal qiladi).'
+                : 'Autentifikatsiya ilovangizdagi 6 xonali kodni kiriting'}
+            </p>
 
             <form
               className="wa__form"
@@ -208,6 +223,20 @@ export function CabinetLogin({ scope = 'clinic' }: { scope?: LoginScope }) {
                 Tasdiqlash
               </Button>
             </form>
+
+            <p className="wa__fine">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setPending(null);
+                  setCode('');
+                  setError(null);
+                }}
+              >
+                ↩ Orqaga — qaytadan kirish
+              </a>
+            </p>
           </>
         )}
       </m.div>

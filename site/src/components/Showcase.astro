@@ -1,0 +1,104 @@
+---
+/**
+ * Hero ostidagi 2-bo'lim — antigravity.google'dagi `landing-video-section`.
+ *
+ * Ularning mexanikasi (kodidan o'qilgan): bo'lim ekran pastidan kirganda
+ * 50% o'lchamda, tepasi ekran o'rtasiga yetguncha aylantirish bilan
+ * 100% gacha kattalashadi (silliq, ~1 s kechikib). Ichida ovozsiz
+ * takrorlanuvchi video; kursor ustiga kelsa "▶ Play intro" yorlig'i
+ * sakrab chiqib ergashadi; bosilsa to'liq video modal oynada ochiladi.
+ *
+ * Bu yerda xuddi shu, kutubxonasiz (`scripts/main.ts` → `intro()`):
+ *   • takrorlanuvchi video — admin "Sayt media" → `hero-loop` (mp4)
+ *   • bosilganda — `video-home` YouTube videosi
+ *   • video yuklanmaguncha ramkada ilova namunasi (mock) turadi —
+ *     bo'lim hech qachon bo'sh ko'rinmaydi
+ */
+import Slot from './Slot.astro';
+import Icon from './Icon.astro';
+import { mocks } from '../i18n/mocks';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+}
+const { t } = Astro.props;
+const m = mocks[t.lang];
+const offers = [
+  { l: 'A', c: '#0fb39e', price: '690 000', r: '4.9', d: 1, best: true },
+  { l: 'B', c: '#4f7cff', price: '750 000', r: '4.7', d: 2, best: false },
+  { l: 'C', c: '#f5a524', price: '820 000', r: '4.8', d: 1, best: false },
+];
+---
+
+<section class="intro" data-intro aria-label={t.home.video.title}>
+  <div class="wrap intro__wrap">
+    <div class="intro__scaler" data-intro-scaler>
+      <div class="intro__frame" data-intro-frame data-video="video-home" aria-label={`${t.common.watch}: ${t.home.video.title}`}>
+    <div class="showcase__stage" aria-hidden="true">
+      <div class="showcase__grid">
+        <div class="mock">
+          <div class="mock__bar">{m.request} <span class="mock__tag mock__tag--muted">{t.common.sample}</span></div>
+          <div class="mock__field"><small>{m.service}</small><b>{m.serviceValue}</b></div>
+          <div class="mock__field"><small>{m.city}</small><b>{m.cityValue}</b></div>
+          <div class="mock__field"><small>{m.budget}</small><b>{m.budgetValue}</b></div>
+          <div class="mock__btn">{m.send}</div>
+        </div>
+
+        <Slot id="hero-app" size="1600×1000" class="mock showcase__main" eager alt={t.home.meta.title}>
+          <div class="mock__bar">
+            {m.offers}
+            <span class="mock__tag">{m.offersCount}</span>
+          </div>
+          {
+            offers.map((o) => (
+              <div class={`offer ${o.best ? 'offer--best' : ''}`}>
+                <span class="offer__logo" style={`--c:${o.c}`}>{o.l}</span>
+                <span>
+                  <span class="offer__name">{m.clinic(o.l)}</span>
+                  <span class="offer__meta">
+                    <span class="stars">★</span> {o.r} · {m.days(o.d)}
+                  </span>
+                </span>
+                <span class="offer__price">
+                  {o.price} <small>{m.sum}</small>
+                </span>
+              </div>
+            ))
+          }
+          <div class="tags" style="margin-top:6px">
+            {m.includesList.map((x) => <span>✓ {x}</span>)}
+          </div>
+        </Slot>
+
+        <div class="mock">
+          <div class="mock__bar">{m.market}</div>
+          <div class="market" style="box-shadow:none;padding:0">
+            <div class="market__bar"><span class="market__pin"></span></div>
+            <div class="market__legend"><span>{m.cheap}</span><span>{m.avg}</span><span>{m.high}</span></div>
+          </div>
+          <div class="mock__field" style="margin-top:14px">
+            <small>{m.rating} · {m.clinic('A')}</small>
+            <b><span class="stars">★★★★★</span> 4.9</b>
+          </div>
+          <div class="mock__field">
+            <small>{m.includes}</small>
+            <b style="display:flex;gap:6px;align-items:center"><Icon name="shield" size={16} /> {m.includesList[0]}</b>
+          </div>
+        </div>
+      </div>
+    </div>
+
+        <video class="intro__video" data-loop="hero-loop" muted loop playsinline preload="none" aria-hidden="true"></video>
+        <span class="intro__pill" aria-hidden="true"><i><Icon name="play" size={12} /></i>{t.common.watch}</span>
+        <span class="intro__cursor" aria-hidden="true"><i><Icon name="play" size={12} /></i>{t.common.watch}</span>
+        <span class="slot__label">hero-loop · video-home</span>
+      </div>
+    </div>
+  </div>
+
+  <dialog class="ytm" data-ytm aria-label={t.home.video.title}>
+    <button class="ytm__close" type="button" data-ytm-close aria-label="×">×</button>
+    <div class="ytm__frame" data-ytm-frame></div>
+  </dialog>
+</section>

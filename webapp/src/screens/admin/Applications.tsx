@@ -14,7 +14,7 @@
 import { useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useApp } from '@/store/app';
-import { api, type ClinicApplication } from '@/lib/api';
+import { api, fetchApplicationLicense, type ClinicApplication } from '@/lib/api';
 import { haptic } from '@/lib/telegram';
 import { popVariants, spring } from '@/lib/motion';
 import { formatDate } from '@/lib/format';
@@ -34,6 +34,23 @@ export function Applications() {
   const [busy, setBusy] = useState(false);
   /** Yangi berilgan kod — bir marta ko'rsatiladi */
   const [issued, setIssued] = useState<ClinicApplication | null>(null);
+
+  /*
+   * Fayl sessiya sarlavhasi bilan olinadi, shuning uchun oddiy havola
+   * ishlamaydi. Oyna BOSISH paytida ochiladi (aks holda brauzer uni
+   * "popup" deb to'sadi), manzil esa fayl kelgach qo'yiladi.
+   */
+  const openLicense = async (id: number) => {
+    const win = window.open('', '_blank');
+    try {
+      const url = await fetchApplicationLicense(id);
+      if (win) win.location.href = url;
+      else window.location.assign(url);
+    } catch (err: any) {
+      win?.close();
+      toast(err?.message ?? 'Litsenziyani ochib bo‘lmadi', 'error');
+    }
+  };
 
   const approve = async (app: ClinicApplication) => {
     setBusy(true);
@@ -120,6 +137,16 @@ export function Applications() {
                     <div className="app-row">
                       <span className="tiny">{t('app.license')}</span>
                       <strong className="num">{app.licenseNo}</strong>
+                    </div>
+                    <div className="app-row">
+                      <span className="tiny">Litsenziya fayli</span>
+                      {app.licenseFile ? (
+                        <button type="button" className="link-btn" onClick={() => openLicense(app.id)}>
+                          Ochish ({app.licenseFile.mime === 'application/pdf' ? 'PDF' : 'rasm'})
+                        </button>
+                      ) : (
+                        <span className="tiny">yuklanmagan</span>
+                      )}
                     </div>
                     <div className="app-row">
                       <span className="tiny">{t('app.contact')}</span>

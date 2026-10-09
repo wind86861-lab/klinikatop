@@ -111,3 +111,48 @@ export async function sendTelegramMessage(
     return false;
   }
 }
+
+export interface TgInlineButton {
+  text: string;
+  callback_data?: string;
+  web_app?: { url: string };
+  url?: string;
+}
+
+/**
+ * Tugmali xabar (bir nechta qator). `sendTelegramMessage` faqat bitta
+ * havola tugmasini beradi — tavsiyada esa sana tugmalari kerak.
+ * Xato istisno tashlamaydi: xabar ketmasa ham asosiy amal bekor bo'lmaydi.
+ */
+export async function sendTelegramKeyboard(
+  chatId: number,
+  text: string,
+  rows: TgInlineButton[][],
+): Promise<boolean> {
+  return telegramCall('sendMessage', {
+    chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: rows },
+  });
+}
+
+/** Telegram Bot API chaqiruvi — token bo'lmasa (lokal/test) jim o'tadi */
+export async function telegramCall(method: string, body: unknown): Promise<boolean> {
+  if (!config.telegram.botToken) return false;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${config.telegram.botToken}/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const data = (await res.json().catch(() => ({ ok: false }))) as { ok: boolean; description?: string };
+    if (!data.ok) console.warn(`[telegram] ${method}: ${data.description ?? res.status}`);
+    return data.ok;
+  } catch (err) {
+    console.warn(`[telegram] ${method} tarmoq xatosi`, err);
+    return false;
+  }
+}

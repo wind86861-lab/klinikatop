@@ -9,6 +9,7 @@
  * o'ylab topilgan bosqich yo'q. Shuning uchun taxta hech qachon haqiqatdan
  * ajralib qolmaydi.
  */
+import { autoGrow } from '@/lib/keyboard';
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, m } from 'framer-motion';
 import { useNavigate, useParams } from '@/lib/router';
@@ -318,6 +319,11 @@ export function ClinicChat() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Yuborilgach maydon yana bir qatorga qaytadi
+  useEffect(() => {
+    if (!draft && inputRef.current) inputRef.current.style.height = '';
+  }, [draft]);
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -371,6 +377,8 @@ export function ClinicChat() {
         <div className="ai-composer">
           <textarea
             className="composer__input"
+            ref={inputRef}
+            onInput={(e) => autoGrow(e.currentTarget)}
             rows={1}
             value={draft}
             placeholder={t('chat.placeholder')}

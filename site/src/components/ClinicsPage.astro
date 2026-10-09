@@ -1,0 +1,258 @@
+---
+/**
+ * Klinikalar uchun sahifa (`/klinikalar-uchun/`, `/ru/dlya-klinik/`).
+ *
+ * Bu sahifaning vazifasi — taklif tomonini to'ldirish: hozir so'rovlarning
+ * ko'pi hech bir klinikaga yetmayapti. Shuning uchun har ekranda bitta
+ * asosiy harakat bor: "Klinikani ulash" → /klinika.
+ */
+import Layout from '../layouts/Layout.astro';
+import Header from './Header.astro';
+import Footer from './Footer.astro';
+import Video from './Video.astro';
+import Faq from './Faq.astro';
+import Slot from './Slot.astro';
+import Icon from './Icon.astro';
+import { site } from '../site';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+}
+const { t } = Astro.props;
+const c = t.clinics;
+const whyIcons = ['users', 'clock', 'scale', 'chart'] as const;
+
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: c.faq.items.map((it) => ({
+    '@type': 'Question',
+    name: it.q,
+    acceptedAnswer: { '@type': 'Answer', text: it.a },
+  })),
+};
+const breadcrumb = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'KlinikaTop', item: new URL(t.paths.home, site.url).href },
+    { '@type': 'ListItem', position: 2, name: t.nav.clinics, item: new URL(t.paths.clinics, site.url).href },
+  ],
+};
+const ru = t.lang === 'ru';
+const requests = [
+  { l: 'M', c: '#0fb39e', t: ru ? 'МРТ — головной мозг' : 'MRT — bosh miya', m: ru ? 'Ташкент · 600–900 тыс.' : 'Toshkent · 600–900 ming', s: ru ? 'Новая' : 'Yangi', blue: false },
+  { l: 'L', c: '#4f7cff', t: ru ? 'Лапароскопия' : 'Laparoskopiya', m: ru ? 'Ташкент · по цене клиники' : 'Toshkent · klinika narxi', s: ru ? 'Предложение' : 'Taklif', blue: true },
+  { l: 'Q', c: '#f5a524', t: ru ? 'Анализ крови' : 'Qon tahlili', m: ru ? 'Ташкент · 12 показателей' : 'Toshkent · 12 ko‘rsatkich', s: ru ? 'Новая' : 'Yangi', blue: false },
+  { l: 'K', c: '#e0457b', t: ru ? 'Катаракта' : 'Katarakta', m: ru ? 'Ташкент · срочно' : 'Toshkent · shoshilinch', s: ru ? 'Сделка' : 'Bitim', blue: true },
+];
+const board = [
+  { title: ru ? 'Новые' : 'Yangi', n: 3, items: [ru ? 'МРТ — мозг' : 'MRT — bosh miya', ru ? 'Анализ крови' : 'Qon tahlili'] },
+  { title: ru ? 'Предложение' : 'Taklif', n: 2, items: [ru ? 'Лапароскопия' : 'Laparoskopiya'] },
+  { title: ru ? 'Сделки' : 'Bitim', n: 4, items: [ru ? 'УЗИ брюшной полости' : 'Qorin UZI', ru ? 'Катаракта' : 'Katarakta'] },
+];
+---
+
+<Layout
+  t={t}
+  title={c.meta.title}
+  description={c.meta.description}
+  path={t.paths.clinics}
+  altPath={t.alt.clinics}
+  schema={[faqSchema, breadcrumb]}
+>
+  <Header t={t} page="clinics" />
+
+  <main id="main">
+    <section class="hero hero--clinic" aria-labelledby="hero-title">
+      <div class="hero__fx" aria-hidden="true">
+        <div class="fx-fallback"></div>
+        <canvas class="fx-canvas" data-fx="light"></canvas>
+        <div class="hero__fade"></div>
+      </div>
+      <div class="wrap hero__split">
+        <div class="hero__in">
+          <span class="eyebrow" data-reveal>{c.hero.eyebrow}</span>
+          <h1 id="hero-title" class="h-display hero__title" data-split>{c.hero.title}</h1>
+          <p class="lead hero__lead" data-reveal style="--d:3">{c.hero.lead}</p>
+          <div class="hero__ctas" data-reveal style="--d:4">
+            <a class="btn btn--dark" href={site.clinicSignupPath}>{c.hero.primary} <Icon name="arrow" size={18} /></a>
+            <a class="btn btn--ghost" href={site.cabinetPath} rel="nofollow">{c.hero.secondary}</a>
+          </div>
+          <ul class="chips hero__chips" data-reveal style="--d:5" role="list">
+            {c.hero.chips.map((x) => <li class="chip"><Icon name="check" size={16} />{x}</li>)}
+          </ul>
+        </div>
+
+        <Slot id="clinic-hero" size="1400×1000" class="mock" alt={c.cabinet.title} eager>
+          <div data-reveal style="--d:3">
+            <div class="mock__bar">
+              {ru ? 'Кабинет клиники' : 'Klinika kabineti'}
+              <span class="mock__tag mock__tag--muted">{t.common.sample}</span>
+            </div>
+            <div class="board">
+              {
+                board.map((col) => (
+                  <div class="board__col">
+                    <b>{col.title} <span>{col.n}</span></b>
+                    {col.items.map((x, i) => (
+                      <div class="ticket">
+                        <b>{x}</b>
+                        <small>{ru ? 'Ташкент' : 'Toshkent'}</small>
+                        <div class="bar"><i style={`--w:${40 + i * 30}%`} /></div>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        </Slot>
+      </div>
+    </section>
+
+    <!-- Afzalliklar -->
+    <section class="section" aria-labelledby="why-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow" data-reveal>{c.why.eyebrow}</span>
+          <h2 id="why-title" class="h-section" data-split>{c.why.title}</h2>
+        </div>
+        <div class="cards">
+          {
+            c.why.items.map((b, i) => (
+              <article class="card" data-reveal style={`--d:${i}`}>
+                <span class="card__num">0{i + 1}</span>
+                <span class="card__icon"><Icon name={whyIcons[i]} /></span>
+                <h3 class="h-card">{b.title}</h3>
+                <p>{b.text}</p>
+              </article>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Jarayon -->
+    <section class="section section--tint" id="qanday" aria-labelledby="flow-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow" data-reveal>{c.flow.eyebrow}</span>
+          <h2 id="flow-title" class="h-section" data-split>{c.flow.title}</h2>
+        </div>
+        <div class="flow" role="list">
+          <span class="flow__line" aria-hidden="true"></span>
+          {
+            c.flow.items.map((f, i) => (
+              <div class="flow__item" role="listitem" data-reveal style={`--d:${i}`}>
+                <span class="flow__dot">0{i + 1}</span>
+                <h3>{f.title}</h3>
+                <p>{f.text}</p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Kabinet suratlari -->
+    <section class="section" aria-labelledby="cabinet-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow" data-reveal>{c.cabinet.eyebrow}</span>
+          <h2 id="cabinet-title" class="h-section" data-split>{c.cabinet.title}</h2>
+          <p class="lead" data-reveal style="--d:3">{c.cabinet.text}</p>
+        </div>
+        <div class="shots">
+          {
+            c.cabinet.shots.map((cap, i) => (
+              <Slot id={`cabinet-${i + 1}`} size="1600×1000" class="shot" tag="figure" alt={cap}>
+                <div class="shot__mock" aria-hidden="true">
+                  {i === 0 &&
+                    requests.map((r) => (
+                      <div class="mini-row">
+                        <span class="offer__logo" style={`--c:${r.c}`}>{r.l}</span>
+                        <span>
+                          <b>{r.t}</b>
+                          <small>{r.m}</small>
+                        </span>
+                        <span class={`mock__tag ${r.blue ? 'mock__tag--blue' : ''}`}>{r.s}</span>
+                      </div>
+                    ))}
+                  {i === 1 && (
+                    <div class="mock" style="box-shadow:none">
+                      <div class="mock__field"><small>{ru ? 'Цена' : 'Narx'}</small><b>690 000 {ru ? 'сум' : 'so‘m'}</b></div>
+                      <div class="tags">{(ru ? ['Заключение', 'Контраст', 'Диск'] : ['Xulosa', 'Kontrast', 'Disk']).map((x) => <span>✓ {x}</span>)}</div>
+                      <div class="mock__btn">{ru ? 'Отправить предложение' : 'Taklif yuborish'}</div>
+                    </div>
+                  )}
+                  {i === 2 && (
+                    <div class="cal">
+                      {Array.from({ length: 28 }, (_, d) => (
+                        <span class={[3, 9, 10, 16, 22].includes(d) ? 'is-busy' : d === 12 ? 'is-today' : ''}>{d + 1}</span>
+                      ))}
+                    </div>
+                  )}
+                  {i === 3 && (
+                    <div class="chart">
+                      {[38, 52, 44, 66, 58, 74, 88].map((h) => (
+                        <i style={`--h:${h}%`} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <figcaption>{cap}</figcaption>
+              </Slot>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Shartlar -->
+    <section class="section section--tint" aria-labelledby="pricing-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow" data-reveal>{c.pricing.eyebrow}</span>
+          <h2 id="pricing-title" class="h-section" data-split>{c.pricing.title}</h2>
+        </div>
+        <div class="pricing">
+          {
+            c.pricing.items.map((p, i) => (
+              <div class="price" data-reveal style={`--d:${i}`}>
+                <span class="price__value">{p.value}</span>
+                <span class="price__title">{p.title}</span>
+                <p>{p.text}</p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <Video t={t} id="video-clinic" eyebrow={c.video.eyebrow} title={c.video.title} text={c.video.text} />
+
+    <Faq eyebrow={c.faq.eyebrow} title={c.faq.title} items={c.faq.items}>
+      <a class="btn btn--dark" href={site.clinicSignupPath} data-reveal style="--d:4;justify-self:start">
+        {c.hero.primary} <Icon name="arrow" size={18} />
+      </a>
+    </Faq>
+
+    <section class="section" style="padding-top:0;padding-bottom:clamp(40px,6vw,80px)" aria-labelledby="final-title">
+      <div class="wrap">
+        <div class="final" data-reveal>
+          <img src="/logo-light.svg" alt="" width="72" height="84" />
+          <h2 id="final-title" class="h-section">{c.cta.title}</h2>
+          <p class="lead">{c.cta.text}</p>
+          <div class="hero__ctas">
+            <a class="btn btn--light" href={site.clinicSignupPath}>{c.hero.primary} <Icon name="arrow" size={18} /></a>
+            <a class="btn btn--line-light" href={site.cabinetPath} rel="nofollow">{c.hero.secondary}</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <Footer t={t} />
+</Layout>

@@ -1,3 +1,4 @@
+import { activeBanners } from '../services/appBanners';
 import { Router } from 'express';
 import {
   catalogTree,
@@ -20,6 +21,8 @@ import { listLabOrgans, listLabTests } from '../services/labOrgans';
 export const catalogRouter = Router();
 
 catalogRouter.get('/cities', (_req, res) => res.json(listCities()));
+// Bosh sahifa bannerlari — ochiq, faqat yoqilganlari
+catalogRouter.get('/banners', (_req, res) => res.json(activeBanners()));
 catalogRouter.get('/categories', (_req, res) => res.json(listCategories()));
 
 /**

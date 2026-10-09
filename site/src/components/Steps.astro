@@ -1,0 +1,184 @@
+---
+/**
+ * "5 bosqichda to'g'ri tanlov" — aylantirish bilan boshqariladigan hikoya.
+ *
+ * Bo'lim baland (5 × 85vh) va ichida yopishqoq (sticky) ekran turadi.
+ * Aylantirilgan sari:
+ *   • chapdagi chiziq to'ladi, faol bosqich ochiladi (matn va teglar)
+ *   • o'ngdagi telefonda shu bosqich sahnasi paydo bo'ladi, oldingisi
+ *     yuqoriga ketadi; sahna ichidagi elementlar ketma-ket chiqadi
+ *   • orqadagi nur aylanadi
+ *
+ * JS'siz yoki "harakatni kamaytirish" yoqilganda — oddiy ro'yxat,
+ * hamma matn ochiq (site.css: `html.js` qoidasi).
+ *
+ * Har sahna — slot: admin shu bosqich uchun haqiqiy skrinshot yuklasa,
+ * mock o'rniga o'sha chiqadi.
+ */
+import Slot from './Slot.astro';
+import Icon from './Icon.astro';
+import { mocks } from '../i18n/mocks';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+}
+const { t } = Astro.props;
+const s = t.home.steps;
+const m = mocks[t.lang];
+const tabs = t.lang === 'ru' ? ['Главная', 'Заявки', 'Сделки', 'Профиль'] : ['Bosh sahifa', 'So‘rovlar', 'Bitimlar', 'Profil'];
+const tabIcons = ['stetho', 'doc', 'chat', 'users'] as const;
+const pad = (n: number) => String(n).padStart(2, '0');
+const radarDots = [
+  { l: 'A', c: '#0fb39e', x: '-92px', y: '-96px' },
+  { l: 'B', c: '#4f7cff', x: '96px', y: '-70px' },
+  { l: 'C', c: '#f5a524', x: '-110px', y: '52px' },
+  { l: 'D', c: '#e0457b', x: '92px', y: '84px' },
+  { l: 'E', c: '#7c5cff', x: '0px', y: '130px' },
+];
+---
+
+<section class="steps" id="qanday" data-steps style={`--n:${s.items.length}`} aria-labelledby="steps-title">
+  <div class="wrap steps__head">
+    <div class="section-head section-head--center">
+      <span class="eyebrow" data-reveal>{s.eyebrow}</span>
+      <h2 id="steps-title" class="h-section" data-split>{s.title}</h2>
+      <p class="lead" data-reveal style="--d:3">{s.lead}</p>
+    </div>
+  </div>
+
+  <div class="steps__track">
+    <div class="wrap steps__sticky">
+      <div class="steps__list">
+        <span class="steps__rail" aria-hidden="true"></span>
+        <ol class="steps__ol" role="list">
+        {
+          s.items.map((it, i) => (
+            <li class="step">
+              <span class="step__num">{pad(i + 1)}</span>
+              <div>
+                <h3 class="step__title">{it.title}</h3>
+                <div class="step__body">
+                  <div>
+                    <p class="step__text">{it.text}</p>
+                    <ul class="step__points" role="list">
+                      {it.points.map((p) => (
+                        <li>{p}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </li>
+          ))
+        }
+        </ol>
+      </div>
+
+      <div class="steps__stage" aria-hidden="true">
+        <div class="stage__glow"></div>
+        <div class="stage__phone">
+          <div class="stage__screen">
+            <span class="stage__notch"></span>
+            <div class="stage__statusbar"><span>9:41</span><span>KlinikaTop</span></div>
+
+            <!-- 1. So'rov -->
+            <Slot id="step-1" size="780×1600" class="scene">
+              <span class="scene__kicker">01 · {t.common.sample}</span>
+              <p class="scene__title">{m.request}</p>
+              <div class="mock__field" data-seq style="--i:0"><small>{m.service}</small><b>{m.serviceValue}</b></div>
+              <div class="mock__field" data-seq style="--i:1"><small>{m.city}</small><b>{m.cityValue}</b></div>
+              <div class="mock__field" data-seq style="--i:2"><small>{m.budget}</small><b>{m.budgetValue}</b></div>
+              <div class="mock__field" data-seq style="--i:3"><small>{m.date}</small><b>{m.dateValue}</b></div>
+              <div class="mock__btn" data-seq style="--i:4">{m.send}</div>
+            </Slot>
+
+            <!-- 2. Moslash -->
+            <Slot id="step-2" size="780×1600" class="scene">
+              <span class="scene__kicker">02 · {t.common.sample}</span>
+              <p class="scene__title">{m.sending}</p>
+              <div class="radar">
+                <span class="radar__ring"></span><span class="radar__ring"></span><span class="radar__ring"></span>
+                <span class="radar__pulse"></span><span class="radar__pulse"></span>
+                <span class="radar__core"><img src="/logo.svg" alt="" width="34" height="39" /></span>
+                {
+                  radarDots.map((d, i) => (
+                    <span class="radar__dot" style={`--x:${d.x};--y:${d.y};--c:${d.c};--i:${i}`}>
+                      <i />
+                      {d.l}
+                    </span>
+                  ))
+                }
+              </div>
+              <div class="mock__tag" data-seq style="--i:5;justify-self:center">✓ {m.matched}</div>
+            </Slot>
+
+            <!-- 3. Takliflar -->
+            <Slot id="step-3" size="780×1600" class="scene">
+              <span class="scene__kicker">03 · {t.common.sample}</span>
+              <p class="scene__title">{m.offers}</p>
+              {
+                [
+                  { l: 'A', c: '#0fb39e', p: '690 000', d: 1 },
+                  { l: 'B', c: '#4f7cff', p: '750 000', d: 2 },
+                  { l: 'C', c: '#f5a524', p: '820 000', d: 1 },
+                ].map((o, i) => (
+                  <div class="offer" data-seq style={`--i:${i}`}>
+                    <span class="offer__logo" style={`--c:${o.c}`}>{o.l}</span>
+                    <span>
+                      <span class="offer__name">{m.clinic(o.l)}</span>
+                      <span class="offer__meta">{m.days(o.d)}</span>
+                    </span>
+                    <span class="offer__price">
+                      {o.p} <small>{m.sum}</small>
+                    </span>
+                  </div>
+                ))
+              }
+              <div class="mock__field" data-seq style="--i:3">
+                <small>{m.includes}</small>
+                <b>{m.includesList.join(' · ')}</b>
+              </div>
+            </Slot>
+
+            <!-- 4. Solishtirish -->
+            <Slot id="step-4" size="780×1600" class="scene">
+              <span class="scene__kicker">04 · {t.common.sample}</span>
+              <p class="scene__title">{m.compare}</p>
+              <div class="compare">
+                <div class="compare__row compare__row--head"><span></span><span>{m.price}</span><span>{m.rating}</span><span>{m.term}</span></div>
+                <div class="compare__row compare__row--best" data-seq style="--i:0"><span>{m.clinic('A')}</span><span>690 000</span><span>★ 4.9</span><span>1</span></div>
+                <div class="compare__row" data-seq style="--i:1"><span>{m.clinic('B')}</span><span>750 000</span><span>★ 4.7</span><span>2</span></div>
+                <div class="compare__row" data-seq style="--i:2"><span>{m.clinic('C')}</span><span>820 000</span><span>★ 4.8</span><span>1</span></div>
+              </div>
+              <div class="market" data-seq style="--i:3">
+                <b style="font-size:12px">{m.market}</b>
+                <div class="market__bar"><span class="market__pin"></span></div>
+                <div class="market__legend"><span>{m.cheap}</span><span>{m.avg}</span><span>{m.high}</span></div>
+              </div>
+            </Slot>
+
+            <!-- 5. Tanlov -->
+            <Slot id="step-5" size="780×1600" class="scene">
+              <span class="scene__kicker">05 · {t.common.sample}</span>
+              <div class="success">
+                <span class="success__icon"><Icon name="check" /></span>
+                <p class="scene__title" style="margin:0">{m.success}</p>
+                <span class="mock__tag">{m.successText}</span>
+              </div>
+              <div class="bubble" data-seq style="--i:1">{m.msgClinic}</div>
+              <div class="bubble bubble--me" data-seq style="--i:2">{m.msgMe}</div>
+            </Slot>
+            <div class="stage__tabs">
+              {tabs.map((x, i) => <span><Icon name={tabIcons[i]} size={20} />{x}</span>)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="steps__dots" aria-hidden="true">
+        {s.items.map(() => <i />)}
+      </div>
+    </div>
+  </div>
+</section>

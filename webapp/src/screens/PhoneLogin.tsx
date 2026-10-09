@@ -12,7 +12,6 @@
  */
 import { useEffect, useState } from 'react';
 import { m } from 'framer-motion';
-import { useNavigate } from '@/lib/router';
 import { api } from '@/lib/api';
 import { setPatientToken } from '@/lib/session';
 import { useApp } from '@/store/app';
@@ -23,7 +22,6 @@ const BASE = import.meta.env.VITE_API_URL ?? '';
 
 export function PhoneLogin() {
   const { t, toast } = useApp();
-  const navigate = useNavigate();
 
   /*
    * Bot havolasi — kanal topilmagan holat uchun zaxira yo'l.
@@ -102,7 +100,8 @@ export function PhoneLogin() {
        * bir marta o'qiydi, shuning uchun holatni yangilash yetarli
        * emas edi — kabinet kirishida aynan shu xato bo'lgan.
        */
-      window.location.replace('/');
+      // Bemor ilovasi /app da; "/" — ochiq sayt
+      window.location.replace('/app');
     } catch (err: any) {
       toast(err?.message ?? t('common.error'), 'error');
       setBusy(false);
@@ -189,7 +188,8 @@ export function PhoneLogin() {
           </>
         )}
 
-        <button type="button" className="plogin__back" onClick={() => navigate('/')}>
+        {/* "/" — ochiq sayt (statik HTML), SPA emas: to'liq o'tish kerak */}
+        <button type="button" className="plogin__back" onClick={() => window.location.assign('/')}>
           {t('common.back')}
         </button>
       </m.div>

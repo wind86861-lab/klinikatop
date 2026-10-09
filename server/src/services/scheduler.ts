@@ -9,6 +9,7 @@ import { syncLinkedClinics } from './clinicSync';
 import { runSync as runCatalogSync } from './catalogSync';
 import { purgeUsedTickets } from './clinicLink';
 import { purgePatientAuth } from './patientAuth';
+import { processDoctorCases } from './doctorCases';
 
 const TICK_MS = 60_000;
 
@@ -92,6 +93,11 @@ export function tick() {
   safe('purgeUsedTickets', purgeUsedTickets);
   // Eskirgan bemor sessiyalari va ishlatilgan kodlar
   safe('purgePatientAuth', purgePatientAuth);
+  // Shifokor taklifnomalari: 24 soatda eslatma, 72 soatda yopiladi
+  const cases = safe('processDoctorCases', processDoctorCases);
+  if (cases?.expired || cases?.reminded) {
+    console.log(`[scheduler] shifokor taklifnomalari — yopildi: ${cases.expired}, eslatildi: ${cases.reminded}`);
+  }
 
   if (exp?.expired || exp?.warned || subs?.suspended || confirms || autoClosed) {
     console.log(

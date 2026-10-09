@@ -5,7 +5,12 @@
 
 /* ─────────────────────────  Rollar  ───────────────────────── */
 
-export const ROLES = ['patient', 'clinic_admin', 'clinic_operator', 'admin'] as const;
+/**
+ * `doctor` — yo'naltiruvchi shifokor (bemor uchun so'rov yaratadi).
+ * U BEMOR rolini yo'qotmaydi: shifokorning o'zi ham davolanishi mumkin.
+ * Rol faqat belgi — haqiqiy holat (`pending`, `approved`...) `referring_doctors` da.
+ */
+export const ROLES = ['patient', 'clinic_admin', 'clinic_operator', 'admin', 'doctor'] as const;
 export type Role = (typeof ROLES)[number];
 
 export type Lang = 'uz' | 'ru';
@@ -248,6 +253,14 @@ export interface LabTest {
    * taklifida beradi va u har joyda boshqacha.
    */
   durationMin: number | null;
+  /** Bemordan vazn so'raladimi (kapsula endoskopiyasida — yo'q) */
+  needsWeight: boolean;
+  /**
+   * Qarshi ko'rsatmalar — bo'lsa sehrgarda alohida qadam chiqadi va
+   * bemor "menda bunday holat yo'q" deb tasdiqlamaguncha so'rov ketmaydi.
+   */
+  contraUz: string | null;
+  contraRu: string | null;
 }
 
 export interface Operation {
@@ -264,6 +277,30 @@ export interface Operation {
   descUz: string;
   descRu: string;
   keywords: string[];
+  /**
+   * Admin belgilagan narx oralig'i — bemorning byudjeti shu orada
+   * bo'lishi kerak. `null` — chegara qo'yilmagan, byudjet erkin.
+   *
+   * Ikkovi ham alohida null bo'la oladi: faqat pastki chegara
+   * ma'lum bo'lgan hollar bor ("bundan arzon bo'lishi mumkin emas"),
+   * yuqorisi esa klinikaga qarab o'zgaradi.
+   */
+  minPriceUzs: number | null;
+  maxPriceUzs: number | null;
+}
+
+/**
+ * Admin ro'yxati uchun operatsiya — sohasi bilan.
+ *
+ * Narx yozadigan odam operatsiyani nomi bo'yicha emas, sohasi
+ * bo'yicha topadi: "Kardiologiya" ni ochib, ichidagilarga narx
+ * qo'yadi. Nomlar o'xshash bo'lgani uchun soha ko'rsatilmasa
+ * qaysi biriga narx yozayotganini bilish qiyin.
+ */
+export interface AdminOperation extends Operation {
+  category: OperationCategory | null;
+  subcategory: OperationCategory | null;
+  active: boolean;
 }
 
 export interface Clinic {
@@ -437,6 +474,10 @@ export interface MedicalRequest {
    * ishlatiladi; tanishiga bo'lsa shu yerdagi qiymatlar.
    */
   forSelf: boolean;
+  /** Shifokor yaratgan va bemor tasdiqlagan so'rov (klinikaga belgi; shifokor ismi ko'rinmaydi) */
+  viaDoctor?: boolean;
+  /** Bemor qarshi ko'rsatmalar yo'qligini tasdiqlagan (kapsula endoskopiyasi kabi) */
+  contraAcked?: boolean;
   subjectName: string | null;
   subjectBirthYear: number | null;
   subjectGender: Gender | null;
@@ -680,6 +721,14 @@ export const NOTIFICATION_TYPES = [
   /** Admin komissiya to'lovini rad etdi */
   'commission_rejected',
   /** Ikkinchi tomon narxni o'zgartirishni taklif qildi */
+  /** Admin shifokor arizasini tasdiqladi yoki rad etdi */
+  'doctor_review',
+  /** Bemorga: shifokor siz uchun so'rov yaratdi — tasdiqlang */
+  'doctor_case',
+  /** Shifokorga: bemor tasdiqladi / rad etdi / muddat tugadi / klinikani tanladi */
+  'doctor_case_update',
+  /** Bemorga: shifokoringiz klinikani tavsiya qildi */
+  'doctor_recommendation',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -1247,6 +1296,8 @@ export const BUILTIN_STEPS = [
   'documents',
   /** Faqat tahlil oqimida */
   'test',
+  /** Qarshi ko'rsatmalar — faqat matni bor tekshiruvda (kapsula endoskopiyasi) */
+  'contra',
   'weight',
   'region',
   'budget',
@@ -1262,6 +1313,8 @@ export type BuiltinStep = (typeof BUILTIN_STEPS)[number];
  */
 export const LOCKED_STEPS: readonly BuiltinStep[] = [
   'type',
+  // Xavfsizlik: qarshi ko'rsatmalarni bemor ko'rmasdan so'rov ketmasin
+  'contra',
   'referral',
   'operation',
   'condition',
@@ -1292,9 +1345,18 @@ export const STEP_FLOWS: Record<BuiltinStep, readonly RequestKind[]> = {
   condition: ['operation'],
   documents: ['operation'],
   test: ['lab'],
+  contra: ['lab'],
   weight: ['lab'],
   region: ['referral', 'operation', 'lab'],
-  budget: ['referral', 'operation', 'lab'],
+  /*
+   * Byudjet FAQAT operatsiyada.
+   *
+   * Tahlil va yo'llanmada narx bemorning ishi emas: qon tahlilining
+   * narxi klinikada allaqachon belgilangan, bemor esa uni taxmin
+   * qilib kiritsa faqat xato qiladi. Operatsiyada boshqa — u yerda
+   * narx muzokara predmeti va bemorning imkoniyati muhim.
+   */
+  budget: ['operation'],
   date: ['operation'],
   note: ['referral', 'operation'],
   review: ['referral', 'operation', 'lab'],
@@ -1388,3 +1450,198 @@ export function stepMatchesScope(
   if (ctx.kind !== 'lab') return false;
   return step.labTestId === ctx.labTestId || step.labTestId === ctx.labTestParentId;
 }
+
+/* ─────────────────────────  Yo'naltiruvchi shifokor  ───────────────────────── */
+
+/**
+ * Shifokor arizasi holati.
+ *
+ *   pending   → birinchi ariza, admin ko'rmagan
+ *   in_review → rad etilgandan keyin YANGI hujjat yuklandi
+ *   approved  → bemorlar uchun so'rov yarata oladi
+ *   rejected  → sabab bilan rad etildi; yangi hujjat → in_review
+ */
+export const REFERRING_DOCTOR_STATUSES = ['pending', 'in_review', 'approved', 'rejected'] as const;
+export type ReferringDoctorStatus = (typeof REFERRING_DOCTOR_STATUSES)[number];
+
+/** Diplom turi: bakalavr majburiy, magistr ixtiyoriy */
+export const DOCTOR_DOC_KINDS = ['bachelor', 'master'] as const;
+export type DoctorDocKind = (typeof DOCTOR_DOC_KINDS)[number];
+
+export interface ReferringDoctorDocument {
+  id: number;
+  kind: DoctorDocKind;
+  name: string;
+  mime: string;
+  size: number;
+  createdAt: string;
+}
+
+export interface ReferringDoctor {
+  id: number;
+  userId: number;
+  firstName: string;
+  lastName: string;
+  specialty: string;
+  workplace: string;
+  bio: string | null;
+  status: ReferringDoctorStatus;
+  /** Oxirgi rad sababi — qayta ko'rib chiqishda ham saqlanadi */
+  rejectReason: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  documents: ReferringDoctorDocument[];
+}
+
+/** Admin ko'radigan qator — aloqa ma'lumotlari bilan */
+export interface AdminReferringDoctor extends ReferringDoctor {
+  phone: string | null;
+  username: string | null;
+}
+
+/**
+ * Shifokor bemor uchun yaratgan so'rov — bemor tasdiqlagunga qadar
+ * qoralama. Klinikalar uni ko'rmaydi: haqiqiy so'rov (`requests`)
+ * faqat bemor "Tasdiqlash" ni bosgandan keyin yaratiladi.
+ */
+export const DOCTOR_CASE_STATUSES = ['waiting', 'approved', 'declined', 'expired', 'not_me'] as const;
+export type DoctorCaseStatus = (typeof DOCTOR_CASE_STATUSES)[number];
+
+export interface DoctorCase {
+  id: number;
+  patientPhone: string;
+  /** Bemor botda topildimi (xabar yetib bordimi) */
+  patientLinked: boolean;
+  /** Bemor ismi — faqat tasdiqlagandan keyin */
+  patientName: string | null;
+  kind: RequestKind;
+  operationId: number | null;
+  labTestId: number | null;
+  referralItems: string[];
+  serviceUz: string;
+  serviceRu: string;
+  cityId: number;
+  note: string | null;
+  status: DoctorCaseStatus;
+  /** Bemorga beriladigan havola (QR) — botni ochadi */
+  inviteLink: string;
+  requestId: number | null;
+  requestStatus: RequestStatus | null;
+  offersCount: number;
+  dealStatus: DealStatus | null;
+  dealPriceUzs: number | null;
+  /** Bemor tanlagan taklif (bitim) — tavsiya bilan solishtirish uchun */
+  chosenOfferId: number | null;
+  /** Shifokorning faol tavsiyasi */
+  recommendation: { offerId: number; comment: string | null; createdAt: string } | null;
+  expiresAt: string;
+  decidedAt: string | null;
+  createdAt: string;
+}
+
+export interface DoctorStats {
+  cases: number;
+  waiting: number;
+  approved: number;
+  declined: number;
+  offers: number;
+  deals: number;
+  dealSumUzs: number;
+  /** Faol tavsiyalar va ulardagi takliflar summasi (tavsiya paytidagi narx) */
+  recommendations: number;
+  recommendedSumUzs: number;
+  /** Bemor aynan tavsiya qilingan taklifni tanlagan */
+  acceptedRecommendations: number;
+  acceptedSumUzs: number;
+  byClinic: DoctorClinicStat[];
+}
+
+/** Shifokor → klinika kesimi: nechta tavsiya, qancha summa, nechtasi qabul qilindi */
+export interface DoctorClinicStat {
+  clinicId: number;
+  clinicName: string;
+  recommendations: number;
+  recommendedSumUzs: number;
+  accepted: number;
+  acceptedSumUzs: number;
+}
+
+/** Admin: har bir shifokor bo'yicha jamlanma */
+export interface AdminDoctorStatRow extends DoctorStats {
+  doctorId: number;
+  name: string;
+  specialty: string;
+  workplace: string;
+  status: ReferringDoctorStatus;
+}
+
+/** Bemor so'rovida: shifokor tavsiya qilgan taklif */
+export interface PatientRecommendation {
+  offerId: number;
+  comment: string | null;
+  doctorName: string;
+  specialty: string;
+  createdAt: string;
+}
+
+/** Bemor ko'radigan taklifnoma */
+export interface DoctorInvite {
+  token: string;
+  doctor: { name: string; specialty: string; workplace: string };
+  kind: RequestKind;
+  serviceUz: string;
+  serviceRu: string;
+  cityId: number;
+  note: string | null;
+  referralItems: string[];
+  status: DoctorCaseStatus;
+  requestId: number | null;
+  expiresAt: string;
+  /** Tahlil so'rovida vazn kerak — profilda bo'lsa oldindan to'ldiriladi */
+  weightKg: number | null;
+  /** Tekshiruv vazn so'raydimi (kapsula endoskopiyasi — yo'q) */
+  needsWeight: boolean;
+  /** Qarshi ko'rsatmalar — bo'lsa bemor tasdiqlashi shart */
+  contraUz: string | null;
+  contraRu: string | null;
+}
+
+/**
+ * So'rov turlari — qaysilari faol va bemorga qaysi tartibda
+ * ko'rsatiladi. Admin panelidan boshqariladi (`platform_settings`).
+ * Nofaol tur kartada ko'rinadi ("Hozircha faol emas"), lekin tanlanmaydi.
+ */
+export interface RequestKindSetting {
+  kind: RequestKind;
+  enabled: boolean;
+}
+
+/**
+ * Bemor ilovasi bosh sahifasidagi banner — admin boshqaradi.
+ *
+ * Rasm ixtiyoriy: yuklanmaguncha sarlavha va izoh bilan matnli
+ * banner chiqadi. `link` — ilova ichidagi manzil (`/new?kind=lab`)
+ * yoki tashqi `https://` havola.
+ */
+export interface AppBanner {
+  id: number;
+  titleUz: string;
+  titleRu: string;
+  subUz: string | null;
+  subRu: string | null;
+  link: string;
+  /** Rasm; video bo'lsa — uning muqovasi */
+  imageUrl: string | null;
+  /** Video: yuklangan fayl, YouTube yoki to'g'ridan-to'g'ri havola */
+  video: AppBannerVideo | null;
+  /** Sarlavha va izohni media ustida ko'rsatish */
+  overlay: boolean;
+  active: boolean;
+  sort: number;
+}
+
+export type AppBannerVideo =
+  | { kind: 'file'; src: string }
+  | { kind: 'link'; src: string }
+  | { kind: 'youtube'; id: string };

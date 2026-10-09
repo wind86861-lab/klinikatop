@@ -13,6 +13,8 @@ import { telegramRouter } from './telegram';
 import { publicRouter } from './publicRoutes';
 import { webAuthRouter } from './webAuthRoutes';
 import { patientAuthRouter } from './patientAuthRoutes';
+import { doctorRouter } from './doctor';
+import { doctorInvitesRouter } from './doctorInvites';
 import { limits } from '../middleware/rateLimit';
 
 export const apiRouter = Router();
@@ -56,6 +58,10 @@ apiRouter.use('/files', limits.upload, filesRouter);
 apiRouter.use('/requests', limits.write, requestsRouter);
 apiRouter.use('/offers', limits.write, offersRouter);
 apiRouter.use('/deals', limits.write, dealsRouter);
+// Yo'naltiruvchi shifokor — Telegram imzosi bilan (doctor.ts)
+apiRouter.use('/doctor', limits.write, doctorRouter);
+// Bemor: shifokor yaratgan so'rovga rozilik
+apiRouter.use('/doctor-invites', limits.write, doctorInvitesRouter);
 /*
  * Klinika kabineti va admin paneli — FAQAT veb sessiya orqali.
  *

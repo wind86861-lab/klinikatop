@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 /**
  * Migratsiyalar — `schema.sql` yangi bazani quradi, bu esa mavjud bazani rivojlantiradi.
  *
@@ -2155,6 +2156,431 @@ export const MIGRATIONS: Migration[] = [
         );
         CREATE INDEX IF NOT EXISTS idx_phone_codes ON phone_login_codes(phone, created_at DESC);
       `);
+    },
+  },
+  {
+    /**
+     * Operatsiyaning narx oralig'i — min va max.
+     *
+     * Bemor byudjetni ixtiyoriy qo'yardi va natijada klinikalar
+     * bajarib bo'lmaydigan so'rovlarni ko'rardi: 100 ming so'mga
+     * yurak operatsiyasi. Har bunday taklif qo'lda rad etilardi —
+     * bu ikki tomonning ham vaqtini yeydi.
+     *
+     * Oraliq ADMIN qo'lida, klinikada emas: aks holda klinika o'z
+     * narxini ko'tarish uchun pastki chegarani surib qo'yardi. Ya'ni
+     * bu katalog ma'lumoti, bozor ma'lumoti emas.
+     *
+     * NULL — chegara yo'q. Hamma operatsiyaga darhol narx yozib
+     * bo'lmaydi, shuning uchun chegarasiz operatsiya ilgarigidek
+     * ishlashda davom etadi. Majburiy qilinsa, narxi kiritilmagan
+     * operatsiyaga so'rov umuman yuborilmay qolardi.
+     */
+    id: '038_operation_price_range',
+    up: (db) => {
+      addColumn(db, 'operations', 'min_price_uzs', 'INTEGER');
+      addColumn(db, 'operations', 'max_price_uzs', 'INTEGER');
+    },
+  },
+  {
+    /**
+     * Ochiq sayt media — klinikatop.uz sahifalaridagi rasm va videolar.
+     *
+     * Bemor hujjatlari (`files`) bilan ATAYLAB aralashtirilmaydi: bular
+     * internetga ochiq. Kalit — sahifadagi joy nomi (`shared/siteMedia.ts`),
+     * shuning uchun bir joyga bitta yozuv.
+     */
+    id: '039_site_media',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS site_media (
+          key         TEXT PRIMARY KEY,
+          kind        TEXT NOT NULL CHECK (kind IN ('image','youtube')),
+          file_name   TEXT,
+          youtube_id  TEXT,
+          alt_uz      TEXT NOT NULL DEFAULT '',
+          alt_ru      TEXT NOT NULL DEFAULT '',
+          updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `);
+    },
+  },
+  {
+    /**
+     * Arizadagi litsenziya FAYLI.
+     *
+     * Ilgari faqat raqam so'ralardi va moderator uni hech narsa bilan
+     * solishtira olmasdi. Fayl ariza bilan birga keladi — arizachida
+     * hali hisob yo'q, shuning uchun `files` jadvaliga (egasi majburiy)
+     * emas, arizaning o'ziga yoziladi. Tasdiqlanganda klinika
+     * hujjatlariga ko'chiriladi.
+     */
+    id: '040_application_license_file',
+    up: (db) => {
+      addColumn(db, 'clinic_applications', 'license_file', 'TEXT');
+      addColumn(db, 'clinic_applications', 'license_file_name', 'TEXT');
+      addColumn(db, 'clinic_applications', 'license_file_mime', 'TEXT');
+      addColumn(db, 'clinic_applications', 'license_file_size', 'INTEGER');
+    },
+  },
+  {
+    /**
+     * Bemor PAROLI — brauzerda telefon + parol bilan kirish.
+     *
+     * Ro'yxatdan o'tishda raqam BIR MARTA SMS/Telegram kodi bilan
+     * tasdiqlanadi, keyin bemor parol qo'yadi va har kirishda SMS
+     * kerak bo'lmaydi (SMS pullik, kutish ham noqulay).
+     *
+     * `code_verified_at` — sessiya KOD bilan ochilganmi. Parolni
+     * o'rnatish/almashtirish faqat shunday, yangi sessiyadan mumkin:
+     * parol bilan kirgan (yoki o'g'irlangan) sessiya parolni o'zgartira
+     * olmaydi.
+     */
+    id: '041_patient_password',
+    up: (db) => {
+      addColumn(db, 'users', 'password_salt', 'TEXT');
+      addColumn(db, 'users', 'password_hash', 'TEXT');
+      addColumn(db, 'users', 'password_set_at', 'TEXT');
+      addColumn(db, 'users', 'login_failed', 'INTEGER NOT NULL DEFAULT 0');
+      addColumn(db, 'users', 'login_locked_until', 'TEXT');
+      addColumn(db, 'patient_sessions', 'code_verified_at', 'TEXT');
+    },
+  },
+  {
+    /**
+     * Shifokor yo'llanmasi — FAQAT o'zi yoqqan klinikaga.
+     *
+     * 036-migratsiya `clinics.accepts_referral` ni sukut bo'yicha 1
+     * qilgan edi ("mavjudlar uchun o'zgarmasin"). Natijada yo'llanma
+     * so'rovi rozilik bermagan hamma klinikaga — tish klinikasiga ham,
+     * xatna markaziga ham — borardi, kabinetdagi tugma ham "yoqilgan"
+     * deb turardi.
+     *
+     * Rozilikning yagona ishonchli dalili — arizadagi tanlov. Shunday
+     * klinikada belgi qoladi, qolganida o'chadi; ular xohlasa
+     * kabinetdan o'zi yoqadi.
+     *
+     * Faol yo'llanma so'rovlari rozi bo'lmagan klinikalar ro'yxatidan
+     * olinadi — agar ular hali TAKLIF BERMAGAN bo'lsa. Taklif bergan
+     * klinikadan so'rov olinmaydi: bemor uni ko'rib turgan bo'lishi
+     * mumkin.
+     */
+    id: '042_referral_opt_in',
+    up: (db) => {
+      db.exec(`
+        UPDATE clinics SET accepts_referral = 0
+         WHERE accepts_referral = 1
+           AND NOT EXISTS (
+             SELECT 1 FROM clinic_applications a
+              WHERE a.clinic_id = clinics.id AND a.accepts_referral = 1
+           );
+
+        DELETE FROM request_broadcasts
+         WHERE request_id IN (SELECT id FROM requests WHERE kind = 'referral' AND status IN ('NEW','COLLECTING'))
+           AND clinic_id IN (SELECT id FROM clinics WHERE accepts_referral = 0)
+           AND NOT EXISTS (
+             SELECT 1 FROM offers o
+              WHERE o.request_id = request_broadcasts.request_id
+                AND o.clinic_id = request_broadcasts.clinic_id
+           );
+      `);
+    },
+  },
+  {
+    /**
+     * Sayt MATNLARI va HAMKORLAR — admin panelidan boshqariladi.
+     *
+     * `site_texts` — faqat O'ZGARTIRILGAN matnlar. Asl matn build chiqargan
+     * `site-content/defaults.json` da; server sahifani berayotganda shu
+     * asl matn turgan joyga yangisini qo'yadi. Qayta build kerak emas.
+     *
+     * `site_partners` — hamkor klinikalar logolari, CHEKLANMAGAN son,
+     * tartibi `sort` bo'yicha. Ilgari 8 ta qat'iy joy edi.
+     */
+    id: '043_site_texts_partners',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS site_texts (
+          lang       TEXT NOT NULL CHECK (lang IN ('uz','ru')),
+          key        TEXT NOT NULL,
+          value      TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (lang, key)
+        );
+        CREATE TABLE IF NOT EXISTS site_partners (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          name       TEXT NOT NULL,
+          url        TEXT,
+          file_name  TEXT NOT NULL,
+          sort       INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
+  {
+    /*
+     * YO'NALTIRUVCHI SHIFOKOR — bemor uchun so'rov yaratadi.
+     *
+     * `doctors` jadvali allaqachon bor, lekin u KLINIKA XODIMLARI
+     * (klinika profilidagi shifokorlar). Bu boshqa narsa: Telegram
+     * orqali kirgan mustaqil shifokor, shuning uchun alohida nom.
+     *
+     * Hisob — oddiy Telegram foydalanuvchisi (`users`), telefon
+     * botda kontakt orqali tasdiqlangan. Bitta foydalanuvchi — bitta
+     * shifokor profili.
+     *
+     * Diplomlar klinika litsenziyasi bilan bir xil yopiq papkada
+     * (`applications/`): ochiq manzil yo'q, faqat egasi va admin o'qiydi.
+     */
+    id: '044_referring_doctors',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS referring_doctors (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id       INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+          first_name    TEXT NOT NULL,
+          last_name     TEXT NOT NULL,
+          specialty     TEXT NOT NULL,
+          workplace     TEXT NOT NULL,
+          bio           TEXT,
+          status        TEXT NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending','in_review','approved','rejected')),
+          reject_reason TEXT,
+          reviewed_by   INTEGER,
+          reviewed_at   TEXT,
+          created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_referring_doctors_status ON referring_doctors(status);
+
+        CREATE TABLE IF NOT EXISTS referring_doctor_documents (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          doctor_id  INTEGER NOT NULL REFERENCES referring_doctors(id) ON DELETE CASCADE,
+          kind       TEXT NOT NULL CHECK (kind IN ('bachelor','master')),
+          storage    TEXT NOT NULL,
+          name       TEXT NOT NULL,
+          mime       TEXT NOT NULL,
+          size       INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_referring_doctor_docs ON referring_doctor_documents(doctor_id);
+      `);
+    },
+  },
+  {
+    /*
+     * SHIFOKOR YARATGAN SO'ROV — bemor roziligigacha qoralama.
+     *
+     * Haqiqiy so'rov (`requests`) bemor "Tasdiqlash" ni bosgandagina
+     * yaratiladi. Shuning uchun tasdiqlanmagan so'rovning klinikalarga
+     * oqib chiqishi TEXNIK jihatdan imkonsiz: klinikalar faqat
+     * `requests` ni ko'radi, bu jadvalni emas.
+     *
+     * `patient_phone` — normallashgan raqam (faqat raqamlar). Bemor
+     * botda o'sha raqamni kontakt bilan tasdiqlagandagina bog'lanadi.
+     *
+     * `bot_pending_invites` — bemor havolani ochdi, lekin raqamini hali
+     * ulashmagan. Kontakt kelganda taklifnoma shu yerdan olinadi.
+     */
+    id: '045_doctor_cases',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS doctor_cases (
+          id              INTEGER PRIMARY KEY AUTOINCREMENT,
+          doctor_id       INTEGER NOT NULL REFERENCES referring_doctors(id) ON DELETE CASCADE,
+          patient_phone   TEXT NOT NULL,
+          patient_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          kind            TEXT NOT NULL CHECK (kind IN ('operation','lab','referral')),
+          operation_id    INTEGER REFERENCES operations(id),
+          lab_test_id     INTEGER REFERENCES lab_tests(id),
+          referral_items  TEXT,
+          city_id         INTEGER NOT NULL REFERENCES cities(id),
+          note            TEXT,
+          status          TEXT NOT NULL DEFAULT 'waiting'
+                          CHECK (status IN ('waiting','approved','declined','expired','not_me')),
+          invite_token    TEXT NOT NULL UNIQUE,
+          request_id      INTEGER REFERENCES requests(id) ON DELETE SET NULL,
+          notified_at     TEXT,
+          reminded_at     TEXT,
+          decided_at      TEXT,
+          expires_at      TEXT NOT NULL,
+          created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_doctor_cases_doctor ON doctor_cases(doctor_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_doctor_cases_phone ON doctor_cases(patient_phone, status);
+
+        CREATE TABLE IF NOT EXISTS bot_pending_invites (
+          telegram_id INTEGER PRIMARY KEY,
+          token       TEXT NOT NULL,
+          created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      addColumn(db, 'requests', 'doctor_case_id', 'INTEGER');
+    },
+  },
+  {
+    /*
+     * Bemor ilovasi bosh sahifasidagi bannerlar — admin boshqaradi.
+     *
+     * Bitta banner darhol yaratiladi: MRT/MSKT tekshiruviga olib boradi.
+     * Rasmi yo'q — admin keyin yuklaydi; shungacha matnli ko'rinishda.
+     */
+    id: '046_app_banners',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS app_banners (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          title_uz   TEXT NOT NULL,
+          title_ru   TEXT NOT NULL,
+          sub_uz     TEXT,
+          sub_ru     TEXT,
+          link       TEXT NOT NULL,
+          file_name  TEXT,
+          active     INTEGER NOT NULL DEFAULT 1,
+          sort       INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      db.prepare(
+        `INSERT INTO app_banners (title_uz, title_ru, sub_uz, sub_ru, link, sort) VALUES (?, ?, ?, ?, ?, 1)`,
+      ).run(
+        'MRT va MSKT tekshiruvi',
+        'МРТ и МСКТ',
+        'Bitta so‘rov — klinikalar narx taklif qiladi',
+        'Одна заявка — клиники предложат цены',
+        '/new?kind=lab',
+      );
+    },
+  },
+  {
+    /*
+     * Banner VIDEO bilan ham: yuklangan fayl (`video_file`) yoki havola
+     * (`video_url`: `yt:<id>` YouTube uchun, yoki to'g'ridan-to'g'ri
+     * https .mp4/.webm). Rasm bo'lsa u videoga muqova (poster) bo'ladi.
+     * `overlay` — sarlavha va izohni media ustida ko'rsatish.
+     */
+    id: '047_app_banner_video',
+    up: (db) => {
+      addColumn(db, 'app_banners', 'video_file', 'TEXT');
+      addColumn(db, 'app_banners', 'video_url', 'TEXT');
+      addColumn(db, 'app_banners', 'overlay', 'INTEGER NOT NULL DEFAULT 0');
+    },
+  },
+  {
+    /*
+     * SHIFOKOR TAVSIYASI — bemorga qaysi klinika taklifi maqbul.
+     *
+     * Har so'rovda bitta FAOL tavsiya (`superseded_at IS NULL`).
+     * Shifokor fikrini o'zgartirsa eskisi yopiladi, lekin o'chmaydi:
+     * statistika ("qaysi shifokor qaysi klinikani necha marta tavsiya
+     * qildi") va nizo bo'lsa tarix kerak. Narx tavsiya PAYTIDAGI
+     * qiymat — klinika keyin o'zgartirsa ham hisobot o'zgarmaydi.
+     */
+    id: '048_doctor_recommendations',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS doctor_recommendations (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          case_id       INTEGER NOT NULL REFERENCES doctor_cases(id) ON DELETE CASCADE,
+          doctor_id     INTEGER NOT NULL REFERENCES referring_doctors(id) ON DELETE CASCADE,
+          request_id    INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+          offer_id      INTEGER NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+          clinic_id     INTEGER NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+          price_uzs     INTEGER NOT NULL,
+          comment       TEXT,
+          created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+          superseded_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_doctor_rec_case ON doctor_recommendations(case_id, superseded_at);
+        CREATE INDEX IF NOT EXISTS idx_doctor_rec_doctor ON doctor_recommendations(doctor_id, clinic_id);
+        CREATE INDEX IF NOT EXISTS idx_doctor_rec_request ON doctor_recommendations(request_id, superseded_at);
+      `);
+    },
+  },
+  {
+    /*
+     * Bemor sessiya tokenlari — XESH bo'lib (admin/klinika sessiyalari kabi).
+     *
+     * Ilgari ochiq matnda saqlanardi: baza yoki zaxira nusxa sizib chiqsa,
+     * undagi har bir faol token bilan bemor nomidan kirish mumkin edi.
+     * Mavjud sessiyalar shu yerda xeshlanadi — hech kim chiqib ketmaydi
+     * (qurilmadagi token o'zgarmaydi, server endi uning xeshini qidiradi).
+     */
+    id: '049_hash_patient_sessions',
+    up: (db) => {
+      const rows = db.prepare(`SELECT rowid AS rid, token FROM patient_sessions`).all() as { rid: number; token: string }[];
+      const upd = db.prepare(`UPDATE patient_sessions SET token = ? WHERE rowid = ?`);
+      for (const r of rows) {
+        // Allaqachon xesh (64 ta hex) bo'lsa tegmaymiz — migratsiya ikki marta yurmasin
+        if (/^[0-9a-f]{64}$/.test(r.token)) continue;
+        upd.run(crypto.createHash('sha256').update(r.token).digest('hex'), r.rid);
+      }
+    },
+  },
+  {
+    /*
+     * KAPSULA ENDOSKOPIYASI — MRT va MSKT dan keyin, 3-o'rinda.
+     *
+     * Ikki yangi xususiyat (boshqa tekshiruvlarga ham qo'llasa bo'ladi):
+     *   needs_weight — vazn so'raladimi (bu yerda kerak emas, yosh kerak:
+     *                  u bemor profilida/"kimga" qadamida bor)
+     *   contra_*     — qarshi ko'rsatmalar matni. Bo'lsa sehrgarda alohida
+     *                  qadam chiqadi va bemor tasdiqlamaguncha so'rov ketmaydi
+     *                  (`requests.contra_ack_at`).
+     * Narxni bemor bermaydi — tahlil oqimida byudjet qadami yo'q, klinika
+     * taklif qiladi. Klinikalar uni profilidagi "Tahlillar" ro'yxatida
+     * MRT/MSKT qatorida yoqadi (bolasiz guruh — o'zi tekshiruv).
+     */
+    id: '050_capsule_endoscopy',
+    up: (db) => {
+      addColumn(db, 'lab_tests', 'needs_weight', 'INTEGER NOT NULL DEFAULT 1');
+      addColumn(db, 'lab_tests', 'contra_uz', 'TEXT');
+      addColumn(db, 'lab_tests', 'contra_ru', 'TEXT');
+      addColumn(db, 'requests', 'contra_ack_at', 'TEXT');
+
+      // Yangi o'rnatilgan qadam — tekshiruv tanlangandan keyin, vazndan oldin
+      const testPos = (db.prepare(`SELECT position FROM request_steps WHERE key = 'test'`).get() as { position: number } | undefined)?.position ?? 12;
+      db.prepare(
+        `INSERT OR IGNORE INTO request_steps (key, kind, position, enabled, required, locked)
+         VALUES ('contra', 'builtin', ?, 1, 1, 1)`,
+      ).run(testPos + 1);
+
+      if (db.prepare(`SELECT 1 FROM lab_tests WHERE slug = 'kapsula-endoskopiya'`).get()) return;
+      const mskt = db.prepare(`SELECT position FROM lab_tests WHERE slug = 'mskt' AND parent_id IS NULL`).get() as
+        | { position: number }
+        | undefined;
+      let position = 15;
+      if (mskt) {
+        // MSKT dan keyingilarini bir pog'ona suramiz — 3-o'rin bo'shasin
+        db.prepare(`UPDATE lab_tests SET position = position + 1 WHERE parent_id IS NULL AND position > ?`).run(mskt.position);
+        position = mskt.position + 1;
+      }
+      db.prepare(
+        `INSERT INTO lab_tests (slug, name_uz, name_ru, icon, position, active, parent_id, needs_weight, contra_uz, contra_ru)
+         VALUES ('kapsula-endoskopiya', ?, ?, '💊', ?, 1, NULL, 0, ?, ?)`,
+      ).run(
+        'Kapsula endoskopiyasi',
+        'Капсульная эндоскопия',
+        position,
+        [
+          'Quyidagi holatlarda kapsula endoskopiyasi O‘TKAZILMAYDI:',
+          '• Oshqozon-ichak traktida tutilish, torayish (striktura) yoki oqma (fistula) bo‘lsa yoki gumon qilinsa',
+          '• Ovqat yutish qiyinlashgan bo‘lsa',
+          '• Homiladorlik',
+          '• Yurak stimulyatori yoki boshqa implantatsiya qilingan elektron qurilma bo‘lsa',
+          '• Yaqinda qorin bo‘shlig‘ida katta operatsiya bo‘lgan bo‘lsa',
+        ].join('\n'),
+        [
+          'Капсульная эндоскопия НЕ проводится, если:',
+          '• есть или подозревается непроходимость, сужение (стриктура) или свищ ЖКТ',
+          '• затруднено глотание',
+          '• беременность',
+          '• установлен кардиостимулятор или другое электронное имплантированное устройство',
+          '• недавно была крупная операция на брюшной полости',
+        ].join('\n'),
+      );
     },
   },
 ];

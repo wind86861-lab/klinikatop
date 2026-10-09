@@ -17,6 +17,8 @@ interface TelegramWebApp {
   ready(): void;
   expand(): void;
   close(): void;
+  /** t.me havolasini Telegram ichida ochish (ulashish oynasi) */
+  openTelegramLink?(url: string): void;
   setHeaderColor(color: string): void;
   setBackgroundColor(color: string): void;
   onEvent(event: string, cb: () => void): void;

@@ -60,8 +60,9 @@ export function registerClinic(input: RegisterClinicInput): Clinic {
   const clinicId = tx(() => {
     const info = db
       .prepare(
-        `INSERT INTO clinics (name, city_id, address, about, license_file_id, verification, subscription_status)
-         VALUES (?, ?, ?, ?, ?, 'pending', 'none')`,
+        /* Yo'llanma — klinika O'ZI yoqadi (ustun sukuti 1, shuning uchun ochiq 0) */
+        `INSERT INTO clinics (name, city_id, address, about, license_file_id, verification, subscription_status, accepts_referral)
+         VALUES (?, ?, ?, ?, ?, 'pending', 'none', 0)`,
       )
       .run(input.name.trim(), input.cityId, input.address, input.about, input.licenseFileId);
     const id = Number(info.lastInsertRowid);

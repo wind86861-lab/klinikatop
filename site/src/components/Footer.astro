@@ -1,0 +1,87 @@
+---
+import Icon from './Icon.astro';
+import { site } from '../site';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+}
+const { t } = Astro.props;
+const f = t.footer;
+const c = site.contacts;
+const year = new Date().getFullYear();
+const hasContacts = Object.values(c).some(Boolean);
+---
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer__top">
+      <div class="footer__about">
+        <a class="brand" href={t.paths.home}>
+          <img src="/logo.svg" alt="" width="30" height="35" />
+          <span>Klinika<b>Top</b></span>
+        </a>
+        <p>{f.about}</p>
+      </div>
+
+      <nav aria-label={f.product}>
+        <h3>{f.product}</h3>
+        <ul>
+          <li><a href={`${t.paths.home}#qanday`}>{f.links.how}</a></li>
+          <li><a href={`${t.paths.home}#savollar`}>{f.links.faq}</a></li>
+          <li><a href={site.appPath} data-bot>{f.links.app}</a></li>
+        </ul>
+      </nav>
+
+      <nav aria-label={f.company}>
+        <h3>{f.company}</h3>
+        <ul>
+          <li><a href={t.paths.clinics}>{f.links.clinics}</a></li>
+          <li><a href={site.clinicSignupPath}>{f.links.signup}</a></li>
+          <li><a href={site.cabinetPath} rel="nofollow">{f.links.cabinet}</a></li>
+        </ul>
+      </nav>
+
+      {
+        hasContacts && (
+          <div>
+            <h3>{f.contact}</h3>
+            <ul>
+              {c.phone && (
+                <li>
+                  <a href={`tel:${c.phone.replace(/\s/g, '')}`}>{c.phone}</a>
+                </li>
+              )}
+              {c.email && (
+                <li>
+                  <a href={`mailto:${c.email}`}>{c.email}</a>
+                </li>
+              )}
+              {c.telegram && (
+                <li>
+                  <a href={c.telegram} rel="noopener" target="_blank">
+                    Telegram
+                  </a>
+                </li>
+              )}
+              {c.instagram && (
+                <li>
+                  <a href={c.instagram} rel="noopener" target="_blank">
+                    Instagram
+                  </a>
+                </li>
+              )}
+              {c.address && <li>{c.address}</li>}
+            </ul>
+          </div>
+        )
+      }
+    </div>
+
+    <div class="footer__bottom">
+      <span>© {year} KlinikaTop. {f.rights}</span>
+      <span class="footer__disclaimer">{f.disclaimer}</span>
+    </div>
+    <div class="footer__word" aria-hidden="true">KlinikaTop</div>
+  </div>
+</footer>

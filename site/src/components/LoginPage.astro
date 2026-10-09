@@ -1,0 +1,74 @@
+---
+/**
+ * Bemor KIRISHI — telefon + parol, SMS'siz.
+ *
+ * Raqam ro'yxatdan o'tishda bir marta tasdiqlangan (`/royxatdan-otish/`),
+ * shuning uchun bu yerda kod yuborilmaydi — tez va tekin. Parol
+ * unutilsa "Parolni unutdingizmi?" kod orqali tiklaydi.
+ *
+ * Bir xil xato "raqam yoki parol noto'g'ri": qaysi biri xatoligini aytish
+ * hisob borligini oshkor qilardi. 5 xato → 15 daqiqa blok (server).
+ */
+import Layout from '../layouts/Layout.astro';
+import Header from './Header.astro';
+import Icon from './Icon.astro';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+}
+const { t } = Astro.props;
+const l = t.login;
+---
+
+<Layout t={t} title={l.meta.title} description={l.meta.description} path={t.paths.login} altPath={t.alt.login}>
+  <Header t={t} page="login" />
+
+  <main id="main" class="auth">
+    <div class="hero__fx auth__fx" aria-hidden="true">
+      <canvas class="fx-canvas" data-fx="light"></canvas>
+    </div>
+
+    <div class="wrap auth__grid">
+      <section class="auth__pitch">
+        <span class="eyebrow" data-reveal>{l.eyebrow}</span>
+        <h1 class="h-section" data-split>{l.title}</h1>
+        <p class="lead" data-reveal style="--d:3">{l.lead}</p>
+      </section>
+
+      <section class="auth__card" data-reveal style="--d:2" aria-live="polite">
+        <form class="auth__step is-active" data-login-form data-fallback={t.auth.error} novalidate>
+          <h2 class="auth__title">{l.title}</h2>
+          <label class="auth__field">
+            <span>{l.phone}</span>
+            <input name="phone" type="tel" inputmode="tel" autocomplete="tel" value="+998 " placeholder="+998 90 123 45 67" required />
+          </label>
+          <label class="auth__field">
+            <span>{l.password}</span>
+            <input name="password" type="password" autocomplete="current-password" maxlength="200" required />
+          </label>
+          <a class="auth__link" href={`${t.paths.auth}?tiklash=1`}>{l.forgot}</a>
+          <button class="btn btn--dark auth__submit" type="submit">
+            {l.submit} <Icon name="arrow" size={18} />
+          </button>
+        </form>
+
+        <div class="auth__step auth__done" data-login-done>
+          <span class="success__icon"><Icon name="check" /></span>
+          <p class="auth__title">{l.done}</p>
+        </div>
+
+        <p class="auth__error" role="alert" data-login-error hidden></p>
+
+        <div class="auth__alt">
+          <span class="auth__switch">{l.noAccount} <a href={t.paths.auth}>{l.register}</a></span>
+          <a href="/app" data-bot><Icon name="telegram" size={18} /> {t.auth.telegramAlt}</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    import '../scripts/login';
+  </script>
+</Layout>

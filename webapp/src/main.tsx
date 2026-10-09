@@ -6,6 +6,7 @@ import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { isCabinetPath } from './lib/session';
 import { initTelegram } from './lib/telegram';
+import { installViewportTracking } from './lib/keyboard';
 import { applyTheme, watchSystemTheme, watchTelegramTheme } from './lib/theme';
 import './styles/global.css';
 import './styles/components.css';
@@ -33,6 +34,8 @@ const WebApp = lazy(() => import('./WebApp').then((mod) => ({ default: mod.WebAp
 // Telegram SDK har ikkala ildizga ham kerak: bemor u orqali ishlaydi,
 // kabinet esa klinika botdan kirganda `initData` ni oladi.
 initTelegram();
+// Klaviatura ochilganda yozish paneli uning ostida qolmasin (lib/keyboard.ts)
+installViewportTracking();
 
 /*
  * Mavzu Telegram ulangandan KEYIN qo'yiladi: `auto` holatda u

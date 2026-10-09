@@ -28,6 +28,7 @@ import { haptic } from '@/lib/telegram';
 import { spring } from '@/lib/motion';
 import { Button, Card, Chip, Field, Input, Notice, Section, Sheet, Skeleton, Textarea } from '@/ui';
 import { Async, useResource } from '@/screens/clinic/shell';
+import { RequestKindsCard } from './RequestKinds';
 import {
   BUILTIN_STEPS,
   type LabTest,
@@ -43,6 +44,10 @@ const BUILTIN_INFO: Record<string, { name: string; what: string }> = {
   operation: { name: 'Operatsiya', what: 'Katalogdan tanlash yoki AI yordami' },
   condition: { name: 'Holat', what: 'Bemor o‘z so‘zi bilan yozadi' },
   documents: { name: 'Hujjatlar', what: 'Tahlil va xulosalarni yuklash' },
+  contra: {
+    name: 'Qarshi ko‘rsatmalar',
+    what: 'Tekshiruvda bo‘lsa (kapsula endoskopiyasi) — bemor «menda yo‘q» deb tasdiqlaydi',
+  },
   region: { name: 'Viloyat', what: 'Qaysi shaharda qidiriladi' },
   budget: { name: 'Byudjet', what: 'Narx statistikasi bilan slayder' },
   date: { name: 'Sana', what: 'Qulay sana oralig‘i' },
@@ -161,6 +166,9 @@ export function RequestStepsScreen() {
 
         return (
           <div className="stack">
+            {/* Turlar bosqichlardan oldin: qaysi oqim umuman ochiqligini belgilaydi */}
+            <RequestKindsCard />
+
             <Notice>
               Bemor so‘rov qoldirayotganda shu bosqichlardan o‘tadi. <b>Tayyor</b> bosqichlar kodda
               yozilgan — ularning tartibi va matnini o‘zgartirish mumkin, lekin yangisini yaratib

@@ -1,0 +1,13 @@
+# Ochiq sahifalar indekslansin; ilova, kabinet va admin — yo'q.
+#
+# Kabinet va admin parol bilan himoyalangan, lekin qidiruvda chiqib
+# turishi ularni e'tibor markaziga qo'yadi. Bu ruxsatni almashtirmaydi.
+
+User-agent: *
+Disallow: /kabinet
+Disallow: /admin
+Disallow: /app
+Disallow: /doctor
+Disallow: /api/
+
+Sitemap: https://klinikatop.uz/sitemap.xml

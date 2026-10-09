@@ -179,7 +179,8 @@ export function ClinicRequest() {
           // Turga mos boshlang'ich bandlar — endi turni bilamiz
           setIncludes(DEFAULT_INCLUDES[data.request.kind]);
           // Boshlang'ich narx: bemor byudjeti yoki bozor medianasi
-          setPrice(data.request.budgetUzs ?? data.stats.median ?? 0);
+          // Yo'llanma va tahlilda narx statistikasi yo'q (`stats` = null)
+          setPrice(data.request.budgetUzs ?? data.stats?.median ?? 0);
         }
       })
       .catch((err) => !cancelled && setError(err?.message ?? t('common.error')));
@@ -300,6 +301,10 @@ export function ClinicRequest() {
             <IconClock size={13} /> {left.text}
           </div>
         )}
+
+        {/* Shifokor yo'naltirgan — ishonch belgisi (shifokor ismi ko'rsatilmaydi) */}
+        {request.viaDoctor && <Badge tone="accent">{t('req.viaDoctor')}</Badge>}
+        {request.contraAcked && <Badge tone="success">{t('req.contraAcked')}</Badge>}
 
         {request.urgency !== 'normal' && (
           <Badge tone={request.urgency === 'urgent' ? 'danger' : 'warning'}>

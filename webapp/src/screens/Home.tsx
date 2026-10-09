@@ -14,6 +14,7 @@ import { money, timeLeft } from '@/lib/format';
 import { haptic } from '@/lib/telegram';
 import { spring } from '@/lib/motion';
 import { TabBar } from '@/components/TabBar';
+import { HomeBanners } from '@/components/HomeBanners';
 import {
   AnimatedItem,
   AnimatedList,
@@ -109,6 +110,9 @@ export function Home() {
             <IconPlus size={22} />
           </span>
         </m.button>
+
+        {/* ── Bannerlar (admin boshqaradi) ── */}
+        <HomeBanners />
 
         {/* ── Narx pulsi: shu hafta nima to'landi ── */}
         <PulseStrip highlights={highlights} />

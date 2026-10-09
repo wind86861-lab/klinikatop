@@ -295,8 +295,8 @@ export async function completeLink(
       .prepare(
         `INSERT INTO clinics
            (name, city_id, address, about, phone, logo_url, license_file_id,
-            verification, external_id, external_synced_at)
-         VALUES (?, ?, ?, '', ?, ?, ?, 'approved', ?, datetime('now'))`,
+            verification, external_id, external_synced_at, accepts_referral)
+         VALUES (?, ?, ?, '', ?, ?, ?, 'approved', ?, datetime('now'), 0)`,
       )
       .run(
         source.nameUz,

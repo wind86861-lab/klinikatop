@@ -1,0 +1,242 @@
+---
+/**
+ * Bosh sahifa — ikki tilda bitta tuzilish (`/` va `/ru/`).
+ */
+import Layout from '../layouts/Layout.astro';
+import Header from './Header.astro';
+import Footer from './Footer.astro';
+import Hero from './Hero.astro';
+import Showcase from './Showcase.astro';
+import Steps from './Steps.astro';
+import Faq from './Faq.astro';
+import Icon from './Icon.astro';
+import { site } from '../site';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+}
+const { t } = Astro.props;
+const h = t.home;
+const benefitIcons = ['bolt', 'scale', 'gift', 'heart'] as const;
+const serviceIcons = ['stetho', 'flask', 'doc'] as const;
+const trustIcons = ['shield', 'lock', 'star', 'spark'] as const;
+
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: h.faq.items.map((it) => ({
+    '@type': 'Question',
+    name: it.q,
+    acceptedAnswer: { '@type': 'Answer', text: it.a },
+  })),
+};
+const howToSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'HowTo',
+  name: h.steps.title,
+  description: h.steps.lead,
+  step: h.steps.items.map((it, i) => ({
+    '@type': 'HowToStep',
+    position: i + 1,
+    name: it.title,
+    text: it.text,
+  })),
+};
+/*
+ * Raqamlar BUILD vaqtida prod'dan olinadi — HTML'da haqiqiy son turadi
+ * (Google ham ko'radi, JS'siz ham). Sahifada keyin jonli yangilanadi.
+ * Olinmasa — "—", va JS ochilganda to'ldiradi.
+ */
+let stats: Record<string, number> = {};
+try {
+  const res = await fetch(`${site.url}/api/public/stats`, { signal: AbortSignal.timeout(5000) });
+  if (res.ok) stats = await res.json();
+} catch {
+  /* tarmoq yo'q — jonli yangilanishga qoladi */
+}
+const stat = (k: string) => {
+  const v = stats[k];
+  return typeof v === 'number' && v > 0 ? v.toLocaleString('ru-RU').replace(/\u00a0|,/g, ' ') : '—';
+};
+---
+
+<Layout
+  t={t}
+  title={h.meta.title}
+  description={h.meta.description}
+  path={t.paths.home}
+  altPath={t.alt.home}
+  schema={[faqSchema, howToSchema]}
+  telegramRedirect
+>
+  <Header t={t} page="home" />
+
+  <main id="main">
+    <Hero t={t} />
+    <Showcase t={t} />
+
+    <!-- Raqamlar -->
+    <section class="section" id="raqamlar" style="padding-top:0" aria-label={h.stats.title}>
+      <div class="wrap">
+        <div class="stats" data-reveal>
+          <div class="stat"><span class="stat__num" data-stat="clinics">{stat('clinics')}</span><span class="stat__label">{h.stats.clinics}</span></div>
+          <div class="stat"><span class="stat__num" data-stat="operations">{stat('operations')}</span><span class="stat__label">{h.stats.operations}</span></div>
+          <div class="stat"><span class="stat__num" data-stat="labTests">{stat('labTests')}</span><span class="stat__label">{h.stats.labTests}</span></div>
+          <div class="stat"><span class="stat__num grad-text">0</span><span class="stat__label">{h.stats.free}</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Muammo → yechim -->
+    <section class="section section--tint" aria-labelledby="problem-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow" data-reveal>{h.problem.eyebrow}</span>
+          <h2 id="problem-title" class="h-section" data-split>{h.problem.title}</h2>
+        </div>
+        <div class="versus">
+          <div class="versus__card versus__card--before" data-reveal>
+            <span class="versus__label">{h.problem.beforeLabel}</span>
+            <ul>{h.problem.before.map((x) => <li><Icon name="x" />{x}</li>)}</ul>
+          </div>
+          <div class="versus__card versus__card--after" data-reveal style="--d:2">
+            <span class="versus__label">{h.problem.afterLabel}</span>
+            <ul>{h.problem.after.map((x) => <li><Icon name="check" />{x}</li>)}</ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <Steps t={t} />
+
+
+    <!-- Bemorlarga -->
+    <section class="section" id="bemorlar" aria-labelledby="benefits-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow" data-reveal>{h.benefits.eyebrow}</span>
+          <h2 id="benefits-title" class="h-section" data-split>{h.benefits.title}</h2>
+        </div>
+        <div class="cards">
+          {
+            h.benefits.items.map((b, i) => (
+              <article class="card" data-reveal style={`--d:${i}`}>
+                <span class="card__num">0{i + 1}</span>
+                <span class="card__icon"><Icon name={benefitIcons[i]} /></span>
+                <h3 class="h-card">{b.title}</h3>
+                <p>{b.text}</p>
+              </article>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Xizmatlar -->
+    <section class="section section--tint" id="xizmatlar" aria-labelledby="services-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow" data-reveal>{h.services.eyebrow}</span>
+          <h2 id="services-title" class="h-section" data-split>{h.services.title}</h2>
+        </div>
+        <div class="services">
+          {
+            h.services.items.map((s, i) => (
+              <article class="service" data-reveal style={`--d:${i}`}>
+                <div>
+                  <span class="card__icon"><Icon name={serviceIcons[i]} /></span>
+                  <h3>{s.title}</h3>
+                  <p>{s.text}</p>
+                </div>
+                <div class="tags">{s.tags.map((x) => <span>{x}</span>)}</div>
+              </article>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Klinikalar uchun (qorong'i bant) -->
+    <section class="section deep" aria-labelledby="band-title">
+      <div class="deep__fx" aria-hidden="true">
+        <div class="fx-fallback"></div>
+        <canvas class="fx-canvas" data-fx="dark"></canvas>
+      </div>
+      <div class="wrap band">
+        <div class="section-head" style="margin:0">
+          <span class="eyebrow" data-reveal>{h.clinicsBand.eyebrow}</span>
+          <h2 id="band-title" class="h-section" data-split>{h.clinicsBand.title}</h2>
+          <p class="lead" data-reveal style="--d:3">{h.clinicsBand.text}</p>
+          <div class="hero__ctas" style="justify-content:flex-start;--d:4" data-reveal>
+            <a class="btn btn--light" href={t.paths.clinics}>{h.clinicsBand.cta} <Icon name="arrow" size={18} /></a>
+            <a class="btn btn--line-light" href={site.clinicSignupPath}>{t.clinics.hero.primary}</a>
+          </div>
+        </div>
+        <ul class="band__list" role="list">
+          {h.clinicsBand.items.map((x, i) => <li data-reveal style={`--d:${i}`}><span>0{i + 1}</span>{x}</li>)}
+        </ul>
+      </div>
+    </section>
+
+    <!-- Ishonch -->
+    <section class="section" aria-labelledby="trust-title">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow" data-reveal>{h.trust.eyebrow}</span>
+          <h2 id="trust-title" class="h-section" data-split>{h.trust.title}</h2>
+        </div>
+        <div class="trust">
+          {
+            h.trust.items.map((x, i) => (
+              <div class="trust__item" data-reveal style={`--d:${i}`}>
+                <Icon name={trustIcons[i]} />
+                <h3 class="h-card">{x.title}</h3>
+                <p>{x.text}</p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!--
+      Hamkorlar — admin panelidan, CHEKLANMAGAN son. Logolarni server qo'yadi
+      (services/siteContent.ts → applyPartners); hamkor yo'q bo'lsa bo'lim yashirin.
+    -->
+    <section class="section section--tint partners-section" aria-labelledby="partners-title" style="padding-block:clamp(60px,8vw,110px)">
+      <div class="wrap">
+        <div class="section-head section-head--center" style="margin-bottom:40px">
+          <span class="eyebrow">{h.partners.eyebrow}</span>
+          <h2 id="partners-title" class="h-section" style="font-size:clamp(1.8rem,3.4vw,2.8rem)">{h.partners.title}</h2>
+        </div>
+      </div>
+      <div class="marquee">
+        <div class="marquee__track" data-partners></div>
+      </div>
+    </section>
+
+    <Faq eyebrow={h.faq.eyebrow} title={h.faq.title} items={h.faq.items}>
+      <a class="btn btn--dark" href={site.appPath} data-bot data-reveal style="--d:4;justify-self:start">
+        <Icon name="telegram" size={20} /> {t.nav.cta}
+      </a>
+    </Faq>
+
+    <!-- Yakuniy CTA -->
+    <section class="section" style="padding-top:0;padding-bottom:clamp(40px,6vw,80px)" aria-labelledby="final-title">
+      <div class="wrap">
+        <div class="final" data-reveal>
+          <img src="/logo-light.svg" alt="" width="72" height="84" />
+          <h2 id="final-title" class="h-section">{h.cta.title}</h2>
+          <p class="lead">{h.cta.text}</p>
+          <div class="hero__ctas">
+            <a class="btn btn--light" href={site.appPath} data-bot><Icon name="telegram" size={20} /> {t.common.telegram}</a>
+            <a class="btn btn--line-light" href={t.paths.auth}>{t.common.browser}</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <Footer t={t} />
+</Layout>

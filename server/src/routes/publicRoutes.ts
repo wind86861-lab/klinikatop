@@ -10,14 +10,18 @@
  * talab qilish keraksiz to'siq. U avval arizasini qoldiradi, tasdiqlangach
  * bot orqali hisobini biriktiradi.
  */
-import { Router } from 'express';
+import { bannerFilePath } from '../services/appBanners';
+import express, { Router } from 'express';
 import { z } from 'zod';
 import { rateLimit } from '../middleware/rateLimit';
 import { submitApplication } from '../services/clinicApplications';
+import { MAX_LICENSE_BYTES } from '../services/applicationFiles';
 import { listLabTests } from '../services/labOrgans';
 import { catalogTree, listCities, listOperations } from '../services/catalog';
 import { getPublicStats } from '../services/publicStats';
 import { asyncHandler } from '../lib/asyncHandler';
+import { publicSiteMedia, siteMediaFilePath } from '../services/siteMedia';
+import { partnerFilePath } from '../services/siteContent';
 
 export const publicRouter = Router();
 
@@ -34,6 +38,71 @@ publicRouter.get(
     res.json(await getPublicStats());
   }),
 );
+
+/**
+ * Sayt media ro'yxati — klinikatop.uz sahifalari o'qiydi.
+ * Faqat ochiq narsalar: rasm manzili, YouTube ID va alt-matn.
+ */
+publicRouter.get(
+  '/site-media',
+  rateLimit({ name: 'public-site-media', windowSec: 60, max: 120 }),
+  (_req, res) => {
+    res.setHeader('cache-control', 'public, max-age=60');
+    res.json({ items: publicSiteMedia() });
+  },
+);
+
+/**
+ * Sayt rasmi. Fayl nomi har yuklashda yangi — shuning uchun uzoq kesh
+ * xavfsiz: rasm almashsa, manzil ham almashadi.
+ */
+publicRouter.get('/media/:name', (req, res, next) => {
+  const file = siteMediaFilePath(req.params.name);
+  // `sendFile` Range so'rovlarini qo'llaydi — video bo'laklab yuklanadi
+  res.sendFile(
+    file.path,
+    {
+      headers: {
+        'content-type': file.mimeType,
+        'cache-control': 'public, max-age=31536000, immutable',
+        'cross-origin-resource-policy': 'same-site',
+      },
+    },
+    (err) => err && next(err),
+  );
+});
+
+/** Ilova banneri rasmi — nomi har yuklashda yangi, shuning uchun uzoq kesh */
+publicRouter.get('/banners/:name', (req, res, next) => {
+  const file = bannerFilePath(req.params.name);
+  res.sendFile(
+    file.path,
+    {
+      headers: {
+        'content-type': file.mimeType,
+        'cache-control': 'public, max-age=31536000, immutable',
+        'cross-origin-resource-policy': 'same-site',
+      },
+    },
+    (err) => err && next(err),
+  );
+});
+
+/** Hamkor logosi — nomi har yuklashda yangi, shuning uchun uzoq kesh */
+publicRouter.get('/partners/:name', (req, res, next) => {
+  const file = partnerFilePath(req.params.name);
+  res.sendFile(
+    file.path,
+    {
+      headers: {
+        'content-type': file.mimeType,
+        'cache-control': 'public, max-age=31536000, immutable',
+        'cross-origin-resource-policy': 'same-site',
+      },
+    },
+    (err) => err && next(err),
+  );
+});
 
 /** Ariza formasi uchun ma'lumotnomalar — ochiq, maxfiy emas. */
 publicRouter.get('/reference', (_req, res) => {
@@ -64,7 +133,20 @@ const applicationSchema = z.object({
   operationIds: z.array(z.number().int().positive()).max(60).default([]),
   labTestIds: z.array(z.number().int().positive()).max(120).default([]),
   acceptsReferral: z.boolean().default(false),
+  /** Litsenziya fayli — base64. Turi serverda faylning o'ziga qarab aniqlanadi */
+  licenseFile: z.object({
+    name: z.string().trim().min(1).max(200),
+    dataBase64: z.string().min(1),
+  }),
 });
+
+/*
+ * Ariza tanasi fayl bilan keladi — umumiy 1 MB chegara yetmaydi.
+ * `index.ts` bu yo'lni umumiy parserdan o'tkazib yuboradi; bu yerda
+ * tezlik cheklovidan KEYIN o'qiladi, ya'ni cheklovdan oshgan so'rovning
+ * katta tanasi umuman tahlil qilinmaydi.
+ */
+const applicationBody = express.json({ limit: `${Math.ceil((MAX_LICENSE_BYTES * 1.4) / 1024 / 1024)}mb` });
 
 /**
  * Ariza qoldirish.
@@ -76,6 +158,7 @@ const applicationSchema = z.object({
 publicRouter.post(
   '/clinic-application',
   rateLimit({ name: 'clinic-application', windowSec: 3600, max: 20 }),
+  applicationBody,
   (req, res) => {
     const body = applicationSchema.parse(req.body);
 

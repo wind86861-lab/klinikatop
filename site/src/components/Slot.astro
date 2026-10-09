@@ -1,0 +1,27 @@
+---
+/**
+ * Admin yuklaydigan rasm uchun joy.
+ *
+ * Ichidagi kontent (mock yoki bo'sh fon) — rasm yuklanmaguncha
+ * ko'rinadi. Admin "Sayt media" bo'limida shu `id` ga rasm qo'ysa,
+ * sahifa uni ustiga qo'yadi. Kalitlar ro'yxati: shared/siteMedia.ts.
+ *
+ * `?preview=slots` bilan ochilganda har joy nomi va o'lchami bilan
+ * belgilanadi — admin qaysi rasm qayerga tushishini ko'radi.
+ */
+interface Props {
+  id: string;
+  /** Tavsiya etilgan o'lcham — ko'rib chiqish rejimida ko'rsatiladi */
+  size: string;
+  alt?: string;
+  eager?: boolean;
+  class?: string;
+  tag?: 'div' | 'figure';
+}
+const { id, size, alt = '', eager = false, class: cls = '', tag: Tag = 'div' } = Astro.props;
+---
+
+<Tag class={`slot ${cls}`} data-slot={id} data-alt={alt} data-eager={eager ? '1' : undefined}>
+  <slot />
+  <span class="slot__label">{id} · {size}</span>
+</Tag>

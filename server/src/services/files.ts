@@ -15,6 +15,7 @@ import path from 'node:path';
 import { db } from '../db';
 import { config } from '../lib/config';
 import { badRequest, forbidden, notFound } from '../lib/errors';
+import { sniff } from './applicationFiles';
 
 export const FILE_KINDS = ['uzi', 'mrt', 'analiz', 'xulosa', 'other'] as const;
 export type FileKind = (typeof FILE_KINDS)[number];
@@ -66,8 +67,7 @@ export interface SaveFileInput {
 }
 
 export function saveFile(input: SaveFileInput): StoredFile {
-  const extension = ALLOWED_MIME[input.mimeType];
-  if (!extension) {
+  if (!ALLOWED_MIME[input.mimeType]) {
     throw badRequest('unsupported_type', 'Faqat rasm (JPG, PNG, WEBP) yoki PDF qabul qilinadi');
   }
 
@@ -76,6 +76,19 @@ export function saveFile(input: SaveFileInput): StoredFile {
   if (buffer.length > MAX_FILE_BYTES) {
     throw badRequest('file_too_large', `Fayl ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB dan katta`);
   }
+
+  /*
+   * Tur FAYLNING O'ZIDAN aniqlanadi, mijoz aytganidan emas. Ilgari
+   * `image/png` deb belgilangan HTML ham saqlanib, klinikaga berilardi.
+   * Saqlanadigan tur ham haqiqiysi — telefon kamerasi JPEG'ni boshqa
+   * nom bilan yuborsa ham to'g'ri ko'rsatiladi.
+   */
+  const real = sniff(buffer);
+  if (!real || !ALLOWED_MIME[real.mime]) {
+    throw badRequest('unsupported_type', 'Fayl rasm (JPG, PNG, WEBP, HEIC) yoki PDF emas');
+  }
+  const extension = ALLOWED_MIME[real.mime];
+  input = { ...input, mimeType: real.mime };
 
   fs.mkdirSync(uploadDir, { recursive: true });
 

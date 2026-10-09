@@ -4,6 +4,7 @@ import { m } from 'framer-motion';
 import { useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { api } from '@/lib/api';
+import { tg } from '@/lib/telegram';
 import { money } from '@/lib/format';
 import { popVariants, spring } from '@/lib/motion';
 import { cityName } from '@/i18n';
@@ -61,6 +62,19 @@ export function Profile() {
 
   // Anketa to'ldirilganmi — profil ekranida holatini ko'rsatish uchun
   const [medicalFilled, setMedicalFilled] = useState(false);
+  /*
+   * Saytga kirish paroli — faqat Telegram ichida qo'yiladi (shaxs
+   * Telegram imzosi bilan tasdiqlangan, SMS kerak emas).
+   */
+  const insideTelegram = Boolean(tg?.initData);
+  const [hasPassword, setHasPassword] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!insideTelegram) return;
+    api
+      .webLogin()
+      .then((s) => setHasPassword(s.hasPassword))
+      .catch(() => setHasPassword(null));
+  }, [insideTelegram]);
   // Asosiy profil doim to'liq (aks holda ilovaga kirib bo'lmaydi), anketa ixtiyoriy
   const completedSteps = 1 + (medicalFilled ? 1 : 0);
   useEffect(() => {
@@ -155,6 +169,14 @@ export function Profile() {
           sub={medicalFilled ? t('med.filled') : t('med.empty')}
           onClick={() => navigate('/profile/medical')}
         />
+        {insideTelegram && (
+          <MenuRow
+            icon={<IconShield size={18} />}
+            title={t('profile.webLogin')}
+            sub={hasPassword ? t('profile.webLoginSet') : t('profile.webLoginNone')}
+            onClick={() => navigate('/profile/password')}
+          />
+        )}
         <MenuRow icon={<IconGear />} title={t('profile.settings')} onClick={() => navigate('/settings')} />
         <MenuRow
           icon={<IconBell size={18} />}

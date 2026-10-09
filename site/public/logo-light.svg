@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 232" role="img" aria-label="KlinikaTop">
+  <defs>
+    <linearGradient id="kt-shield" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2cf0cf"/>
+      <stop offset="1" stop-color="#079a8a"/>
+    </linearGradient>
+    <linearGradient id="kt-v" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c9d6d9"/>
+    </linearGradient>
+    <linearGradient id="kt-t" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1fe3c2"/>
+      <stop offset="1" stop-color="#0aa895"/>
+    </linearGradient>
+  </defs>
+  <path d="M100 10c27 14 55 20 86 20v78c0 60-36 97-86 116C50 205 14 168 14 108V30c31 0 59-6 86-20z"
+        fill="none" stroke="url(#kt-shield)" stroke-width="15" stroke-linejoin="round"/>
+  <path d="M46 70h32l30 80-15 19z" fill="url(#kt-v)" class="kt-v"/>
+  <path d="M93 169l15-19 42-92h14z" fill="url(#kt-v)" class="kt-v" opacity=".85"/>
+  <path d="M104 112h64v20h-21v62h-22v-62h-21z" fill="url(#kt-t)"/>
+</svg>

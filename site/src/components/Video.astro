@@ -1,0 +1,41 @@
+---
+/**
+ * YouTube video — "facade" usulida.
+ *
+ * Sahifa ochilganda faqat muqova rasmi bor; YouTube iframe'i (~600 KB
+ * skript) BOSILGANDAN keyin yuklanadi. Video ID admin panelidan
+ * keladi (`data-video` kaliti). ID qo'yilmaguncha butun bo'lim
+ * yashirin: "tez orada" degan bo'sh quti saytni tugallanmagan
+ * ko'rsatardi. `?preview=slots` da ko'rinadi.
+ */
+import Icon from './Icon.astro';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+  id: string;
+  eyebrow: string;
+  title: string;
+  text: string;
+  tint?: boolean;
+}
+const { t, id, eyebrow, title, text, tint = false } = Astro.props;
+---
+
+<section class={`section ${tint ? 'section--tint' : ''}`} data-needs-media aria-labelledby={`${id}-title`}>
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow" data-reveal>{eyebrow}</span>
+      <h2 id={`${id}-title`} class="h-section" data-split>{title}</h2>
+      <p class="lead" data-reveal style="--d:3">{text}</p>
+    </div>
+
+    <div class="video" data-video={id} role="button" tabindex="0" aria-label={`${t.common.watch}: ${title}`} data-reveal>
+      <img data-poster alt="" loading="lazy" decoding="async" hidden />
+      <span class="video__shade"></span>
+      <span class="video__play"><Icon name="play" /></span>
+      <span class="video__cursor"><i><Icon name="play" size={14} /></i>{t.common.watch}</span>
+      <span class="video__soon">{t.common.soon} · <code>{id}</code></span>
+    </div>
+  </div>
+</section>

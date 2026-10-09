@@ -22,6 +22,8 @@ import type { City, LabTest, Operation } from '@shared/types';
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
 
+import { formatSize, prepareLicense, type LicenseFile } from '@/lib/docFile';
+
 interface Reference {
   cities: City[];
   operations: Operation[];
@@ -66,6 +68,9 @@ export function ClinicSignup() {
   const [cityId, setCityId] = useState<number | null>(null);
   const [address, setAddress] = useState('');
   const [licenseNo, setLicenseNo] = useState('');
+  const [licenseFile, setLicenseFile] = useState<LicenseFile | null>(null);
+  const [licenseBusy, setLicenseBusy] = useState(false);
+  const [licenseError, setLicenseError] = useState<string | null>(null);
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -89,7 +94,12 @@ export function ClinicSignup() {
 
   /** Har bosqichning o'z sharti — keyingisiga o'tishdan oldin tekshiriladi. */
   const stepValid: Record<Step, boolean> = {
-    clinic: name.trim().length >= 2 && cityId !== null && address.trim().length >= 3 && licenseNo.trim().length >= 3,
+    clinic:
+      name.trim().length >= 2 &&
+      cityId !== null &&
+      address.trim().length >= 3 &&
+      licenseNo.trim().length >= 3 &&
+      licenseFile !== null,
     contact: contactName.trim().length >= 2 && contactPhone.trim().length >= 7,
     // Kamida bitta xizmat — server ham shuni talab qiladi
     services: operationIds.length > 0 || labTestIds.size > 0 || acceptsReferral,
@@ -104,6 +114,19 @@ export function ClinicSignup() {
     setDirection(delta);
     setStep(STEPS[next]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const pickLicense = async (file: File | undefined) => {
+    if (!file) return;
+    setLicenseError(null);
+    setLicenseBusy(true);
+    try {
+      setLicenseFile(await prepareLicense(file));
+    } catch (err: any) {
+      setLicenseError(err?.message ?? 'Faylni o‘qib bo‘lmadi');
+    } finally {
+      setLicenseBusy(false);
+    }
   };
 
   const submit = async () => {
@@ -125,6 +148,7 @@ export function ClinicSignup() {
           operationIds,
           labTestIds: [...labTestIds],
           acceptsReferral,
+          licenseFile: licenseFile && { name: licenseFile.name, dataBase64: licenseFile.dataBase64 },
         }),
       });
       const data = await res.json();
@@ -320,6 +344,46 @@ export function ClinicSignup() {
                           maxLength={120}
                           onChange={(e) => setLicenseNo(e.target.value)}
                         />
+                      </Field>
+
+                      <Field
+                        label="Litsenziya fayli"
+                        hint="PDF yoki surat, 8 MB gacha. Moderator raqamni shu hujjat bilan solishtiradi."
+                      >
+                        {licenseFile ? (
+                          <div className="cs__file is-picked">
+                            {licenseFile.preview ? (
+                              <img className="cs__fileThumb" src={licenseFile.preview} alt="" />
+                            ) : (
+                              <span className="cs__fileThumb cs__fileThumb--pdf">PDF</span>
+                            )}
+                            <span className="cs__fileMeta">
+                              <strong>{licenseFile.name}</strong>
+                              <span className="tiny">{formatSize(licenseFile.size)}</span>
+                            </span>
+                            <button type="button" className="cs__clear" onClick={() => setLicenseFile(null)}>
+                              Olib tashlash
+                            </button>
+                          </div>
+                        ) : (
+                          <label className={`cs__file ${licenseBusy ? 'is-busy' : ''}`}>
+                            <input
+                              type="file"
+                              accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,.heic"
+                              hidden
+                              onChange={(e) => {
+                                void pickLicense(e.target.files?.[0]);
+                                e.target.value = '';
+                              }}
+                            />
+                            <span className="cs__fileIcon" aria-hidden="true">⬆</span>
+                            <span className="cs__fileMeta">
+                              <strong>{licenseBusy ? 'Tayyorlanmoqda…' : 'Faylni tanlang yoki suratga oling'}</strong>
+                              <span className="tiny">PDF, JPG, PNG, HEIC</span>
+                            </span>
+                          </label>
+                        )}
+                        {licenseError && <span className="cs__fileError">{licenseError}</span>}
                       </Field>
                     </>
                   )}

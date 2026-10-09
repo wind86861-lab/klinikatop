@@ -33,7 +33,7 @@ function activeIndex(tabs: Tab[], pathname: string): number {
   let best = -1;
   let bestLength = -1;
   tabs.forEach((tab, i) => {
-    const matches = tab.path === '/' ? pathname === '/' : pathname.startsWith(tab.path);
+    const matches = tab.path === '/' ? pathname === '/' || pathname === '/app' : pathname.startsWith(tab.path);
     if (matches && tab.path.length > bestLength) {
       best = i;
       bestLength = tab.path.length;

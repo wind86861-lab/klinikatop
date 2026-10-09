@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AUCTION_MODES, REQUEST_KINDS, STEP_KINDS } from '../../../shared/types';
 import { listSteps, saveSteps } from '../services/requestSteps';
+import { getRequestKinds, setRequestKinds } from '../services/requestKinds';
+import { adminDoctorStats } from '../services/doctorCases';
+import { createBanner, deleteBanner, listBanners, reorderBanners, updateBanner } from '../services/appBanners';
 import { listPendingCommissionPayments, reviewCommissionPayment } from '../services/clinicCabinet';
 import {
   applyBotFace,
@@ -15,7 +18,11 @@ import { setTextSetting } from '../services/terms.business';
 import { addAiKey, deleteAiKey, listAiKeys, setAiKeyActive } from '../services/aiKeys';
 import { resetAiProvider } from '../services/aiProvider';
 import { listSyncLog, planSync, runSync, sourceConfigured } from '../services/catalogSync';
+import { listOperationsForPricing, setOperationPriceRange } from '../services/operationPricing';
 import { rateLimit } from '../middleware/rateLimit';
+import express from 'express';
+import { MAX_SITE_UPLOAD_BYTES, clearSiteMedia, listSiteMedia, setSiteImage, setSiteVideo } from '../services/siteMedia';
+import { SITE_MEDIA_SLOTS } from '../../../shared/siteMedia';
 import { forbidden } from '../lib/errors';
 import { asyncHandler } from '../lib/asyncHandler';
 import { db } from '../db';
@@ -32,11 +39,32 @@ import {
 } from '../services/terms.business';
 import {
   approveApplication,
+  getApplicationLicense,
   deleteApplication,
   listApplications,
   rejectApplication,
 } from '../services/clinicApplications';
 import { ADMIN_CLINIC_FILTERS, type AdminClinicFilter } from '../../../shared/types';
+import { getAdminClinicDetail } from '../services/adminClinicDetail';
+import {
+  addPartner,
+  deletePartner,
+  invalidateSite,
+  listPartners,
+  listSiteTexts,
+  reorderPartners,
+  setSiteText,
+  updatePartner,
+} from '../services/siteContent';
+import { ADMIN_REQUEST_FILTERS, getAdminRequest, listAdminRequests, rebroadcastRequest } from '../services/adminRequests';
+import {
+  approveDoctor,
+  getDoctorForAdmin,
+  listDoctorsForAdmin,
+  readDoctorDocumentForAdmin,
+  rejectDoctor,
+} from '../services/referringDoctors';
+import { REFERRING_DOCTOR_STATUSES } from '../../../shared/types';
 
 /** Moderator amalini mavjud audit jurnaliga yozadi. */
 function logModeration(userId: number, entity: string, entityId: number, action: string, note: string | null) {
@@ -172,6 +200,11 @@ adminRouter.patch('/clinics/:id', requireRole('admin'), (req, res) => {
  * Ekran shu sonlarni ko'rsatadi — odam nimani yo'qotayotganini
  * bilib turib tasdiqlasin.
  */
+/** Bitta klinika — to'liq ma'lumot (jadval va so'rov varag'idan ochiladi) */
+adminRouter.get('/clinics/:id/detail', requireRole('admin'), (req, res) => {
+  res.json(getAdminClinicDetail(Number(req.params.id)));
+});
+
 adminRouter.get('/clinics/:id/deletion-impact', requireRole('admin'), (req, res) => {
   res.json(clinicDeletionImpact(Number(req.params.id)));
 });
@@ -324,6 +357,38 @@ adminRouter.get('/applications', (req, res) => {
  * Parol o'rnatish havolasi javobda BIR MARTA qaytadi — moderator uni
  * klinikaning pochtasiga yuboradi.
  */
+/**
+ * Bemor so'rovlari: kim so'radi va so'rov qaysi klinikalarga ketdi.
+ * Bemor telefon raqami ko'rinadi — bu ekran faqat admin eshigida.
+ */
+adminRouter.get('/requests', requireRole('admin'), (req, res) => {
+  const filter = z.enum(ADMIN_REQUEST_FILTERS).catch('all').parse(req.query.filter);
+  res.json(listAdminRequests(filter));
+});
+
+adminRouter.get('/requests/:id', requireRole('admin'), (req, res) => {
+  res.json(getAdminRequest(Number(req.params.id)));
+});
+
+adminRouter.post('/requests/:id/rebroadcast', requireRole('admin'), (req, res) => {
+  const id = Number(req.params.id);
+  const result = rebroadcastRequest(id);
+  logModeration(req.user!.id, 'request', id, 'rebroadcast', String(result.added));
+  res.json(result);
+});
+
+/**
+ * Arizadagi litsenziya fayli. Fayl ochiq manzilda emas — faqat admin
+ * sessiyasi bilan, keshlanmasdan beriladi.
+ */
+adminRouter.get('/applications/:id/license', (req, res) => {
+  const file = getApplicationLicense(Number(req.params.id));
+  res.setHeader('content-type', file.mime);
+  res.setHeader('content-disposition', `inline; filename="${encodeURIComponent(file.name)}"`);
+  res.setHeader('cache-control', 'private, no-store');
+  res.send(file.buffer);
+});
+
 adminRouter.post('/applications/:id/approve', (req, res) => {
   const app = approveApplication(Number(req.params.id), req.user!.id);
   /*
@@ -348,6 +413,45 @@ adminRouter.delete('/applications/:id', (req, res) => {
   deleteApplication(Number(req.params.id));
   logModeration(req.user!.id, 'application', Number(req.params.id), 'delete', null);
   res.status(204).end();
+});
+
+/* ═════════════════  Yo'naltiruvchi shifokorlar  ═════════════════ */
+
+adminRouter.get('/doctors', (req, res) => {
+  const filter = z.enum([...REFERRING_DOCTOR_STATUSES, 'all']).catch('all').parse(req.query.status);
+  res.json(listDoctorsForAdmin(filter));
+});
+
+/** Shifokorlar statistikasi: tavsiyalar, klinikalar kesimi, summalar */
+adminRouter.get('/doctors/stats', (_req, res) => res.json(adminDoctorStats()));
+
+adminRouter.get('/doctors/:id', (req, res) => {
+  res.json(getDoctorForAdmin(Number(req.params.id)));
+});
+
+/** Diplom fayli — ochiq manzil yo'q, faqat admin sessiyasi bilan, keshlanmasdan */
+adminRouter.get('/doctors/:id/documents/:docId', (req, res) => {
+  const file = readDoctorDocumentForAdmin(Number(req.params.id), Number(req.params.docId));
+  res.setHeader('content-type', file.mime);
+  res.setHeader('content-disposition', `inline; filename="${encodeURIComponent(file.name)}"`);
+  res.setHeader('cache-control', 'private, no-store');
+  res.send(file.buffer);
+});
+
+/*
+ * Qaror — faqat to'liq huquqli administrator. Tasdiqlangan shifokor
+ * bemorlar nomidan so'rov yarata oladi, ya'ni bu platformaga kimni
+ * kiritish haqidagi qaror.
+ */
+adminRouter.post('/doctors/:id/approve', (req, res) => {
+  requireFullAdmin(req);
+  res.json(approveDoctor(Number(req.params.id), req.user!.id));
+});
+
+adminRouter.post('/doctors/:id/reject', (req, res) => {
+  requireFullAdmin(req);
+  const body = z.object({ reason: z.string().trim().min(3).max(500) }).parse(req.body);
+  res.json(rejectDoctor(Number(req.params.id), req.user!.id, body.reason));
 });
 
 /* ═════════════════  Katalog manbasi (banisa.uz)  ═════════════════ */
@@ -401,6 +505,21 @@ adminRouter.post(
  * Tartib, matn va yoqilgan-yoqilmagani — mahsulot qarori. Admin ularni
  * shu yerdan o'zgartiradi va o'zining savolini qo'sha oladi.
  */
+/* ── So'rov turlari: yoqish/o'chirish va tartib ── */
+
+adminRouter.get('/request-kinds', (_req, res) => res.json(getRequestKinds()));
+
+adminRouter.put('/request-kinds', (req, res) => {
+  const body = z
+    .object({ kinds: z.array(z.object({ kind: z.enum(REQUEST_KINDS), enabled: z.boolean() })).length(REQUEST_KINDS.length) })
+    .parse(req.body);
+  const before = getRequestKinds();
+  // `updated_by` — admin_users jadvali (veb hisob), users emas
+  const after = setRequestKinds(body.kinds, req.web?.id ?? null);
+  logModeration(req.user!.id, 'platform', 0, 'request-kinds:update', JSON.stringify({ before, after }));
+  res.json(after);
+});
+
 adminRouter.get('/request-steps', (_req, res) => {
   res.json(listSteps());
 });
@@ -584,6 +703,9 @@ const labTestSchema = z.object({
   /* Qaysi guruhga kiradi (MRT, MSKT); null — o'zi guruh */
   parentId: z.number().int().positive().nullable().optional(),
   durationMin: z.number().int().min(0).max(600).nullable().optional(),
+  needsWeight: z.boolean().optional(),
+  contraUz: z.string().max(2000).nullable().optional(),
+  contraRu: z.string().max(2000).nullable().optional(),
 });
 
 adminRouter.post('/lab-tests', requireRole('admin'), (req, res) => {
@@ -600,4 +722,174 @@ adminRouter.delete('/lab-tests/:id', requireRole('admin'), (req, res) => {
   res.status(204).end();
 });
 
+/**
+ * Operatsiyalarning narx oralig'i.
+ *
+ * Katalogning o'zi bu yerdan tahrirlanmaydi — operatsiyalar banisa
+ * importidan keladi. Faqat narx: u bizning ma'lumotimiz va importda
+ * yo'q.
+ */
+adminRouter.get('/operations', requireRole('admin'), (_req, res) => {
+  res.json({ operations: listOperationsForPricing() });
+});
 
+adminRouter.patch('/operations/:id/price-range', requireRole('admin'), (req, res) => {
+  const body = z
+    .object({
+      /*
+       * `null` — chegarani olib tashlash, shuning uchun `nullable`
+       * va `optional` emas: admin maydonni bo'shatganda buni aniq
+       * yuborish kerak.
+       */
+      minPriceUzs: z.number().int().min(0).max(2_000_000_000).nullable(),
+      maxPriceUzs: z.number().int().min(0).max(2_000_000_000).nullable(),
+    })
+    .parse(req.body);
+  res.json(setOperationPriceRange(Number(req.params.id), body.minPriceUzs, body.maxPriceUzs));
+});
+
+/* ═════════════════  Sayt media (klinikatop.uz)  ═════════════════ */
+
+/*
+ * Rasm base64 bilan keladi — umumiy 1 MB chegara yetmaydi. Shuning
+ * uchun bu yo'l `index.ts` dagi umumiy parserdan o'tkazib yuboriladi
+ * va o'z chegarasi shu yerda.
+ */
+const siteMediaBody = express.json({ limit: `${Math.ceil((MAX_SITE_UPLOAD_BYTES * 1.4) / 1024 / 1024)}mb` });
+
+adminRouter.get('/site-media', requireRole('admin'), (_req, res) => {
+  res.json({ slots: SITE_MEDIA_SLOTS, items: listSiteMedia() });
+});
+
+const siteMediaSchema = z.union([
+  z.object({
+    mimeType: z.string().min(3).max(40),
+    dataBase64: z.string().min(1),
+    altUz: z.string().trim().max(200).default(''),
+    altRu: z.string().trim().max(200).default(''),
+  }),
+  z.object({
+    youtubeUrl: z.string().trim().min(5).max(300),
+    altUz: z.string().trim().max(200).default(''),
+    altRu: z.string().trim().max(200).default(''),
+  }),
+]);
+
+adminRouter.put(
+  '/site-media/:key',
+  requireRole('admin'),
+  rateLimit({ name: 'site-media', windowSec: 60, max: 30 }),
+  siteMediaBody,
+  (req, res) => {
+    const body = siteMediaSchema.parse(req.body);
+    const key = String(req.params.key);
+    const item =
+      'youtubeUrl' in body
+        ? setSiteVideo(key, { url: body.youtubeUrl, altUz: body.altUz, altRu: body.altRu })
+        : setSiteImage(key, body);
+    invalidateSite();
+    logModeration(req.user!.id, 'platform', 0, 'site-media:set', key);
+    res.json(item);
+  },
+);
+
+adminRouter.delete('/site-media/:key', requireRole('admin'), (req, res) => {
+  clearSiteMedia(String(req.params.key));
+  invalidateSite();
+  logModeration(req.user!.id, 'platform', 0, 'site-media:clear', String(req.params.key));
+  res.status(204).end();
+});
+
+/* ═════════════════  Sayt matnlari va hamkorlar  ═════════════════ */
+
+const langSchema = z.enum(['uz', 'ru']);
+
+adminRouter.get('/site-texts', requireRole('admin'), (req, res) => {
+  res.json(listSiteTexts(langSchema.catch('uz').parse(req.query.lang)));
+});
+
+adminRouter.put('/site-texts', requireRole('admin'), (req, res) => {
+  const body = z
+    .object({ lang: langSchema, id: z.string().min(1).max(200), value: z.string().max(4000).nullable() })
+    .parse(req.body);
+  setSiteText(body.lang, body.id, body.value);
+  logModeration(req.user!.id, 'platform', 0, body.value === null ? 'site-text:reset' : 'site-text:set', `${body.lang}:${body.id}`);
+  res.json({ ok: true });
+});
+
+/* ── Ilova bannerlari (bemor bosh sahifasi) ── */
+
+const bannerSchema = z.object({
+  titleUz: z.string().max(80).optional(),
+  titleRu: z.string().max(80).optional(),
+  subUz: z.string().max(140).nullable().optional(),
+  subRu: z.string().max(140).nullable().optional(),
+  link: z.string().max(300).optional(),
+  active: z.boolean().optional(),
+  mimeType: z.string().max(40).optional(),
+  dataBase64: z.string().optional(),
+  removeImage: z.boolean().optional(),
+  videoMimeType: z.string().max(40).optional(),
+  videoBase64: z.string().optional(),
+  videoLink: z.string().max(500).optional(),
+  removeVideo: z.boolean().optional(),
+  overlay: z.boolean().optional(),
+});
+
+adminRouter.get('/app-banners', requireRole('admin'), (_req, res) => res.json(listBanners()));
+
+adminRouter.post('/app-banners', requireRole('admin'), siteMediaBody, (req, res) => {
+  const b = createBanner(bannerSchema.parse(req.body));
+  logModeration(req.user!.id, 'platform', 0, 'app-banner:add', String(b.id));
+  res.status(201).json(b);
+});
+
+adminRouter.put('/app-banners/:id', requireRole('admin'), siteMediaBody, (req, res) => {
+  const b = updateBanner(Number(req.params.id), bannerSchema.parse(req.body));
+  logModeration(req.user!.id, 'platform', 0, 'app-banner:update', String(b.id));
+  res.json(b);
+});
+
+adminRouter.delete('/app-banners/:id', requireRole('admin'), (req, res) => {
+  deleteBanner(Number(req.params.id));
+  logModeration(req.user!.id, 'platform', 0, 'app-banner:delete', String(req.params.id));
+  res.status(204).end();
+});
+
+adminRouter.post('/app-banners/reorder', requireRole('admin'), (req, res) => {
+  const { ids } = z.object({ ids: z.array(z.number().int().positive()).max(100) }).parse(req.body);
+  res.json(reorderBanners(ids));
+});
+
+adminRouter.get('/site-partners', requireRole('admin'), (_req, res) => res.json(listPartners()));
+
+const partnerSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  url: z.string().trim().max(300).nullable().optional(),
+  mimeType: z.string().max(40).optional(),
+  dataBase64: z.string().optional(),
+});
+
+adminRouter.post('/site-partners', requireRole('admin'), siteMediaBody, (req, res) => {
+  const body = partnerSchema.parse(req.body);
+  if (!body.mimeType || !body.dataBase64) throw forbidden('Logo faylini tanlang');
+  const p = addPartner({ name: body.name, url: body.url, mimeType: body.mimeType, dataBase64: body.dataBase64 });
+  logModeration(req.user!.id, 'platform', 0, 'site-partner:add', p.name);
+  res.status(201).json(p);
+});
+
+adminRouter.put('/site-partners/:id', requireRole('admin'), siteMediaBody, (req, res) => {
+  const body = partnerSchema.partial().parse(req.body);
+  res.json(updatePartner(Number(req.params.id), body));
+});
+
+adminRouter.delete('/site-partners/:id', requireRole('admin'), (req, res) => {
+  deletePartner(Number(req.params.id));
+  logModeration(req.user!.id, 'platform', 0, 'site-partner:delete', String(req.params.id));
+  res.status(204).end();
+});
+
+adminRouter.post('/site-partners/reorder', requireRole('admin'), (req, res) => {
+  const { ids } = z.object({ ids: z.array(z.number().int().positive()).max(500) }).parse(req.body);
+  res.json(reorderPartners(ids));
+});

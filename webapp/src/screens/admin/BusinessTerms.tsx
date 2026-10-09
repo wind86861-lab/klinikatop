@@ -34,6 +34,7 @@ import {
 } from '@/ui';
 import { Async, useResource } from '@/screens/clinic/shell';
 import { DataTable, Empty, PageHeader, RowMenu, Tag } from './ui';
+import { ClinicInfoSheet } from './ClinicInfo';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   ADMIN_CLINIC_FILTERS,
@@ -52,6 +53,8 @@ export function AdminClinics() {
   const res = useResource(() => api.adminClinics(filter), [filter]);
 
   const [editing, setEditing] = useState<AdminClinicRow | null>(null);
+  /** Qator bosilganda ochiladigan klinika ma'lumoti */
+  const [infoId, setInfoId] = useState<number | null>(null);
   const [mode, setMode] = useState<ClinicSheetMode>('commission');
 
   const open = (clinic: AdminClinicRow, which: ClinicSheetMode) => {
@@ -191,7 +194,7 @@ export function AdminClinics() {
              * muhimligi bilinmay qoladi. Shuning uchun asosiy amal ham
              * ikkilamchi ko'rinishda — u baribir yagona yashil element.
              */
-            <div className="arow-actions">
+            <div className="arow-actions" onClick={(e) => e.stopPropagation()}>
               {row.verification !== 'approved' && (
                 <Button size="sm" variant="secondary" onClick={() => decide(row)}>
                   {t('ac.approve')}
@@ -246,10 +249,13 @@ export function AdminClinics() {
             data={list}
             columns={columns}
             searchPlaceholder={t('ac.search')}
+            onRowClick={(row) => setInfoId(row.id)}
             empty={<Empty title={t('ac.empty')} />}
           />
         )}
       </Async>
+
+      <ClinicInfoSheet clinicId={infoId} onClose={() => setInfoId(null)} />
 
       <ClinicTermsSheet
         clinic={editing}

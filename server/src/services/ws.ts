@@ -73,6 +73,9 @@ function authenticateSocket(req: IncomingMessage): User | null {
 }
 
 /** Kanalga obuna bo'lish huquqi. */
+/** Bitta ulanishdagi obunalar chegarasi — oddiy ilova 10 tadan oshmaydi */
+const MAX_CHANNELS = 100;
+
 function canSubscribe(user: User, channel: string): boolean {
   const [kind, rawId] = channel.split(':');
   const id = Number(rawId);
@@ -115,6 +118,12 @@ export function attachWebSocket(server: Server) {
     server,
     path: '/ws',
     /*
+     * Mijoz faqat kichik buyruqlar yuboradi (obuna, "yozmoqda"). `ws`
+     * kutubxonasining standart chegarasi 100 MB — bitta ulanish ulkan
+     * xabar bilan server xotirasini to'ldira olardi.
+     */
+    maxPayload: 16 * 1024,
+    /*
      * Taklif qilingan protokolni qaytarib beramiz.
      *
      * Brauzer `Sec-WebSocket-Protocol` yuborsa, server javobida ham
@@ -156,7 +165,11 @@ export function attachWebSocket(server: Server) {
 
       switch (msg.type) {
         case 'subscribe':
-          if (canSubscribe(user, msg.channel)) client.channels.add(msg.channel);
+          // Kanallar soni cheklangan: har obuna bazaga so'rov, cheksiz obuna — yuk
+          if (client.channels.size >= MAX_CHANNELS) break;
+          if (typeof msg.channel === 'string' && msg.channel.length <= 40 && canSubscribe(user, msg.channel)) {
+            client.channels.add(msg.channel);
+          }
           break;
         case 'unsubscribe':
           client.channels.delete(msg.channel);

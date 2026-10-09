@@ -31,6 +31,7 @@ import type {
   Notification,
   Offer,
   OfferWithClinic,
+  AdminOperation,
   Operation,
   OperationCategory,
   PatientCase,
@@ -60,7 +61,19 @@ import type {
   StepKind,
   LabTest,
   RequestKind,
+  ReferringDoctor,
+  AdminReferringDoctor,
+  ReferringDoctorStatus,
+  DoctorDocKind,
+  DoctorCase,
+  DoctorInvite,
+  DoctorStats,
+  RequestKindSetting,
+  AppBanner,
+  AdminDoctorStatRow,
+  PatientRecommendation,
 } from '@shared/types';
+import type { SiteMediaItem, SiteMediaSlot } from '@shared/siteMedia';
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
 
@@ -183,10 +196,16 @@ function expireWebSession(path: string): void {
  * ulanish shuncha vaqtda ma'lum bo'ladi.
  */
 const REQUEST_TIMEOUT_MS = 20_000;
+/**
+ * Fayl yuklash uchun — base64 bilan bir necha MB, sekin internetda
+ * 20 soniyadan ko'p ketadi. Ilgari hero video yuklash aynan shu
+ * chegarada uzilib qolgan (nginx logida 499).
+ */
+const UPLOAD_TIMEOUT_MS = 180_000;
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
 
   let res: Response;
   try {
@@ -239,6 +258,9 @@ const patch = <T>(p: string, body: unknown) =>
 const put = <T>(p: string, body: unknown) =>
   request<T>(p, { method: 'PUT', body: JSON.stringify(body) });
 const del = <T>(p: string) => request<T>(p, { method: 'DELETE' });
+/** Katta tanali so'rov (fayl) — uzoqroq kutadi */
+const upload = <T>(method: 'POST' | 'PUT', p: string, body: unknown) =>
+  request<T>(p, { method, body: JSON.stringify(body) }, UPLOAD_TIMEOUT_MS);
 
 /* ── Sessiya ── */
 
@@ -255,6 +277,10 @@ export interface Bootstrap {
     commissionPercent: number;
     requestTtlHours: number;
     maxActiveRequests: number;
+    /** Admin yoqqan so'rov turlari, ko'rsatish tartibida (eski server bermasa — uchalasi) */
+    requestKinds?: RequestKind[];
+    /** Hamma turlar admin tartibida, faol/nofaol belgisi bilan */
+    requestKindSettings?: RequestKindSetting[];
   };
 }
 
@@ -363,6 +389,41 @@ export const api = {
   saveClinicLabTests: (testIds: number[]) =>
     put<{ selected: number[] }>('/clinic/lab-tests', { testIds }),
 
+  /* ── Admin: operatsiyalarning narx oralig'i ── */
+  adminOperations: () =>
+    get<{ operations: AdminOperation[] }>('/admin/operations'),
+  setOperationPriceRange: (id: number, minPriceUzs: number | null, maxPriceUzs: number | null) =>
+    patch<Operation>(`/admin/operations/${id}/price-range`, { minPriceUzs, maxPriceUzs }),
+
+  /* ── Admin: bemor so'rovlari va ular qaysi klinikalarga ketgani ── */
+  adminRequests: (filter: AdminRequestFilter = 'all') =>
+    get<AdminRequestRow[]>(`/admin/requests?filter=${filter}`),
+  adminRequest: (id: number) => get<AdminRequestDetail>(`/admin/requests/${id}`),
+  adminClinicDetail: (id: number) => get<AdminClinicDetail>(`/admin/clinics/${id}/detail`),
+  rebroadcastRequest: (id: number) => post<{ added: number }>(`/admin/requests/${id}/rebroadcast`),
+
+  /* ── Admin: klinikatop.uz sayt media ── */
+  adminSiteMedia: () => get<{ slots: SiteMediaSlot[]; items: SiteMediaItem[] }>('/admin/site-media'),
+  setSiteMedia: (
+    key: string,
+    body:
+      | { mimeType: string; dataBase64: string; altUz: string; altRu: string }
+      | { youtubeUrl: string; altUz: string; altRu: string },
+  ) => upload<SiteMediaItem>('PUT', `/admin/site-media/${encodeURIComponent(key)}`, body),
+  clearSiteMedia: (key: string) => del<void>(`/admin/site-media/${encodeURIComponent(key)}`),
+
+  /* ── Admin: sayt matnlari va hamkorlar ── */
+  adminSiteTexts: (lang: 'uz' | 'ru') => get<SiteTextEntry[]>(`/admin/site-texts?lang=${lang}`),
+  setSiteText: (lang: 'uz' | 'ru', id: string, value: string | null) =>
+    put<{ ok: true }>('/admin/site-texts', { lang, id, value }),
+  adminPartners: () => get<SitePartner[]>('/admin/site-partners'),
+  addPartner: (body: { name: string; url: string | null; mimeType: string; dataBase64: string }) =>
+    upload<SitePartner>('POST', '/admin/site-partners', body),
+  updatePartner: (id: number, body: { name?: string; url?: string | null; mimeType?: string; dataBase64?: string }) =>
+    upload<SitePartner>('PUT', `/admin/site-partners/${id}`, body),
+  deletePartner: (id: number) => del<void>(`/admin/site-partners/${id}`),
+  reorderPartners: (ids: number[]) => post<SitePartner[]>('/admin/site-partners/reorder', { ids }),
+
   /* ── Admin: tahlil katalogi ── */
   adminLabTests: () => get<{ tests: LabTest[] }>('/admin/lab-tests'),
   createLabTest: (body: {
@@ -373,6 +434,9 @@ export const api = {
     active?: boolean;
     parentId?: number | null;
     durationMin?: number | null;
+    needsWeight?: boolean;
+    contraUz?: string | null;
+    contraRu?: string | null;
   }) => post<LabTest>('/admin/lab-tests', body),
   updateLabTest: (
     id: number,
@@ -384,6 +448,9 @@ export const api = {
       active: boolean;
       parentId: number | null;
       durationMin: number | null;
+      needsWeight: boolean;
+      contraUz: string | null;
+      contraRu: string | null;
     }>,
   ) => patch<LabTest>(`/admin/lab-tests/${id}`, body),
   deleteLabTest: (id: number) => del(`/admin/lab-tests/${id}`),
@@ -395,7 +462,13 @@ export const api = {
   /* ── So'rovlar ── */
   requests: () => get<RequestWithMeta[]>('/requests'),
   request: (id: number) =>
-    get<{ request: RequestWithMeta; offers: OfferWithClinic[]; stats: PriceStats }>(`/requests/${id}`),
+    get<{
+      request: RequestWithMeta;
+      offers: OfferWithClinic[];
+      stats: PriceStats | null;
+      /** Shifokor tavsiya qilgan taklif (bo'lsa) */
+      recommendation?: PatientRecommendation | null;
+    }>(`/requests/${id}`),
   createRequest: (body: {
     /** Operatsiya so'rovimi yoki tahlil */
     kind?: RequestKind;
@@ -407,6 +480,7 @@ export const api = {
     referralItems?: string[];
     labOrganId?: number | null;
     weightKg?: number | null;
+    contraindicationsAck?: boolean;
     cityId: number;
     conditionText: string;
     budgetUzs: number | null;
@@ -499,7 +573,8 @@ export const api = {
     get<{
       request: RequestWithMeta;
       patientCase: PatientCase;
-      stats: PriceStats;
+      /** Yo'llanma va tahlilda narx statistikasi yo'q — `null` */
+      stats: PriceStats | null;
       competition: RequestCompetition;
       /** Shu klinikaning shu so'rovga bergan taklifi — bo'lsa, forma tahrirga o'tadi */
       myOffer: OfferWithClinic | null;
@@ -532,6 +607,51 @@ export const api = {
   applications: (status: 'pending' | 'approved' | 'rejected' | 'all' = 'pending') =>
     get<ClinicApplication[]>(`/admin/applications?status=${status}`),
   approveApplication: (id: number) => post<ClinicApplication>(`/admin/applications/${id}/approve`),
+  requestKinds: () => get<RequestKindSetting[]>('/admin/request-kinds'),
+  /* ── Ilova bannerlari ── */
+  banners: () => get<AppBanner[]>('/catalog/banners'),
+  appBanners: () => get<AppBanner[]>('/admin/app-banners'),
+  createAppBanner: (body: AppBannerBody) => upload<AppBanner>('POST', '/admin/app-banners', body),
+  updateAppBanner: (id: number, body: AppBannerBody) => upload<AppBanner>('PUT', `/admin/app-banners/${id}`, body),
+  deleteAppBanner: (id: number) => request<void>(`/admin/app-banners/${id}`, { method: 'DELETE' }),
+  reorderAppBanners: (ids: number[]) => post<AppBanner[]>('/admin/app-banners/reorder', { ids }),
+  saveRequestKinds: (kinds: RequestKindSetting[]) => put<RequestKindSetting[]>('/admin/request-kinds', { kinds }),
+
+  /* ── Yo'naltiruvchi shifokor (Telegram) ── */
+  doctorMe: () => get<{ doctor: ReferringDoctor | null; phoneVerified: boolean }>('/doctor/me'),
+  doctorRegister: (body: DoctorRegisterBody) => upload<ReferringDoctor>('POST', '/doctor/register', body),
+  doctorAddDocument: (doc: DoctorDocBody) => upload<ReferringDoctor>('POST', '/doctor/documents', doc),
+  doctorDeleteDocument: (id: number) => request<ReferringDoctor>(`/doctor/documents/${id}`, { method: 'DELETE' }),
+  doctorStats: () => get<DoctorStats>('/doctor/stats'),
+  doctorCases: () => get<DoctorCase[]>('/doctor/cases'),
+  doctorCase: (id: number) => get<DoctorCase & { offers: OfferWithClinic[] }>(`/doctor/cases/${id}`),
+  createDoctorCase: (body: DoctorCaseBody) => post<DoctorCase>('/doctor/cases', body),
+  recommendOffer: (caseId: number, offerId: number, comment: string | null) =>
+    post<DoctorCase & { offers: OfferWithClinic[] }>(`/doctor/cases/${caseId}/recommend`, { offerId, comment }),
+
+  /* ── Saytga kirish paroli (Telegram ichidan) ── */
+  webLogin: () => get<{ phone: string | null; hasPassword: boolean; passwordSetAt: string | null }>('/me/web-login'),
+  setWebPassword: (password: string) =>
+    put<{ phone: string | null; hasPassword: boolean; passwordSetAt: string | null }>('/me/web-login/password', { password }),
+
+  /* ── Bemor: shifokor taklifnomasi ── */
+  invite: (token: string) => get<DoctorInvite>(`/doctor-invites/${encodeURIComponent(token)}`),
+  approveInvite: (
+    token: string,
+    body: { acceptTerms: boolean; weightKg: number | null; contraindicationsAck?: boolean },
+  ) =>
+    post<{ requestId: number }>(`/doctor-invites/${encodeURIComponent(token)}/approve`, body),
+  declineInvite: (token: string, notMe: boolean) =>
+    post<void>(`/doctor-invites/${encodeURIComponent(token)}/${notMe ? 'not-me' : 'decline'}`),
+
+  /* ── Admin: shifokorlar ── */
+  adminDoctors: (status: ReferringDoctorStatus | 'all') =>
+    get<{ doctors: AdminReferringDoctor[]; counts: Record<ReferringDoctorStatus | 'all', number> }>(
+      `/admin/doctors?status=${status}`,
+    ),
+  approveDoctor: (id: number) => post<AdminReferringDoctor>(`/admin/doctors/${id}/approve`),
+  adminDoctorStats: () => get<AdminDoctorStatRow[]>('/admin/doctors/stats'),
+  rejectDoctor: (id: number, reason: string) => post<AdminReferringDoctor>(`/admin/doctors/${id}/reject`, { reason }),
   rejectApplication: (id: number, note: string) =>
     post<ClinicApplication>(`/admin/applications/${id}/reject`, { note }),
   /* Ulanish kodi bilan klinikaga biriktirilish */
@@ -767,6 +887,91 @@ export interface TemplateBody {
   note: string | null;
 }
 
+export interface SiteTextEntry {
+  id: string;
+  keys: string[];
+  page: string;
+  default: string;
+  value: string | null;
+}
+
+export interface SitePartner {
+  id: number;
+  name: string;
+  url: string | null;
+  logoUrl: string;
+  sort: number;
+}
+
+export interface AdminClinicDetail {
+  id: number;
+  name: string;
+  city: string;
+  address: string;
+  phone: string | null;
+  website: string | null;
+  about: string;
+  logoUrl: string | null;
+  licenseNo: string | null;
+  linkedToBanisa: boolean;
+  verification: string;
+  verificationNote: string | null;
+  plan: string | null;
+  subscriptionStatus: string;
+  subscriptionUntil: string | null;
+  trialUntil: string | null;
+  effectiveCommissionPercent: number;
+  acceptsReferral: boolean;
+  createdAt: string;
+  rating: { avg: number; count: number };
+  avgResponseMinutes: number | null;
+  activity: { received: number; viewed: number; offers: number; chosen: number; dealsConfirmed: number };
+  services: { operations: string[]; operationsTotal: number; labTests: number };
+  staff: { fullName: string; phone: string; role: string; lastLoginAt: string | null; disabled: boolean }[];
+  documents: { pending: number; approved: number; rejected: number };
+  recentRequests: {
+    id: number;
+    service: string;
+    patientName: string;
+    sentAt: string;
+    viewedAt: string | null;
+    offerPriceUzs: number | null;
+    offerStatus: string | null;
+  }[];
+}
+
+export type AdminRequestFilter = 'all' | 'active' | 'unreached' | 'no_offers';
+
+export interface AdminRequestRow {
+  id: number;
+  kind: 'operation' | 'lab' | 'referral';
+  status: string;
+  service: string;
+  city: string;
+  budgetUzs: number | null;
+  patient: { id: number; name: string; phone: string | null; viaTelegram: boolean };
+  sent: number;
+  viewed: number;
+  offers: number;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
+export interface AdminRequestDetail extends AdminRequestRow {
+  note: string | null;
+  otherRegionsOk: boolean;
+  clinics: {
+    clinicId: number;
+    name: string;
+    city: string;
+    sentAt: string;
+    viewedAt: string | null;
+    offer: { id: number; priceUzs: number; status: string; createdAt: string } | null;
+  }[];
+  deal: { id: number; status: string; clinicName: string; agreedPriceUzs: number } | null;
+  diagnosis: { inCity: number; anywhere: number } | null;
+}
+
 export interface ClinicApplication {
   id: number;
   name: string;
@@ -784,6 +989,8 @@ export interface ClinicApplication {
   note: string | null;
   clinicId: number | null;
   connectCode: string | null;
+  /** Arizadagi litsenziya fayli (faylning o'zi — `fetchApplicationLicense`) */
+  licenseFile: { name: string; mime: string; size: number } | null;
   createdAt: string;
   reviewedAt: string | null;
 }
@@ -814,8 +1021,69 @@ export interface DoctorBody {
   active: boolean;
 }
 
+/** Arizadagi litsenziya — admin sessiyasi bilan olinadi, sahifada ochiladi */
+export async function fetchApplicationLicense(id: number): Promise<string> {
+  const res = await fetch(`${BASE}/api/admin/applications/${id}/license`, { headers: authHeaders() });
+  if (!res.ok) throw new ApiError(res.status, 'file_error', 'Litsenziyani ochib bo‘lmadi');
+  return URL.createObjectURL(await res.blob());
+}
+
 export async function fetchFileObjectUrl(id: string): Promise<string> {
   const res = await fetch(`${BASE}/api/files/${id}`, { headers: authHeaders() });
   if (!res.ok) throw new ApiError(res.status, 'file_error', 'Faylni ochib bo‘lmadi');
   return URL.createObjectURL(await res.blob());
+}
+
+export interface DoctorDocBody {
+  kind: DoctorDocKind;
+  name: string;
+  dataBase64: string;
+}
+
+export interface DoctorRegisterBody {
+  firstName: string;
+  lastName: string;
+  specialty: string;
+  workplace: string;
+  bio: string | null;
+  documents: DoctorDocBody[];
+}
+
+/**
+ * Diplom faylini ochish. Fayl kirish sarlavhasi bilan olinadi, shuning
+ * uchun oddiy havola ishlamaydi — blob manzil qaytariladi.
+ * `doctorId` berilsa — admin yo'li, aks holda shifokorning o'zi.
+ */
+export async function fetchDoctorDocument(docId: number, doctorId?: number): Promise<string> {
+  const path = doctorId ? `/api/admin/doctors/${doctorId}/documents/${docId}` : `/api/doctor/documents/${docId}`;
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
+  if (!res.ok) throw new ApiError(res.status, 'file_error', 'Hujjatni ochib bo‘lmadi');
+  return URL.createObjectURL(await res.blob());
+}
+
+export interface DoctorCaseBody {
+  patientPhone: string;
+  kind: RequestKind;
+  operationId: number | null;
+  labTestId: number | null;
+  referralItems: string[] | null;
+  cityId: number;
+  note: string | null;
+}
+
+export interface AppBannerBody {
+  titleUz?: string;
+  titleRu?: string;
+  subUz?: string | null;
+  subRu?: string | null;
+  link?: string;
+  active?: boolean;
+  mimeType?: string;
+  dataBase64?: string;
+  removeImage?: boolean;
+  videoMimeType?: string;
+  videoBase64?: string;
+  videoLink?: string;
+  removeVideo?: boolean;
+  overlay?: boolean;
 }

@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { Route, Routes, useLocation, useNavigate } from '@/lib/router';
 import { useApp } from '@/store/app';
 import { tg } from '@/lib/telegram';
-import { patientToken } from '@/lib/session';
+import { patientToken, setPatientToken } from '@/lib/session';
 import { ErrorState, Screen, Toaster } from '@/ui';
 import { Onboarding } from '@/screens/Onboarding';
 import { Register } from '@/screens/Register';
@@ -40,12 +40,26 @@ const MedicalProfileScreen = lazy(() =>
   import('@/screens/MedicalProfile').then((mod) => ({ default: mod.MedicalProfileScreen })),
 );
 const Settings = lazy(() => import('@/screens/Settings').then((mod) => ({ default: mod.Settings })));
+/* Saytga kirish paroli — botda /parol yoki profil menyusidan */
+const WebPassword = lazy(() => import('@/screens/WebPassword').then((mod) => ({ default: mod.WebPassword })));
+/* Shifokor kabineti — botda /shifokor. Bemorlarning ko'pchiligiga kerak emas, shuning uchun alohida bo'lak */
+const DoctorCabinet = lazy(() =>
+  import('@/screens/doctor/DoctorCabinet').then((mod) => ({ default: mod.DoctorCabinet })),
+);
+const DoctorRegister = lazy(() =>
+  import('@/screens/doctor/DoctorCabinet').then((mod) => ({ default: mod.DoctorRegister })),
+);
+const DoctorNewCase = lazy(() => import('@/screens/doctor/DoctorCases').then((mod) => ({ default: mod.DoctorNewCase })));
+const DoctorCaseDetail = lazy(() =>
+  import('@/screens/doctor/DoctorCases').then((mod) => ({ default: mod.DoctorCaseDetail })),
+);
+/* Bemor: shifokor yaratgan so'rovga rozilik (botdagi xabar tugmasi) */
+const DoctorInvite = lazy(() => import('@/screens/DoctorInvite').then((mod) => ({ default: mod.DoctorInvite })));
 
 /*
- * Bosh sahifa — faqat brauzerdan kirilganda. Mini App'da hech qachon
- * ko'rinmaydi, shuning uchun uning kodi ham u yerga tushmaydi.
+ * Eski kirish ekrani — FAQAT lokal ishlab chiqish uchun (u yerda
+ * statik sayt yo'q). Prodda brauzer kirishi `/royxatdan-otish/` da.
  */
-const Landing = lazy(() => import('@/screens/Landing').then((mod) => ({ default: mod.Landing })));
 const PhoneLogin = lazy(() => import('@/screens/PhoneLogin').then((mod) => ({ default: mod.PhoneLogin })));
 
 /**
@@ -110,8 +124,16 @@ export function App() {
     if (!ready || !user) return;
     const path = location.pathname;
 
+    /*
+     * Shifokor kabineti bemor onboarding'idan ozod: shifokor bu yerga
+     * bemor sifatida emas keladi va bemor anketasini to'ldirishga
+     * majbur bo'lmasligi kerak.
+     */
+    if (path.startsWith('/doctor')) return;
+
     if (!user.onboardedAt && path !== '/onboarding') {
-      navigate('/onboarding', { replace: true });
+      // Qaytish manzili saqlanadi: onboarding → anketa → o'sha sahifa
+      navigate('/onboarding', { replace: true, state: { next: path === '/' ? '/' : path } });
       return;
     }
 
@@ -123,55 +145,55 @@ export function App() {
   }, [ready, user, location.pathname, navigate]);
 
   /*
-   * Brauzerdan kirgan odam BOSH SAHIFANI ko'radi.
+   * Brauzerda sessiyasiz odam — ilova emas, SAYT ko'radi.
    *
-   * Bu ilova Telegram Mini App: haqiqiy ish o'sha yerda. Lekin
-   * `klinikatop.uz` ni brauzerda ochadigan odam ham bor — havolani
-   * ko'rgan bemor, qidiruvdan kelgan klinika egasi. Ilgari ular
-   * "Telegramda oching" degan bo'sh quti ko'rardi va nima uchun
-   * ochishlari kerakligini bilmasdi.
+   * Tanishtiruv ham, kirish/ro'yxatdan o'tish ham endi statik saytda
+   * (`/`, `/royxatdan-otish/`). Ilovadagi eski bosh sahifa va kirish
+   * ekrani olib tashlandi: ikki xil dizayn bir vaqtda yashab, odam
+   * qaysi manzilni ochganiga qarab boshqa-boshqa sayt ko'rardi.
    *
-   * Tekshiruv `initData` bo'yicha, sessiya bo'yicha emas: Telegram
-   * ichida sessiya hali yo'q bo'lishi mumkin va u yerda bosh sahifa
-   * emas, kirish ekrani kerak.
-   *
-   * Sahifa alohida bo'lakda: uni faqat brauzerdan kirgan odam
-   * ko'radi va Mini App'ga og'irlik qilmasligi kerak.
+   * Tekshiruv `initData` bo'yicha: Telegram ichida sessiya hali
+   * bo'lmasligi mumkin va u yerda `<Login />` kerak, sayt emas.
+   * Sessiya `localStorage` dan bir marta o'qiladi — kirish sahifasi
+   * shuning uchun `/app` ni to'liq qayta yuklaydi.
    */
   /*
-   * Brauzerda uch holat bor, va tartib muhim:
-   *
-   *   1. Kirish sahifasi so'ralgan — uni har doim ko'rsatamiz.
-   *   2. Bemor sessiyasi bor — ilovaning O'ZI ochiladi, xuddi
-   *      Telegramdagidek.
-   *   3. Aks holda — bosh sahifa (nima ekanini tushuntiradi).
-   *
-   * Sessiya `localStorage` dan BIR MARTA o'qiladi (`useState`
-   * boshlang'ich qiymati): shuning uchun kirgandan keyin sahifa
-   * to'liq qayta yuklanadi — `PhoneLogin` shuni qiladi.
+   * Shifokor kabineti FAQAT Telegram orqali — brauzerda kirish sahifasiga
+   * emas, "botda oching" ekraniga (ekranning o'zi buni ko'rsatadi).
    */
-  if (!insideTelegram) {
-    if (location.pathname === '/kirish') {
-      return (
-        <Suspense fallback={<Splash />}>
-          <PhoneLogin />
-        </Suspense>
-      );
-    }
+  if (!insideTelegram && location.pathname.startsWith('/doctor')) {
+    return (
+      <Suspense fallback={<Splash />}>
+        {location.pathname.startsWith('/doctor/register') ? <DoctorRegister /> : <DoctorCabinet />}
+      </Suspense>
+    );
+  }
 
-    if (!browserSession) {
-      return (
-        <Suspense fallback={<Splash />}>
-          <Landing />
-        </Suspense>
-      );
+  if (!insideTelegram && (!browserSession || location.pathname === '/kirish')) {
+    if (import.meta.env.PROD) {
+      window.location.replace('/kirish/');
+      return <Splash />;
     }
+    return (
+      <Suspense fallback={<Splash />}>
+        <PhoneLogin />
+      </Suspense>
+    );
   }
 
   if (!ready) return <Splash />;
 
   // Sessiya yo'q — bu xato emas, kirish kerak. Ilgari bu yerda
   // "initData yaroqsiz" chiqib, foydalanuvchi boshi berk ko'chaga tushardi.
+  /*
+   * Brauzerdagi bemor tokeni eskirgan: eski "Telegramda oching" ekrani
+   * o'rniga token tozalanadi va kirish sahifasiga yuboriladi.
+   */
+  if (!insideTelegram && needsAuth && import.meta.env.PROD) {
+    setPatientToken(null);
+    window.location.replace('/kirish/');
+    return <Splash />;
+  }
   if (needsAuth || (!error && !user)) return <Login />;
 
   if (error || !user) {
@@ -197,17 +219,30 @@ export function App() {
 
             {/* Bemor bo'limlari */}
             <Route path="/" element={<Home />} />
+            {/*
+              Mini App manzili. "/" endi ochiq sayt (statik HTML, SEO) —
+              Telegram ham, brauzerda kirgan bemor ham ilovani shu yerdan ochadi.
+            */}
+            <Route path="/app" element={<Home />} />
             <Route path="/requests" element={<MyRequests />} />
             <Route path="/deals" element={<MyDeals />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/profile/medical" element={<MedicalProfileScreen />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/profile/password" element={<WebPassword />} />
 
             {/* Bemor oqimlari */}
             <Route path="/new" element={<NewRequest />} />
             <Route path="/request/:id" element={<RequestDetail />} />
             <Route path="/deal/:id" element={<DealScreen />} />
             <Route path="/notifications" element={<Notifications />} />
+
+            {/* Yo'naltiruvchi shifokor */}
+            <Route path="/doctor" element={<DoctorCabinet />} />
+            <Route path="/doctor/register" element={<DoctorRegister />} />
+            <Route path="/doctor/new" element={<DoctorNewCase />} />
+            <Route path="/doctor/case/:id" element={<DoctorCaseDetail />} />
+            <Route path="/invite/:token" element={<DoctorInvite />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

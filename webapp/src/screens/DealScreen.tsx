@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 import { channelFor, onServerEvent, sendTyping, subscribe } from '@/lib/ws';
 import { clockTime, formatDate, groupDigits, money } from '@/lib/format';
 import { haptic } from '@/lib/telegram';
+import { autoGrow, onKeyboardChange } from '@/lib/keyboard';
 import { popVariants, spring } from '@/lib/motion';
 import {
   Avatar,
@@ -42,6 +43,11 @@ export function DealScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Yuborilgach maydon yana bir qatorga qaytadi
+  useEffect(() => {
+    if (!draft && inputRef.current) inputRef.current.style.height = '';
+  }, [draft]);
   const [sending, setSending] = useState(false);
   const [peerTyping, setPeerTyping] = useState(false);
 
@@ -101,6 +107,19 @@ export function DealScreen() {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages.length, peerTyping]);
 
+  /*
+   * Klaviatura ochilganda oxirgi xabarga — odam nimaga javob
+   * yozayotganini ko'rib tursin. Maydon kichraygani uchun aks holda
+   * oxirgi xabarlar pastda, ko'rinmay qolardi.
+   */
+  useEffect(
+    () =>
+      onKeyboardChange((open) => {
+        if (open) chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight });
+      }),
+    [],
+  );
+
   const send = async () => {
     const text = draft.trim();
     if (!text || sending) return;
@@ -156,7 +175,11 @@ export function DealScreen() {
   const counterpartName = isClinicSide ? deal.patientName : deal.clinic.name;
 
   return (
-    <div className="screen" style={{ height: '100dvh', overflow: 'hidden' }}>
+    /*
+      Chat ekrani KO'RINADIGAN maydonga qotiriladi (`.screen--chat`):
+      klaviatura ochilganda ham yozish paneli uning ustida turadi.
+    */
+    <div className="screen screen--chat">
       <header className="app-header">
         <div className="row">
           <button className="app-header__back" onClick={() => navigate(isClinicSide ? '/clinic' : '/')} aria-label={t('common.back')}>
@@ -177,8 +200,8 @@ export function DealScreen() {
         </div>
       </header>
 
-      {/* Bitim holati */}
-      <div style={{ padding: 'var(--s-3) var(--s-4)', background: 'var(--bg)' }}>
+      {/* Bitim holati — klaviatura ochiq paytda yig'iladi, xabarlarga joy qolsin */}
+      <div className="deal-panel" style={{ padding: 'var(--s-3) var(--s-4)', background: 'var(--bg)' }}>
         <Card variant="flat" className="stack">
           {terminal ? (
             <Badge tone={deal.status === 'DISPUTED' ? 'warning' : 'danger'}>
@@ -279,6 +302,8 @@ export function DealScreen() {
         <div className="composer">
           <textarea
             className="composer__input"
+            ref={inputRef}
+            onInput={(e) => autoGrow(e.currentTarget)}
             value={draft}
             rows={1}
             placeholder={t('chat.placeholder')}

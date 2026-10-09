@@ -1,0 +1,38 @@
+---
+/**
+ * Savol-javob. `<details>` — JS'siz ishlaydi, Google matnni ko'radi.
+ * FAQPage sxemasi sahifa darajasida qo'shiladi (qidiruvda kengaytirilgan
+ * natija uchun).
+ */
+interface Props {
+  eyebrow: string;
+  title: string;
+  items: { q: string; a: string }[];
+  aside?: string;
+}
+const { eyebrow, title, items, aside } = Astro.props;
+---
+
+<section class="section" id="savollar" aria-labelledby="faq-title">
+  <div class="wrap faq">
+    <div class="faq__head">
+      <span class="eyebrow" data-reveal>{eyebrow}</span>
+      <h2 id="faq-title" class="h-section" data-split>{title}</h2>
+      {aside && <p class="lead" data-reveal style="--d:3">{aside}</p>}
+      <slot />
+    </div>
+    <div class="faq__list">
+      {
+        items.map((it, i) => (
+          <details class="qa" data-reveal style={`--d:${i % 4}`} open={i === 0}>
+            <summary>
+              {it.q}
+              <span class="qa__icon" aria-hidden="true" />
+            </summary>
+            <p class="qa__a">{it.a}</p>
+          </details>
+        ))
+      }
+    </div>
+  </div>
+</section>

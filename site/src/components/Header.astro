@@ -1,0 +1,73 @@
+---
+import Icon from './Icon.astro';
+import { site } from '../site';
+import type { Dict } from '../i18n/uz';
+
+interface Props {
+  t: Dict;
+  page: 'home' | 'clinics' | 'auth' | 'login';
+}
+const { t, page } = Astro.props;
+const home = t.paths.home;
+const onHome = page === 'home';
+// Bosh sahifada — langar, boshqa sahifada — bosh sahifaning langari
+const anchor = (id: string) => (onHome ? `#${id}` : `${home}#${id}`);
+const altHref =
+  page === 'home' ? t.alt.home : page === 'auth' ? t.alt.auth : page === 'login' ? t.alt.login : t.alt.clinics;
+// Bemor "Kirish" — Telegramsiz ham ishlaydigan sahifa; klinika — kabinet
+const loginHref = page === 'clinics' ? site.cabinetPath : t.paths.login;
+---
+
+<header class="header">
+  <div class="wrap header__in">
+    <a class="brand" href={home} aria-label="KlinikaTop">
+      <img src="/logo.svg" alt="" width="30" height="35" />
+      <span>Klinika<b>Top</b></span>
+    </a>
+
+    <nav class="nav" aria-label={t.nav.menu}>
+      <a href={anchor('qanday')}>{t.nav.how}</a>
+      <a href={anchor('bemorlar')}>{t.nav.patients}</a>
+      <a href={t.paths.clinics} aria-current={page === 'clinics' ? 'page' : undefined}>{t.nav.clinics}</a>
+      <a href={page === 'clinics' ? '#savollar' : anchor('savollar')}>{t.nav.faq}</a>
+    </nav>
+
+    <div class="header__actions">
+      <a class="lang" href={altHref} hreflang={t.alt.lang} lang={t.alt.lang}>{t.alt.label}</a>
+      <a class="header__login" href={loginHref}>{t.nav.login}</a>
+      {
+        page === 'clinics' ? (
+          <a class="btn btn--dark btn--sm header__cta" href={site.clinicSignupPath}>
+            {t.clinics.hero.primary}
+          </a>
+        ) : (
+          <a class="btn btn--dark btn--sm header__cta" href={site.appPath} data-bot>
+            {t.nav.cta}
+          </a>
+        )
+      }
+      <button class="burger" type="button" aria-label={t.nav.menu} aria-expanded="false" aria-controls="mobile-menu">
+        <span></span><span></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="mobile-menu" id="mobile-menu">
+  <a href={anchor('qanday')}>{t.nav.how}</a>
+  <a href={anchor('bemorlar')}>{t.nav.patients}</a>
+  <a href={t.paths.clinics}>{t.nav.clinics}</a>
+  <a href={page === 'clinics' ? '#savollar' : anchor('savollar')}>{t.nav.faq}</a>
+  <a href={loginHref}>{t.nav.login}</a>
+  {
+    page === 'clinics' ? (
+      <a class="btn btn--dark" href={site.clinicSignupPath}>
+        {t.clinics.hero.primary} <Icon name="arrow" size={18} />
+      </a>
+    ) : (
+      <a class="btn btn--dark" href={site.appPath} data-bot>
+        {t.nav.cta} <Icon name="arrow" size={18} />
+      </a>
+    )
+  }
+</div>

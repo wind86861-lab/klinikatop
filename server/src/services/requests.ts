@@ -4,6 +4,7 @@
  * Hayot sikli: NEW → COLLECTING → CHOSEN → COMPLETED
  *                        └──(taymer / bekor)──→ CANCELLED
  */
+import { assertKindEnabled } from './requestKinds';
 import { db, hoursFromNow, parseJson, tx } from '../db';
 import { config } from '../lib/config';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
@@ -120,6 +121,18 @@ export interface CreateRequestInput {
   /** Bemor ommaviy ofertani qabul qilganini tasdiqlaydi — har so'rovda majburiy */
   acceptTerms: boolean;
   userAgent?: string | null;
+  /**
+   * Shifokor yaratgan va bemor tasdiqlagan so'rov. Admin qo'shgan
+   * savollar bu yo'lda SO'RALMAYDI: bemor ularni ko'rmagan, shifokor
+   * esa ularning javobini bilmaydi — majburiy savol so'rovni
+   * butunlay to'xtatib qo'yardi.
+   */
+  doctorCaseId?: number | null;
+  /**
+   * Bemor qarshi ko'rsatmalar yo'qligini tasdiqladi. Tekshiruvda
+   * qarshi ko'rsatmalar matni bo'lsa — MAJBURIY (kapsula endoskopiyasi).
+   */
+  contraindicationsAck?: boolean;
 }
 
 /**
@@ -211,6 +224,58 @@ function cleanReferralItems(raw: unknown): string[] {
   return out;
 }
 
+/**
+ * Byudjetni turga va operatsiyaning narx oralig'iga solishtiradi.
+ *
+ * Qaytaradigan qiymat — BAZAGA yoziladigan byudjet. Tahlil va
+ * yo'llanmada bu doim `null`: u yerda narxni bemor emas, klinika
+ * biladi.
+ *
+ * Nega bittasi jimgina tashlanadi, ikkinchisi rad etiladi:
+ *
+ *  - Tur mos kelmasa (tahlilga byudjet) — TASHLANADI. Bemorning
+ *    telefonida ilovaning eski keshlangan versiyasi turishi mumkin
+ *    va u hali byudjet so'rayveradi. Xato qaytarilsa bemor buni
+ *    tuzata olmaydi, faqat "yuborilmadi" ni ko'radi.
+ *  - Oraliqdan chiqsa — RAD ETILADI. Bu bemorning ongli tanlovi;
+ *    jimgina o'chirib tashlash so'rovni "byudjetim yo'q" holatiga
+ *    aylantiradi, klinikalar esa bajarilmaydigan so'rovni ko'rib
+ *    har birini qo'lda rad etishga majbur bo'lardi.
+ */
+function resolveBudget(
+  kind: RequestKind,
+  operationId: number | null,
+  budgetUzs: number | null | undefined,
+): number | null {
+  if (kind !== 'operation') return null;
+  const budget = budgetUzs ?? null;
+  if (budget == null) return null;
+
+  if (budget < 500_000 || budget > 2_000_000_000) {
+    throw badRequest('invalid_budget', 'Byudjet noto‘g‘ri');
+  }
+
+  const range = operationId
+    ? (db
+        .prepare(`SELECT min_price_uzs, max_price_uzs FROM operations WHERE id = ?`)
+        .get(operationId) as { min_price_uzs: number | null; max_price_uzs: number | null } | undefined)
+    : undefined;
+
+  if (range?.min_price_uzs != null && budget < range.min_price_uzs) {
+    throw badRequest(
+      'budget_below_min',
+      `Bu operatsiya uchun eng kam byudjet ${formatUzs(range.min_price_uzs)}`,
+    );
+  }
+  if (range?.max_price_uzs != null && budget > range.max_price_uzs) {
+    throw badRequest(
+      'budget_above_max',
+      `Bu operatsiya uchun eng ko‘p byudjet ${formatUzs(range.max_price_uzs)}`,
+    );
+  }
+  return budget;
+}
+
 export function createRequest(input: CreateRequestInput): RequestWithMeta {
   // Profil to'liq bo'lmasa so'rov yuborilmaydi: klinika kimga taklif
   // berayotganini bilishi kerak (ism, familiya, viloyat)
@@ -244,6 +309,8 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
   const kind: RequestKind = REQUEST_KINDS.includes(input.kind as RequestKind)
     ? (input.kind as RequestKind)
     : 'operation';
+  // Admin o'chirgan tur — qabul qilinmaydi (eski ilova ham o'tkaza olmaydi)
+  assertKindEnabled(kind);
 
   /*
    * Uch tur — uch xil majburiy maydon.
@@ -257,6 +324,8 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
   let labTestId: number | null = null;
   let referralItems: string[] = [];
   let weightKg: number | null = null;
+  /** Qarshi ko'rsatmalar tasdiqlandi (faqat ular bor tekshiruvda yoziladi) */
+  let contraAck = false;
   let condition = '';
 
   if (kind === 'referral') {
@@ -283,8 +352,8 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
     }
   } else if (kind === 'lab') {
     const test = db
-      .prepare(`SELECT id FROM lab_tests WHERE id = ? AND active = 1`)
-      .get(input.labTestId ?? 0) as { id: number } | undefined;
+      .prepare(`SELECT id, needs_weight, contra_uz FROM lab_tests WHERE id = ? AND active = 1`)
+      .get(input.labTestId ?? 0) as { id: number; needs_weight: number; contra_uz: string | null } | undefined;
     if (!test) throw badRequest('test_required', 'Qanday tekshiruv kerakligini tanlang');
 
     /*
@@ -304,11 +373,30 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
      * Vazn — 2 dan 400 kg gacha. Chegara keng: chaqaloq ham,
      * kattalar ham shu oraliqda. Undan tashqarisi xato kiritish.
      */
-    const w = Number(input.weightKg);
-    if (!Number.isFinite(w) || w < 2 || w > 400) {
-      throw badRequest('invalid_weight', 'Vaznni kilogrammda kiriting');
+    /*
+     * Vazn har tekshiruvda ham kerak emas: kapsula endoskopiyasida
+     * klinikaga YOSH kerak (u profilda/"kimga" qadamida bor), vazn emas.
+     */
+    if (test.needs_weight !== 0) {
+      const w = Number(input.weightKg);
+      if (!Number.isFinite(w) || w < 2 || w > 400) {
+        throw badRequest('invalid_weight', 'Vaznni kilogrammda kiriting');
+      }
+      weightKg = Math.round(w);
     }
-    weightKg = Math.round(w);
+
+    /*
+     * Qarshi ko'rsatmalar — bemor ularni ko'rib, "menda yo'q" deb
+     * tasdiqlamaguncha so'rov ketmaydi. Eski ilova bu qadamni
+     * bilmasa ham server o'tkazib yubormaydi.
+     */
+    if (test.contra_uz && input.contraindicationsAck !== true) {
+      throw badRequest(
+        'contraindications_required',
+        'Qarshi ko‘rsatmalar bilan tanishib, ular sizda yo‘qligini tasdiqlang',
+      );
+    }
+    contraAck = Boolean(test.contra_uz);
   } else {
     // "Bilmayman" yozuvi katalogda active=0 — u ro'yxatlarda ko'rinmaydi,
     // lekin so'rovda tanlanishi mumkin
@@ -327,14 +415,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
   assertOwnedFiles(input.attachments ?? [], input.patientId);
   const city = db.prepare(`SELECT * FROM cities WHERE id = ?`).get(input.cityId);
   if (!city) throw badRequest('unknown_city', 'Bunday shahar topilmadi');
-  /*
-   * Byudjet chegarasi turga bog'liq: tahlil yuz minglar bilan
-   * o'lchanadi, operatsiya esa millionlar bilan.
-   */
-  const minBudget = kind === 'operation' ? 500_000 : 200_000;
-  if (input.budgetUzs != null && (input.budgetUzs < minBudget || input.budgetUzs > 2_000_000_000)) {
-    throw badRequest('invalid_budget', 'Byudjet noto‘g‘ri');
-  }
+  const budgetUzs = resolveBudget(kind, input.operationId ?? null, input.budgetUzs);
 
   // Admin qo'shgan savollar: majburiylari to'ldirilganmi
   /*
@@ -342,7 +423,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
    * savol boshqa tekshiruvda ham, operatsiya so'rovida ham
    * so'ralmaydi.
    */
-  const extraAnswers = validateAnswers(input.extraAnswers ?? null, { kind, labTestId });
+  const extraAnswers = input.doctorCaseId ? null : validateAnswers(input.extraAnswers ?? null, { kind, labTestId });
 
   /*
    * Soha zaxirasi FAQAT operatsiya noma'lum bo'lganda ma'noga ega.
@@ -384,7 +465,7 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
         referralItems: referralItems.length ? JSON.stringify(referralItems) : null,
         weightKg,
         cityId: input.cityId,
-        budgetUzs: input.budgetUzs,
+        budgetUzs,
         conditionText: condition || null,
         note: input.note,
         urgency: input.urgency,
@@ -422,6 +503,11 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
 
     // Qabul alohida jadvalga ham yoziladi — so'rov o'chsa ham dalil qoladi
     recordAcceptance(input.patientId, id, input.userAgent ?? null);
+    // Tarqatishdan OLDIN: klinika so'rovni birinchi ko'rganidayoq belgi tursin
+    if (input.doctorCaseId) {
+      db.prepare(`UPDATE requests SET doctor_case_id = ? WHERE id = ?`).run(input.doctorCaseId, id);
+    }
+    if (contraAck) db.prepare(`UPDATE requests SET contra_ack_at = datetime('now') WHERE id = ?`).run(id);
     return id;
   });
 
@@ -456,17 +542,24 @@ export function broadcast(requestId: number): number {
             })
           : [];
 
+  /*
+   * Xabar faqat YANGI qo'shilgan klinikaga boradi. Qayta yuborishda
+   * (admin "qayta yuborish" bosganda) oldin xabar olgan klinikaga
+   * takroriy bildirishnoma ketmaydi — `INSERT OR IGNORE` o'zgarish
+   * bo'lmagan qatorni shu yerda ko'rsatadi.
+   */
+  const added: typeof clinics = [];
   tx(() => {
     const ins = db.prepare(
       `INSERT OR IGNORE INTO request_broadcasts (request_id, clinic_id) VALUES (?, ?)`,
     );
-    for (const c of clinics) ins.run(requestId, c.id);
+    for (const c of clinics) if (ins.run(requestId, c.id).changes === 1) added.push(c);
     db.prepare(`UPDATE requests SET status = 'COLLECTING' WHERE id = ? AND status = 'NEW'`).run(requestId);
   });
 
   const fresh = getRequest(requestId);
 
-  for (const c of clinics) {
+  for (const c of added) {
     bus.publish(ch.clinic(c.id), { type: 'clinic:request', request: fresh });
     notifyClinic(
       c.id,
@@ -483,7 +576,7 @@ export function broadcast(requestId: number): number {
 
   publishProgress(requestId);
   bus.publish(ch.request(requestId), { type: 'request:status', requestId, status: 'COLLECTING' });
-  return clinics.length;
+  return added.length;
 }
 
 export function publishProgress(requestId: number) {
@@ -521,6 +614,16 @@ export function updateRequest(
     throw conflict('request_locked', 'Tanlov qilingandan keyin so‘rovni tahrirlab bo‘lmaydi');
   }
 
+  /*
+   * Tahrirlashda ham AYNAN shu qoida. Aks holda oraliq chetlab
+   * o'tilardi: to'g'ri byudjet bilan so'rov yuborib, keyin uni
+   * tahrirlab oraliqdan chiqarib qo'yish mumkin bo'lardi.
+   */
+  const budgetUzs =
+    patch.budgetUzs === undefined
+      ? null
+      : resolveBudget(req.kind, req.operationId, patch.budgetUzs);
+
   db.prepare(
     `UPDATE requests SET
        budget_uzs = COALESCE(@budgetUzs, budget_uzs),
@@ -529,7 +632,7 @@ export function updateRequest(
      WHERE id = @id`,
   ).run({
     id: requestId,
-    budgetUzs: patch.budgetUzs ?? null,
+    budgetUzs,
     note: patch.note ?? null,
     urgency: patch.urgency ?? null,
   });
