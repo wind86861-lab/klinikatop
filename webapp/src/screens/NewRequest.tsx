@@ -712,6 +712,8 @@ function TestStep({ draft, onPick }: { draft: Draft; onPick: (test: LabTest) => 
       className={`organrow ${draft.labTest?.id === x.id ? 'is-active' : ''}`}
       onClick={() => onPick(x)}
     >
+      {/* Yuqori darajadagi tekshiruv (kapsula kabi bolasizlari) — o'z belgisi bilan */}
+      {!x.parentId && x.icon && <span className="organrow__icon">{x.icon}</span>}
       <span className="stack" style={{ gap: 2, flex: 1 }}>
         <strong>{name(x)}</strong>
         {sub && <span className="tiny">{sub}</span>}
@@ -753,9 +755,22 @@ function TestStep({ draft, onPick }: { draft: Draft; onPick: (test: LabTest) => 
             const kids = childrenOf(g.id);
             /* Bolasi yo'q guruh — o'zi tanlanadigan tekshiruv */
             if (kids.length === 0) {
+              /*
+               * Guruhlar bilan bir xil ko'rinish: ko'rinmas "›" joy egallaydi,
+               * shunda belgi va nom MRT/MSKT qatoridagi bilan bir chiziqda turadi.
+               */
+              const picked = draft.labTest?.id === g.id;
               return (
-                <div key={g.id} className="cat__branch">
-                  <Row x={g} />
+                <div
+                  key={g.id}
+                  className="cat__branch"
+                  style={picked ? { borderColor: 'var(--primary)' } : undefined}
+                >
+                  <button type="button" className="cat__head" onClick={() => onPick(g)}>
+                    <span className="cat__caret" aria-hidden style={{ visibility: 'hidden' }}>›</span>
+                    <span className="labtest__icon">{g.icon}</span>
+                    <span className="cat__name truncate">{name(g)}</span>
+                  </button>
                 </div>
               );
             }
