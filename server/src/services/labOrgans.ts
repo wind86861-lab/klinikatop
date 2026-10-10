@@ -193,11 +193,21 @@ export interface LabTestInput {
   /** Qarshi ko'rsatmalar — bo'sh bo'lsa qadam chiqmaydi */
   contraUz?: string | null;
   contraRu?: string | null;
+  /** Yosh chegarasi — `null` chegara yo'q */
+  minAge?: number | null;
+  maxAge?: number | null;
 }
 
 const contraText = (v: string | null | undefined) => (v ?? '').trim().slice(0, 2000) || null;
 
+function assertAgeRange(min: number | null | undefined, max: number | null | undefined): void {
+  if (min != null && max != null && min > max) {
+    throw badRequest('invalid_age_range', 'Eng kichik yosh eng kattasidan oshmasin');
+  }
+}
+
 export function createLabTest(input: LabTestInput): LabTest {
+  assertAgeRange(input.minAge, input.maxAge);
   const nameUz = input.nameUz.trim();
   if (nameUz.length < 2) throw badRequest('name_required', 'Tekshiruv nomini yozing');
 
@@ -211,8 +221,8 @@ export function createLabTest(input: LabTestInput): LabTest {
     const info = db
       .prepare(
         `INSERT INTO lab_tests (slug, name_uz, name_ru, icon, position, active,
-                                parent_id, duration_min, needs_weight, contra_uz, contra_ru)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                parent_id, duration_min, needs_weight, contra_uz, contra_ru, min_age, max_age)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         slug,
@@ -226,6 +236,8 @@ export function createLabTest(input: LabTestInput): LabTest {
         input.needsWeight === false ? 0 : 1,
         contraText(input.contraUz),
         contraText(input.contraRu),
+        input.minAge ?? null,
+        input.maxAge ?? null,
       );
 
     return getLabTest(Number(info.lastInsertRowid));
@@ -234,6 +246,10 @@ export function createLabTest(input: LabTestInput): LabTest {
 
 export function updateLabTest(id: number, input: Partial<LabTestInput>): LabTest {
   const current = getLabTest(id);
+  assertAgeRange(
+    input.minAge !== undefined ? input.minAge : current.minAge,
+    input.maxAge !== undefined ? input.maxAge : current.maxAge,
+  );
   /*
    * Berilmagan maydon O'ZGARMAYDI. Ilgari qisman tahrirda (faqat nom)
    * o'rin 999 ga tushib, o'chirilgan tekshiruv esa qayta yoqilib qolardi.
@@ -246,7 +262,8 @@ export function updateLabTest(id: number, input: Partial<LabTestInput>): LabTest
   return tx(() => {
     db.prepare(
       `UPDATE lab_tests SET name_uz = ?, name_ru = ?, icon = ?, position = ?, active = ?,
-                            parent_id = ?, duration_min = ?, needs_weight = ?, contra_uz = ?, contra_ru = ?
+                            parent_id = ?, duration_min = ?, needs_weight = ?, contra_uz = ?, contra_ru = ?,
+                            min_age = ?, max_age = ?
         WHERE id = ?`,
     ).run(
       (input.nameUz ?? current.nameUz).trim().slice(0, 120),
@@ -263,6 +280,8 @@ export function updateLabTest(id: number, input: Partial<LabTestInput>): LabTest
       input.needsWeight === undefined ? (current.needsWeight ? 1 : 0) : input.needsWeight ? 1 : 0,
       input.contraUz !== undefined ? contraText(input.contraUz) : current.contraUz,
       input.contraRu !== undefined ? contraText(input.contraRu) : current.contraRu,
+      input.minAge !== undefined ? input.minAge : current.minAge,
+      input.maxAge !== undefined ? input.maxAge : current.maxAge,
       id,
     );
 

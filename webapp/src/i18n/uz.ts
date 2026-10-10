@@ -482,6 +482,8 @@ export const uz = {
   'wz.test.search': 'Qidiruv',
   'wz.test.searchHint': 'Masalan: tizza, bosh miya, qorin…',
   'wz.test.none': 'Bunday tekshiruv topilmadi. Boshqacha yozib ko‘ring.',
+  'wz.test.ageRange': '{min}–{max} yosh',
+  'wz.test.ageBlocked': '{name} faqat {min} yoshdan {max} yoshgacha bo‘lgan bemorlarga o‘tkaziladi.',
   'wz.review.referralItems': '{n} ta analiz',
   'wz.review.referral': 'Yo‘llanma',
   'wz.review.referralCount': '{n} ta rasm',

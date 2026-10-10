@@ -706,6 +706,8 @@ const labTestSchema = z.object({
   needsWeight: z.boolean().optional(),
   contraUz: z.string().max(2000).nullable().optional(),
   contraRu: z.string().max(2000).nullable().optional(),
+  minAge: z.number().int().min(0).max(120).nullable().optional(),
+  maxAge: z.number().int().min(0).max(120).nullable().optional(),
 });
 
 adminRouter.post('/lab-tests', requireRole('admin'), (req, res) => {

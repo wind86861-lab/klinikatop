@@ -462,6 +462,8 @@ export const ru: Record<TranslationKey, string> = {
   'wz.test.search': 'Поиск',
   'wz.test.searchHint': 'Например: колено, головной мозг, живот…',
   'wz.test.none': 'Ничего не найдено. Попробуйте иначе.',
+  'wz.test.ageRange': '{min}–{max} лет',
+  'wz.test.ageBlocked': '{name} проводится только пациентам от {min} до {max} лет.',
   'wz.review.referralItems': '{n} анализов',
   'wz.review.referral': 'Направление',
   'wz.review.referralCount': '{n} фото',

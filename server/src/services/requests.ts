@@ -13,6 +13,7 @@ import { formatUzs } from '../lib/format';
 import { mapCity, mapLabTest, mapOperation, mapRequest, mapUser } from '../lib/mappers';
 import {
   REQUEST_KINDS,
+  ageFromBirthYear,
   REQUEST_TRANSITIONS,
   UNKNOWN_OPERATION_SLUG,
   isProfileComplete,
@@ -352,8 +353,10 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
     }
   } else if (kind === 'lab') {
     const test = db
-      .prepare(`SELECT id, needs_weight, contra_uz FROM lab_tests WHERE id = ? AND active = 1`)
-      .get(input.labTestId ?? 0) as { id: number; needs_weight: number; contra_uz: string | null } | undefined;
+      .prepare(`SELECT id, name_uz, needs_weight, contra_uz, min_age, max_age FROM lab_tests WHERE id = ? AND active = 1`)
+      .get(input.labTestId ?? 0) as
+      | { id: number; name_uz: string; needs_weight: number; contra_uz: string | null; min_age: number | null; max_age: number | null }
+      | undefined;
     if (!test) throw badRequest('test_required', 'Qanday tekshiruv kerakligini tanlang');
 
     /*
@@ -367,6 +370,33 @@ export function createRequest(input: CreateRequestInput): RequestWithMeta {
       throw badRequest('test_is_group', 'Guruh ichidan aniq tekshiruvni tanlang');
     }
     labTestId = test.id;
+
+    /*
+     * YOSH CHEGARASI (kapsula endoskopiyasi: 18–65).
+     *
+     * Bemor o'zi uchun so'rasa — profilidagi tug'ilgan yil, boshqa
+     * odam uchun — "kimga" qadamida kiritilgani. Chegaradan tashqaridagi
+     * so'rov klinikaga yetib bormaydi: ilova ham to'xtatadi, lekin unga
+     * ishonib bo'lmaydi (eski ilova, shifokor taklifnomasi).
+     */
+    if (test.min_age != null || test.max_age != null) {
+      const birthYear = input.forSelf === false ? (input.subjectBirthYear ?? null) : (mapUser(profile).birthYear ?? null);
+      const age = ageFromBirthYear(birthYear);
+      if (age == null) {
+        throw badRequest('age_required', 'Bu tekshiruv uchun bemorning tug‘ilgan yili kerak');
+      }
+      const tooYoung = test.min_age != null && age < test.min_age;
+      const tooOld = test.max_age != null && age > test.max_age;
+      if (tooYoung || tooOld) {
+        const range =
+          test.min_age != null && test.max_age != null
+            ? `${test.min_age} yoshdan ${test.max_age} yoshgacha`
+            : test.min_age != null
+              ? `${test.min_age} yoshdan katta`
+              : `${test.max_age} yoshgacha`;
+        throw badRequest('age_not_allowed', `${test.name_uz} faqat ${range} bo‘lgan bemorlarga o‘tkaziladi`);
+      }
+    }
 
 
     /*

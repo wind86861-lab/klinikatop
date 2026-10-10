@@ -41,6 +41,7 @@ import {
   REQUEST_KINDS,
   STEP_FLOWS,
   ageFromBirthYear,
+  ageAllowedFor,
   stepMatchesScope,
   type BuiltinStep,
   type ChatTurn,
@@ -118,7 +119,7 @@ const FALLBACK_STEPS: WizardStep[] = [
 type Step = string;
 
 export function NewRequest() {
-  const { t, user, session, toast } = useApp();
+  const { t, lang, user, session, toast } = useApp();
   const navigate = useNavigate();
 
   const [allSteps, setSteps] = useState<WizardStep[]>(FALLBACK_STEPS);
@@ -487,6 +488,23 @@ export function NewRequest() {
             <TestStep
               draft={draft}
               onPick={(labTest) => {
+                /*
+                 * Yosh chegarasi (kapsula: 18–65). Yosh shu yerda ma'lum bo'lsa
+                 * darhol aytamiz; noma'lum bo'lsa server yuborishda to'xtatadi.
+                 */
+                const age = ageFromBirthYear(draft.forSelf ? user?.birthYear : draft.subjectBirthYear);
+                if (ageAllowedFor(labTest, age) === false) {
+                  haptic.error();
+                  toast(
+                    t('wz.test.ageBlocked', {
+                      name: lang === 'ru' ? labTest.nameRu : labTest.nameUz,
+                      min: labTest.minAge ?? 0,
+                      max: labTest.maxAge ?? 120,
+                    }),
+                    'error',
+                  );
+                  return;
+                }
                 // Boshqa tekshiruv — oldingi tasdiq unga tegishli emas
                 patch({ labTest, contraAck: labTest.id === draft.labTest?.id ? draft.contraAck : null });
                 setDirection(1);
@@ -770,6 +788,9 @@ function TestStep({ draft, onPick }: { draft: Draft; onPick: (test: LabTest) => 
                     <span className="cat__caret" aria-hidden style={{ visibility: 'hidden' }}>›</span>
                     <span className="labtest__icon">{g.icon}</span>
                     <span className="cat__name truncate">{name(g)}</span>
+                    {g.minAge != null && g.maxAge != null && (
+                      <span className="cat__count num">{t('wz.test.ageRange', { min: g.minAge, max: g.maxAge })}</span>
+                    )}
                   </button>
                 </div>
               );

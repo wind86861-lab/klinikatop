@@ -34,6 +34,9 @@ interface Draft {
   /** Qarshi ko'rsatmalar — bo'lsa sehrgarda alohida qadam, bemor tasdiqlaydi */
   contraUz: string;
   contraRu: string;
+  /** Yosh chegarasi — bo'sh bo'lsa chegara yo'q */
+  minAge: string;
+  maxAge: string;
 }
 
 const EMPTY: Draft = {
@@ -46,6 +49,8 @@ const EMPTY: Draft = {
   needsWeight: true,
   contraUz: '',
   contraRu: '',
+  minAge: '',
+  maxAge: '',
 };
 
 export function LabTests() {
@@ -70,6 +75,8 @@ export function LabTests() {
             needsWeight: t.needsWeight,
             contraUz: t.contraUz ?? '',
             contraRu: t.contraRu ?? '',
+            minAge: t.minAge == null ? '' : String(t.minAge),
+            maxAge: t.maxAge == null ? '' : String(t.maxAge),
           }
         : { ...EMPTY, parentId },
     );
@@ -92,6 +99,8 @@ export function LabTests() {
         needsWeight: draft.needsWeight,
         contraUz: draft.contraUz.trim() || null,
         contraRu: draft.contraRu.trim() || null,
+        minAge: num(draft.minAge),
+        maxAge: num(draft.maxAge),
       };
       if (draft.id) await api.updateLabTest(draft.id, body);
       else await api.createLabTest(body);
@@ -264,6 +273,31 @@ export function LabTests() {
                 <Chip active={!draft.needsWeight} onClick={() => setDraft({ ...draft, needsWeight: false })}>
                   Yo‘q
                 </Chip>
+              </div>
+            </Field>
+
+            <Field
+              label="Yosh chegarasi"
+              hint="Bemor shu oraliqdan tashqarida bo‘lsa so‘rov yubora olmaydi. Bo‘sh — chegara yo‘q. Kapsula endoskopiyasi: 18–65."
+            >
+              <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                <Input
+                  inputMode="numeric"
+                  maxLength={3}
+                  placeholder="dan"
+                  aria-label="Eng kichik yosh"
+                  value={draft.minAge}
+                  onChange={(e) => setDraft({ ...draft, minAge: e.target.value.replace(/\D/g, '') })}
+                />
+                <span className="tiny">—</span>
+                <Input
+                  inputMode="numeric"
+                  maxLength={3}
+                  placeholder="gacha"
+                  aria-label="Eng katta yosh"
+                  value={draft.maxAge}
+                  onChange={(e) => setDraft({ ...draft, maxAge: e.target.value.replace(/\D/g, '') })}
+                />
               </div>
             </Field>
 

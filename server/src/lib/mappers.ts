@@ -301,6 +301,8 @@ export function mapLabTest(r: any, hasChildren = false) {
     needsWeight: r.needs_weight !== 0,
     contraUz: r.contra_uz ?? null,
     contraRu: r.contra_ru ?? null,
+    minAge: r.min_age ?? null,
+    maxAge: r.max_age ?? null,
   };
 }
 

@@ -261,6 +261,24 @@ export interface LabTest {
    */
   contraUz: string | null;
   contraRu: string | null;
+  /** Yosh chegarasi (kapsula: 18–65). `null` — chegara yo'q */
+  minAge: number | null;
+  maxAge: number | null;
+}
+
+/**
+ * Bemor yoshi tekshiruv chegarasiga to'g'ri keladimi.
+ * Yosh noma'lum bo'lsa `null` — qaror serverda (u profilni biladi).
+ */
+export function ageAllowedFor(
+  test: { minAge: number | null; maxAge: number | null },
+  age: number | null,
+): boolean | null {
+  if (test.minAge == null && test.maxAge == null) return true;
+  if (age == null) return null;
+  if (test.minAge != null && age < test.minAge) return false;
+  if (test.maxAge != null && age > test.maxAge) return false;
+  return true;
 }
 
 export interface Operation {

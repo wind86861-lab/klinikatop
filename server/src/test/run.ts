@@ -4658,6 +4658,36 @@ async function main() {
     check('bemor narx bera olmaydi (byudjet e’tiborga olinmadi)', r.budgetUzs === null);
     check('klinika uchun belgi: qarshi ko‘rsatma yo‘qligi tasdiqlangan', r.contraAcked === true);
 
+    /* ── Yosh chegarasi: 18–65 ── */
+    check('kapsulaga yosh chegarasi 18–65', capTest.minAge === 18 && capTest.maxAge === 65, [capTest.minAge, capTest.maxAge]);
+    const year = new Date().getFullYear();
+    const setAge = (age: number) => db.prepare('UPDATE users SET birth_year = ? WHERE id = ?').run(year - age, pid);
+    setAge(17);
+    throws('17 yosh — so‘rov ketmaydi', () => rq.createRequest({ ...base, contraindicationsAck: true }), 'age_not_allowed');
+    setAge(66);
+    throws('66 yosh — so‘rov ketmaydi', () => rq.createRequest({ ...base, contraindicationsAck: true }), 'age_not_allowed');
+    setAge(18);
+    check('18 yosh — mumkin', rq.createRequest({ ...base, contraindicationsAck: true }).kind === 'lab');
+    setAge(65);
+    check('65 yosh — mumkin', rq.createRequest({ ...base, contraindicationsAck: true }).kind === 'lab');
+    throws('boshqa odam uchun: bola (10 yosh) — ketmaydi', () => rq.createRequest({
+      ...base, contraindicationsAck: true, forSelf: false, subjectName: 'Bola Sinov', subjectBirthYear: year - 10, subjectGender: 'male',
+    }), 'age_not_allowed');
+    check('boshqa odam uchun: 40 yosh — mumkin (bemorning o‘z yoshi emas, u odamniki)', rq.createRequest({
+      ...base, contraindicationsAck: true, forSelf: false, subjectName: 'Ota Sinov', subjectBirthYear: year - 40, subjectGender: 'male',
+    }).kind === 'lab');
+    db.prepare('UPDATE users SET birth_year = NULL WHERE id = ?').run(pid);
+    try {
+      rq.createRequest({ ...base, contraindicationsAck: true });
+      check('tug‘ilgan yil yo‘q — rad etiladi', false);
+    } catch (e: any) {
+      check('tug‘ilgan yil yo‘q — rad etiladi', ['age_required', 'profile_incomplete'].includes(e?.code), e?.code);
+    }
+    db.prepare('UPDATE users SET birth_year = 1975 WHERE id = ?').run(pid);
+    throws('admin: chegara teskari bo‘lmaydi', () => lo.updateLabTest(cap.id, { minAge: 70, maxAge: 20 }), 'invalid_age_range');
+    check('admin: faqat nom tahriri chegarani buzmaydi', lo.updateLabTest(cap.id, { nameUz: 'Kapsula endoskopiyasi' }).maxAge === 65);
+    check('chegarasiz tekshiruv (MRT) — doim ruxsat', lo.getLabTest(db.prepare(`SELECT id FROM lab_tests WHERE slug='mrt'`).get().id).minAge === null);
+
     const mriLeaf = db.prepare(`SELECT t.id FROM lab_tests t JOIN lab_tests p ON p.id = t.parent_id WHERE p.slug = 'mrt' LIMIT 1`).get() as { id: number };
     throws('MRT da vazn hali ham majburiy', () => rq.createRequest({ ...base, labTestId: mriLeaf.id }), 'invalid_weight');
 

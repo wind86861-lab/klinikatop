@@ -2583,6 +2583,23 @@ export const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    /*
+     * TEKSHIRUVGA YOSH CHEGARASI.
+     *
+     * Kapsula endoskopiyasi 18 yoshdan kichik va 65 yoshdan katta
+     * bemorlarga o'tkazilmaydi — bunday so'rov klinikaga umuman
+     * yetib bormasligi kerak. Chegara umumiy: admin istalgan
+     * tekshiruvga qo'ya oladi, NULL — chegara yo'q. Yosh bemor
+     * profilidagi (yoki "kimga" qadamidagi) tug'ilgan yildan olinadi.
+     */
+    id: '051_lab_test_age_limits',
+    up: (db) => {
+      addColumn(db, 'lab_tests', 'min_age', 'INTEGER');
+      addColumn(db, 'lab_tests', 'max_age', 'INTEGER');
+      db.prepare(`UPDATE lab_tests SET min_age = 18, max_age = 65 WHERE slug = 'kapsula-endoskopiya'`).run();
+    },
+  },
 ];
 
 /**
