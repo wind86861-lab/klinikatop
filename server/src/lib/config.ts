@@ -39,6 +39,11 @@ export const config = {
      * adminning o'z Telegram'iga boradi.
      */
     adminAlertChatId: process.env.ADMIN_ALERT_CHAT_ID ?? '',
+    /**
+     * Hisobotlar guruhi — har yangi bron haqida xabar. Bo'sh bo'lsa
+     * `ADMIN_ALERT_CHAT_ID` guruhiga yoziladi.
+     */
+    reportChatId: process.env.REPORT_CHAT_ID ?? '',
   },
 
   /**

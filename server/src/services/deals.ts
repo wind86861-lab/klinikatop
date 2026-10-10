@@ -5,6 +5,7 @@
  *      └──(bekor / nizo)──→ BEKOR / NIZO
  */
 import { onOfferChosen } from './doctorCases';
+import { reportNewBooking } from './bookingReports';
 import { db, nowSql, tx } from '../db';
 import { config } from '../lib/config';
 import { commissionPercentFor, listSettings } from './terms.business';
@@ -163,6 +164,9 @@ export function chooseOffer(
   for (const r of rejected) {
     notifyClinic(r.clinic_id, 'offer_rejected', { operation: requestTitle(req) }, `/clinic/offers`);
   }
+
+  // Hisobot guruhiga — yangi bron (xato bitimni to'xtatmaydi)
+  reportNewBooking(dealId, requestTitle(req));
 
   // Shifokor yo'naltirgan so'rov — shifokorga ham (tavsiyasi qabul qilindimi)
   try {

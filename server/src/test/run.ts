@@ -4810,6 +4810,44 @@ async function main() {
     }
   }
 
+  /* ── Yangi bron — hisobot guruhiga ── */
+  section('Yangi bron — guruhga Telegram xabari');
+  {
+    const br = await import('../services/bookingReports');
+    const { config } = require('../lib/config');
+    const deal = db.prepare(
+      `SELECT d.id, u.phone FROM deals d JOIN users u ON u.id = d.patient_id ORDER BY d.id LIMIT 1`,
+    ).get() as { id: number; phone: string | null };
+    const text = br.bookingReportText(deal.id, 'Sinov xizmati') ?? '';
+    check('xabarda bron raqami, klinika, xizmat, narx, sana', new RegExp(`Yangi bron #${deal.id}`).test(text)
+      && /Klinika:/.test(text) && /Sinov xizmati/.test(text) && /so‘m/.test(text) && /Sana: \d{2}\.\d{2}\.\d{4}/.test(text), text);
+    check('bemor telefoni guruhga CHIQMAYDI', !deal.phone || !text.includes(deal.phone.replace(/^\+/, '')));
+    check('yo‘q bitim — xabar yo‘q', br.bookingReportText(99999999, 'x') === null);
+
+    const realFetch = globalThis.fetch;
+    const realToken = config.telegram.botToken;
+    const sent: any[] = [];
+    (globalThis as any).fetch = async (_u: string, init: any) => { sent.push(JSON.parse(init.body)); return new Response('{}'); };
+    try {
+      config.telegram.botToken = 'test';
+      config.telegram.reportChatId = '';
+      config.telegram.adminAlertChatId = '';
+      br.reportNewBooking(deal.id, 'Sinov');
+      check('guruh sozlanmagan — hech narsa yuborilmaydi', sent.length === 0);
+      config.telegram.adminAlertChatId = '-1001112223334';
+      br.reportNewBooking(deal.id, 'Sinov');
+      check('REPORT_CHAT_ID bo‘sh — admin guruhiga', sent.at(-1)?.chat_id === -1001112223334);
+      config.telegram.reportChatId = '-1005556667778';
+      br.reportNewBooking(deal.id, 'Sinov');
+      check('REPORT_CHAT_ID berilsa — o‘sha guruhga', sent.at(-1)?.chat_id === -1005556667778 && sent.at(-1)?.parse_mode === 'HTML');
+    } finally {
+      (globalThis as any).fetch = realFetch;
+      config.telegram.botToken = realToken;
+      config.telegram.reportChatId = '';
+      config.telegram.adminAlertChatId = '';
+    }
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);
