@@ -139,6 +139,29 @@ export interface CodeRequestResult {
  */
 export type CodePurpose = 'login' | 'register' | 'reset';
 
+/**
+ * SMS matnlari — Eskiz moderatsiyasidan o'tgan shablonlar bilan HARFMA-HARF bir xil.
+ *
+ * Operatorlar talabi (Eskiz yo'riqnomasi, 2-band): tasdiqlash kodi bor har
+ * SMS'da resurs nomi VA kod nima uchunligi yozilishi shart, aks holda xabar
+ * yetkazilmaydi. Matnni o'zgartirsangiz — avval Eskiz kabinetida yangisini
+ * moderatsiyadan o'tkazing, keyin bu yerni yangilang (test ham tekshiradi).
+ *
+ * Uzunlik: lotincha matnda oddiy ' (‘ emas!) — aks holda SMS Unicode'ga
+ * o'tib 160 emas 70 belgiga tushadi. Ruschasi kirill (Unicode) — har biri
+ * 70 belgidan oshmaydi, ya'ni bitta SMS.
+ */
+export function smsCodeText(purpose: CodePurpose, ru: boolean, code: string): string {
+  if (ru) {
+    if (purpose === 'register') return `Код регистрации KlinikaTop (klinikatop.uz): ${code}. Никому не говорите`;
+    if (purpose === 'reset') return `Код сброса пароля KlinikaTop (klinikatop.uz): ${code}. Не сообщайте`;
+    return `Код для входа в KlinikaTop (klinikatop.uz): ${code}. Никому не говорите`;
+  }
+  const what =
+    purpose === 'register' ? "da ro'yxatdan o'tish" : purpose === 'reset' ? 'da parolni tiklash' : 'ga kirish';
+  return `KlinikaTop (klinikatop.uz) ${what} uchun tasdiqlash kodi: ${code}. Kod ${CODE_TTL_MIN} daqiqa amal qiladi. Kodni hech kimga bermang!`;
+}
+
 export async function requestLoginCode(
   rawPhone: string,
   ip: string | null,
@@ -207,11 +230,8 @@ export async function requestLoginCode(
       : `Kirish kodi: <b>${code}</b>\n\n${CODE_TTL_MIN} daqiqa amal qiladi. Agar bu siz bo‘lmasangiz — kiritmang.`;
     sent = await sendTelegramMessage(user!.telegram_id, text);
   } else {
-    // SMS'da HTML yo'q va joy tor — matn qisqa
-    const text = ru
-      ? `KlinikaTop: код ${code}. Действует ${CODE_TTL_MIN} мин.`
-      : `KlinikaTop: kod ${code}. ${CODE_TTL_MIN} daqiqa amal qiladi.`;
-    sent = await sendSms(phone, text);
+    // Matn Eskiz'da tasdiqlangan shablonga aynan mos bo'lishi shart
+    sent = await sendSms(phone, smsCodeText(purpose, ru, code));
   }
 
   return { found: Boolean(user), sent, channel };

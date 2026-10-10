@@ -4848,6 +4848,28 @@ async function main() {
     }
   }
 
+  /* ── SMS matnlari Eskiz shablonlariga mos ── */
+  section('SMS matnlari — Eskiz moderatsiyasi');
+  {
+    const pa = await import('../services/patientAuth');
+    // Eskiz kabinetiga AYNAN shu matnlar yuborilgan (kod: 482915)
+    const approved: Record<string, string> = {
+      'uz login': "KlinikaTop (klinikatop.uz) ga kirish uchun tasdiqlash kodi: 482915. Kod 5 daqiqa amal qiladi. Kodni hech kimga bermang!",
+      'uz register': "KlinikaTop (klinikatop.uz) da ro'yxatdan o'tish uchun tasdiqlash kodi: 482915. Kod 5 daqiqa amal qiladi. Kodni hech kimga bermang!",
+      'uz reset': "KlinikaTop (klinikatop.uz) da parolni tiklash uchun tasdiqlash kodi: 482915. Kod 5 daqiqa amal qiladi. Kodni hech kimga bermang!",
+      'ru login': 'Код для входа в KlinikaTop (klinikatop.uz): 482915. Никому не говорите',
+      'ru register': 'Код регистрации KlinikaTop (klinikatop.uz): 482915. Никому не говорите',
+      'ru reset': 'Код сброса пароля KlinikaTop (klinikatop.uz): 482915. Не сообщайте',
+    };
+    for (const [key, want] of Object.entries(approved)) {
+      const [lang, purpose] = key.split(' ') as ['uz' | 'ru', 'login' | 'register' | 'reset'];
+      const got = pa.smsCodeText(purpose, lang === 'ru', '482915');
+      check(`${key}: shablon bilan bir xil`, got === want, got);
+      const gsm = /^[A-Za-z0-9 .,:;!?'()\-]*$/.test(got);
+      check(`${key}: bitta SMS`, gsm ? got.length <= 160 : got.length <= 70, `${got.length} belgi`);
+    }
+  }
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(`Natija: ${passed} o'tdi, ${failed} yiqildi`);
   if (failed > 0) process.exit(1);
